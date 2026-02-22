@@ -1,0 +1,78 @@
+{
+  "format": 1,
+  "restore": {
+    "C:\\Users\\Shane Earley\\documents\\personal_projects\\across_the_obelisk\\ObeliskAccess\\ObeliskAccess.csproj": {}
+  },
+  "projects": {
+    "C:\\Users\\Shane Earley\\documents\\personal_projects\\across_the_obelisk\\ObeliskAccess\\ObeliskAccess.csproj": {
+      "version": "1.0.0",
+      "restore": {
+        "projectUniqueName": "C:\\Users\\Shane Earley\\documents\\personal_projects\\across_the_obelisk\\ObeliskAccess\\ObeliskAccess.csproj",
+        "projectName": "ObeliskAccess",
+        "projectPath": "C:\\Users\\Shane Earley\\documents\\personal_projects\\across_the_obelisk\\ObeliskAccess\\ObeliskAccess.csproj",
+        "packagesPath": "C:\\Users\\Shane Earley\\.nuget\\packages\\",
+        "outputPath": "C:\\Users\\Shane Earley\\documents\\personal_projects\\across_the_obelisk\\ObeliskAccess\\obj\\",
+        "projectStyle": "PackageReference",
+        "configFilePaths": [
+          "C:\\Users\\Shane Earley\\AppData\\Roaming\\NuGet\\NuGet.Config"
+        ],
+        "originalTargetFrameworks": [
+          "net35"
+        ],
+        "sources": {
+          "https://api.nuget.org/v3/index.json": {},
+          "https://api.nuget.org/v3/index.json": {},
+          "https://nuget.bepinex.dev/v3/index.json": {},
+          "https://nuget.samboy.dev/v3/index.json": {}
+        },
+        "frameworks": {
+          "net35": {
+            "targetAlias": "net35",
+            "projectReferences": {}
+          }
+        },
+        "warningProperties": {
+          "warnAsError": [
+            "NU1605"
+          ]
+        },
+        "restoreAuditProperties": {
+          "enableAudit": "true",
+          "auditLevel": "low",
+          "auditMode": "direct"
+        }
+      },
+      "frameworks": {
+        "net35": {
+          "targetAlias": "net35",
+          "dependencies": {
+            "BepInEx.Analyzers": {
+              "suppressParent": "All",
+              "target": "Package",
+              "version": "[1.*, )"
+            },
+            "BepInEx.Core": {
+              "target": "Package",
+              "version": "[5.*, )"
+            },
+            "BepInEx.PluginInfoProps": {
+              "target": "Package",
+              "version": "[2.*, )"
+            },
+            "Microsoft.NETFramework.ReferenceAssemblies": {
+              "suppressParent": "All",
+              "target": "Package",
+              "version": "[1.0.2, )"
+            },
+            "UnityEngine.Modules": {
+              "include": "Compile",
+              "target": "Package",
+              "version": "[5.6.0, )"
+            }
+          },
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\8.0.414\\RuntimeIdentifierGraph.json"
+        }
+      }
+    }
+  }
+}
