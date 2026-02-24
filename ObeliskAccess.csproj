@@ -60,4 +60,12 @@
       <Private>false</Private>
     </Reference>
   </ItemGroup>
+
+  <Target Name="CopyToPlugins" AfterTargets="Build">
+    <Copy
+      SourceFiles="$(OutputPath)$(AssemblyName).dll"
+      DestinationFolder="C:\Program Files (x86)\Steam\steamapps\common\Across the Obelisk\BepInEx\plugins\$(AssemblyName)"
+    />
+  </Target>
+
 </Project>
