@@ -2,7 +2,6 @@ using System.Collections.Generic;
 using HarmonyLib;
 using TMPro;
 using UnityEngine;
-using UnityEngine.InputSystem;
 using UnityEngine.UI;
 
 namespace ObeliskAccess.Patches;
@@ -41,12 +40,6 @@ internal static class SettingsMenuManager
 
     public static bool Active => _active;
     public static bool DropdownOpen => _dropdownOpen;
-
-    /// <summary>True while the settings panel or an alert dialog owns input, so other menu
-    /// patches should not also react to keys.</summary>
-    public static bool InputBlocked =>
-        (SettingsManager.Instance != null && SettingsManager.Instance.IsActive())
-        || (AlertManager.Instance != null && AlertManager.Instance.IsActive());
 
     public static void OnSettingsToggled(bool state)
     {
@@ -339,59 +332,6 @@ public class SettingsOpenPatch
     static void Postfix(bool _state)
     {
         SettingsMenuManager.OnSettingsToggled(_state);
-    }
-}
-
-[HarmonyPatch(typeof(InputController), "DoMovement")]
-public class SettingsMovementPatch
-{
-    static bool Prefix(InputAction.CallbackContext _context)
-    {
-        if (!SettingsMenuManager.Active)
-            return true;
-
-        if (Keyboard.current == null || _context.control.device.displayName != "Keyboard")
-            return true;
-
-        SettingsMenuManager.HandleArrow(_context.ReadValue<Vector2>());
-        return false; // swallow so the arrow doesn't also drive the (no-op) game navigation
-    }
-}
-
-[HarmonyPatch(typeof(InputController), "DoKeyBinding")]
-public class SettingsKeyPatch
-{
-    static void Postfix(InputAction.CallbackContext _context)
-    {
-        if (!SettingsMenuManager.Active || Keyboard.current == null)
-            return;
-
-        var control = _context.control;
-
-        if (control == Keyboard.current[Key.Enter] || control == Keyboard.current[Key.NumpadEnter])
-        {
-            SettingsMenuManager.HandleEnter();
-        }
-        else if (control == Keyboard.current[Key.Tab])
-        {
-            bool backwards = Keyboard.current.leftShiftKey.isPressed
-                          || Keyboard.current.rightShiftKey.isPressed;
-            SettingsMenuManager.HandleTab(backwards);
-        }
-    }
-}
-
-[HarmonyPatch(typeof(InputController), "DoEscape")]
-public class SettingsEscapePatch
-{
-    static bool Prefix()
-    {
-        // Escape cancels an open dropdown without closing the whole panel; otherwise let the
-        // game's default Escape handling run (which closes the alert, then the settings panel).
-        if (SettingsMenuManager.Active && SettingsMenuManager.DropdownOpen)
-            return !SettingsMenuManager.CancelDropdown();
-
-        return true;
     }
 }
 

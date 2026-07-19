@@ -1,7 +1,6 @@
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
 using HarmonyLib;
-using UnityEngine.InputSystem;
 
 namespace ObeliskAccess.Patches;
 
@@ -160,47 +159,5 @@ public class TutorialClosePatch
     static void Postfix()
     {
         TutorialPopupManager.OnClosed();
-    }
-}
-
-[HarmonyPatch(typeof(InputController), "DoMovement")]
-public class TutorialMovementPatch
-{
-    static bool Prefix(InputAction.CallbackContext _context)
-    {
-        if (!TutorialPopupManager.Active)
-            return true;
-
-        // Only trap keyboard arrow input; leave gamepad to the game.
-        if (Keyboard.current == null || _context.control.device.displayName != "Keyboard")
-            return true;
-
-        float y = _context.ReadValue<UnityEngine.Vector2>().y;
-        if (y > 0f)
-            TutorialPopupManager.Move(-1); // Up  -> previous line
-        else if (y < 0f)
-            TutorialPopupManager.Move(1);  // Down -> next line
-        // Left/Right (y == 0) do nothing.
-
-        // Swallow the press so the popup acts as a modal focus trap.
-        return false;
-    }
-}
-
-[HarmonyPatch(typeof(InputController), "DoKeyBinding")]
-public class TutorialEnterKeyPatch
-{
-    static void Postfix(InputAction.CallbackContext _context)
-    {
-        if (!TutorialPopupManager.Active || Keyboard.current == null)
-            return;
-
-        bool isEnter = _context.control == Keyboard.current[Key.Enter]
-                    || _context.control == Keyboard.current[Key.NumpadEnter];
-
-        if (!isEnter)
-            return;
-
-        TutorialPopupManager.Activate();
     }
 }
