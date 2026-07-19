@@ -38,6 +38,14 @@ public class MainMenuEnterKeyPatch : AccessibleMenuBase
         if (!isEnter)
             return;
 
+        // Let the tutorial popup manager handle Enter while a tutorial is open.
+        if (GameManager.Instance != null && GameManager.Instance.IsTutorialActive())
+            return;
+
+        // Defer to the settings/alert handlers while they own input.
+        if (SettingsMenuManager.InputBlocked)
+            return;
+
         // Let the game handle Enter when in a match
         if (MatchManager.Instance != null)
             return;

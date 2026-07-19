@@ -2,20 +2,23 @@ using System.Collections.Generic;
 using HarmonyLib;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.UI;
 
 namespace ObeliskAccess.Patches;
 
-[HarmonyPatch(typeof(MainMenuManager), "ShowGameModeSelection")]
-public class GameModeSelectionOpenPatch : AccessibleMenuBase
+[HarmonyPatch(typeof(MainMenuManager), nameof(MainMenuManager.ShowSaveGame))]
+public class SaveSlotOpenPatch : AccessibleMenuBase
 {
-    static void Postfix()
+    static void Postfix(bool status)
     {
-        SpeechManager.Speak("Select game mode");
+        // ShowSaveGame(false) is the "back/close" path — only announce when the screen opens.
+        if (status)
+            SpeechManager.Speak("Select save slot");
     }
 }
 
 [HarmonyPatch(typeof(InputController), "DoKeyBinding")]
-public class GameModeSelectionEnterKeyPatch : AccessibleMenuBase
+public class SaveSlotEnterKeyPatch : AccessibleMenuBase
 {
     static void Postfix(InputController __instance, InputAction.CallbackContext _context)
     {
@@ -36,7 +39,7 @@ public class GameModeSelectionEnterKeyPatch : AccessibleMenuBase
         if (SettingsMenuManager.InputBlocked)
             return;
 
-        if (MainMenuManager.Instance == null || !MainMenuManager.Instance.IsGameModesActive())
+        if (MainMenuManager.Instance == null || !MainMenuManager.Instance.IsSaveMenuActive())
             return;
 
         var controllerList = Traverse.Create(MainMenuManager.Instance)
@@ -49,9 +52,21 @@ public class GameModeSelectionEnterKeyPatch : AccessibleMenuBase
         if (index < 0 || index >= controllerList.Count)
             return;
 
-        // BotonMenuGameMode uses OnMouseUp (physics-based), not Button.onClick,
-        // so DoFirePerformed won't hit it. Search the item and its children.
-        var boton = controllerList[index].GetComponentInChildren<BotonMenuGameMode>();
-        boton?.OnMouseUp();
+        // Only act when a save slot is focused. Other items on this screen (back/section
+        // buttons in menuController1) are standard UI buttons handled by the game's fire path.
+        var save = controllerList[index].GetComponentInChildren<MenuSaveButton>();
+        if (save == null)
+            return;
+
+        // MenuSaveButton's real action is SelectThis(); the game's DoFirePerformed only invokes
+        // Button.onClick on the exact raycast hit, which never reaches it. Call it directly.
+        var button = save.GetComponent<Button>();
+        if (button != null && !button.interactable)
+        {
+            SpeechManager.Speak("Save incompatible");
+            return;
+        }
+
+        save.SelectThis();
     }
 }
