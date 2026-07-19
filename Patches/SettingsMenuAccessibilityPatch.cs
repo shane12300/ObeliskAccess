@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using HarmonyLib;
 using TMPro;
@@ -24,6 +25,9 @@ internal static class SettingsMenuManager
         public Toggle Toggle;
         public Slider Slider;
         public TMP_Dropdown Dropdown;
+        // Set for controls that behave as buttons (Reset Tutorial / Reset Saved Data): activating
+        // them invokes this action instead of flipping a toggle or opening a dropdown.
+        public Action Action;
     }
 
     private static readonly string[] TabNames = { "Graphics", "Audio", "Gameplay" };
@@ -38,6 +42,12 @@ internal static class SettingsMenuManager
     private static TMP_Dropdown _openDropdown;
     private static int _pendingOption;
 
+    // The frame on which the panel opened. The single Enter that opens Settings reaches two game
+    // input actions: DoFire opens the panel, then DoKeyBinding (routed by us as Confirm) arrives
+    // when Settings is already active and would otherwise activate entry 0 — opening the resolution
+    // dropdown. We ignore that leaked Enter by dropping Confirm on the frame we opened.
+    private static int _openedFrame = -1;
+
     public static bool Active => _active;
     public static bool DropdownOpen => _dropdownOpen;
 
@@ -48,6 +58,9 @@ internal static class SettingsMenuManager
             _active = true;
             _dropdownOpen = false;
             _openDropdown = null;
+
+            // Remember the open frame so the leaked opening Enter (see _openedFrame) is ignored.
+            _openedFrame = Time.frameCount;
 
             // ShowSettings always forces the Graphics tab visible but doesn't touch the private
             // actualTabIndex, so resync it before we drive SelectTab.
@@ -63,6 +76,7 @@ internal static class SettingsMenuManager
             _active = false;
             _dropdownOpen = false;
             _openDropdown = null;
+            _openedFrame = -1;
             _entries.Clear();
             SpeechManager.Speak("Settings closed");
         }
@@ -89,6 +103,12 @@ internal static class SettingsMenuManager
 
     public static void HandleEnter()
     {
+        // Ignore the Enter that opened Settings: it leaks in as a Confirm on the open frame and
+        // would otherwise activate entry 0 (opening the resolution dropdown). A deliberate Enter
+        // arrives on a later frame.
+        if (Time.frameCount == _openedFrame)
+            return;
+
         if (AlertManager.Instance != null && AlertManager.Instance.IsActive())
         {
             // Enter = Accept. SetConfirmAnswer fires the game's confirm delegate and hides the dialog.
@@ -153,12 +173,16 @@ internal static class SettingsMenuManager
 
         var e = _entries[_index];
 
-        if (e.Toggle != null)
+        if (e.Action != null)
+        {
+            // Button-style controls (Reset Tutorial / Reset Saved Data) open an AlertConfirmDouble
+            // dialog, which AlertConfirmDoublePatch announces — nothing to say here.
+            e.Action();
+        }
+        else if (e.Toggle != null)
         {
             e.Toggle.isOn = !e.Toggle.isOn;
-            // Reset toggles snap back and open a confirm dialog; that alert is announced separately.
-            if (AlertManager.Instance == null || !AlertManager.Instance.IsActive())
-                SpeechManager.Speak(e.Name + ", " + (e.Toggle.isOn ? "on" : "off"));
+            SpeechManager.Speak(e.Name + ", " + (e.Toggle.isOn ? "on" : "off"));
         }
         else if (e.Dropdown != null)
         {
@@ -237,6 +261,8 @@ internal static class SettingsMenuManager
             return "";
 
         var e = _entries[_index];
+        if (e.Action != null)
+            return e.Name + ", button";
         if (e.Toggle != null)
             return e.Name + ", " + (e.Toggle.isOn ? "on" : "off");
         if (e.Slider != null)
@@ -293,15 +319,26 @@ internal static class SettingsMenuManager
                 AddToggle(s.keyboardShortcutsToggle, "Keyboard shortcuts");
                 AddToggle(s.followingTheLeaderToggle, "Following the leader");
                 AddToggle(s.extendedDescriptionsToggle, "Extended descriptions");
-                AddToggle(s.resetTutorialToggle, "Reset tutorial");
+
+                // Reset Tutorial / Reset Saved Data are wired in-game as toggles, but they act as
+                // buttons: flipping one opens an AlertConfirmDouble dialog and immediately snaps the
+                // toggle back to off. Expose them as buttons that call the manager action directly,
+                // and DON'T gate them on activeInHierarchy — the game leaves these controls' Game
+                // objects inactive until needed, which was hiding Reset Tutorial entirely.
+                if (s.resetTutorialToggle != null)
+                {
+                    s.resetTutorialToggle.gameObject.SetActive(true);
+                    _entries.Add(new Entry { Name = "Reset tutorial", Action = s.ResetTutorial });
+                }
+
                 // Reset Saved Data lives in a container (resetSavedT) the game only enables at the
-                // main menu; gate on that rule rather than activeInHierarchy (which reports false
-                // depending on the tab layout). Ensure the container is live before exposing it.
+                // main menu; keep that rule (you can't wipe saves mid-run). Ensure the container is
+                // live before exposing it.
                 if (s.resetSavedToggle != null && SceneStatic.GetSceneName() == "MainMenu")
                 {
                     if (s.resetSavedT != null)
                         s.resetSavedT.gameObject.SetActive(true);
-                    _entries.Add(new Entry { Name = "Reset saved data", Toggle = s.resetSavedToggle });
+                    _entries.Add(new Entry { Name = "Reset saved data", Action = s.ResetSavedData });
                 }
                 break;
         }
