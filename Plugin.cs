@@ -20,7 +20,14 @@ public class Plugin : BaseUnityPlugin
         // menu so that while one is active, input never reaches the screen beneath it.
         InputRouter.Register(new TutorialInputContext());
         InputRouter.Register(new SettingsInputContext());
+        InputRouter.Register(new CorruptionInputContext());
+        var mapContext = new MapInputContext();
+        InputRouter.Register(mapContext);
         InputRouter.Register(new MainMenuInputContext());
+
+        // The map's Alt+G/T/I hotkeys use letters the game leaves unbound, so a frame poller sees
+        // them; it fires only while the map context owns input.
+        gameObject.AddComponent<MapHotkeyPoller>().MapContext = mapContext;
 
         new Harmony(MyPluginInfo.PLUGIN_GUID).PatchAll();
     }

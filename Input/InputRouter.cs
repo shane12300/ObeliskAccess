@@ -46,6 +46,11 @@ public static class InputRouter
     public static bool Confirm() => ActiveContext()?.OnConfirm() ?? false;
     public static bool Cancel() => ActiveContext()?.OnCancel() ?? false;
     public static bool Tab(bool backwards) => ActiveContext()?.OnTab(backwards) ?? false;
+    public static bool Number(int n) => ActiveContext()?.OnNumber(n) ?? false;
+
+    /// <summary>True when the given context is the one that currently owns input. Lets a component
+    /// (e.g. the map hotkey poller) act only while its screen actually has focus, respecting priority.</summary>
+    public static bool IsActive(IInputContext context) => context != null && ActiveContext() == context;
 
     // ---- raw-input helpers (shared by the patches so key detection lives in one place) ----
 
@@ -63,4 +68,26 @@ public static class InputRouter
     public static bool ShiftHeld
         => Keyboard.current != null
         && (Keyboard.current.leftShiftKey.isPressed || Keyboard.current.rightShiftKey.isPressed);
+
+    public static bool CtrlHeld
+        => Keyboard.current != null
+        && (Keyboard.current.leftCtrlKey.isPressed || Keyboard.current.rightCtrlKey.isPressed);
+
+    public static bool AltHeld
+        => Keyboard.current != null
+        && (Keyboard.current.leftAltKey.isPressed || Keyboard.current.rightAltKey.isPressed);
+
+    /// <summary>Recognises the number keys 1–4 (top row or numpad). Outputs the 1-based digit.</summary>
+    public static bool IsDigit(InputControl control, out int n)
+    {
+        n = 0;
+        var kb = Keyboard.current;
+        if (kb == null)
+            return false;
+        if (control == kb[Key.Digit1] || control == kb[Key.Numpad1]) { n = 1; return true; }
+        if (control == kb[Key.Digit2] || control == kb[Key.Numpad2]) { n = 2; return true; }
+        if (control == kb[Key.Digit3] || control == kb[Key.Numpad3]) { n = 3; return true; }
+        if (control == kb[Key.Digit4] || control == kb[Key.Numpad4]) { n = 4; return true; }
+        return false;
+    }
 }

@@ -42,6 +42,25 @@ public class RouterDoKeyBindingPatch
             InputRouter.Confirm();
         else if (InputRouter.IsTab(control))
             InputRouter.Tab(InputRouter.ShiftHeld);
+        else if (InputRouter.IsDigit(control, out int n))
+            InputRouter.Number(n);
+        // Digits are inert on the map by default (the game only acts on them during combat), so a
+        // non-swallowing postfix is enough — nothing else to suppress.
+    }
+}
+
+/// <summary>
+/// The game maps a bare Ctrl press to a "click" (<c>DoFirePerformed</c>). The map context
+/// repurposes Ctrl as its look-ahead modifier, so this prefix suppresses that click while the map
+/// owns input and Ctrl is held — otherwise Ctrl+arrow would also click whatever node the cursor
+/// happens to rest on. Gamepad A (no Ctrl held) and mouse clicks are unaffected.
+/// </summary>
+[HarmonyPatch(typeof(InputController), "DoFirePerformed")]
+public class RouterDoFirePerformedPatch
+{
+    static bool Prefix()
+    {
+        return !(ObeliskAccess.Input.Contexts.MapInputContext.IsCurrentlyActive && InputRouter.CtrlHeld);
     }
 }
 

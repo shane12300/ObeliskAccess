@@ -26,6 +26,9 @@ public interface IInputContext
 
     /// <summary>Handle Tab / Shift+Tab.</summary>
     bool OnTab(bool backwards);
+
+    /// <summary>Handle a number key 1–4 (n is 1-based). Return true to consume it.</summary>
+    bool OnNumber(int n);
 }
 
 /// <summary>No-op base so contexts only override the events they actually use.</summary>
@@ -36,4 +39,5 @@ public abstract class InputContextBase : IInputContext
     public virtual bool OnConfirm() => false;
     public virtual bool OnCancel() => false;
     public virtual bool OnTab(bool backwards) => false;
+    public virtual bool OnNumber(int n) => false;
 }

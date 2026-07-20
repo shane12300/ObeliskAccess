@@ -16,39 +16,110 @@ The output DLL (`bin/Debug/net46/ObeliskAccess.dll`) must be copied to the game'
 
 ## Architecture
 
+Input handling and speech are split into two concerns: a **central input router** decides which
+screen owns the keyboard and translates raw keys into semantic events; per-screen **contexts** and
+**announcement patches** implement each screen's behaviour and spoken output.
+
 ### Core data flow
 
-1. **`Plugin.cs`** — BepInEx entry point; calls `Harmony.PatchAll()` to auto-register all `[HarmonyPatch]` classes.
-2. **`SpeechManager.Speak(string)`** — Single TTS integration point. Currently writes to clipboard (`GUIUtility.systemCopyBuffer`) for use with external screen readers. 
-3. **`Patches/AccessibleMenuBase.cs`** — Abstract base class all menu patches inherit from. Provides shared helpers: `GetMenuItemText`, `AnnounceItem`, `InvokeItemButton`.
-4. **`Patches/*AccessibilityPatch.cs`** — Harmony postfix patches. Each menu screen gets one file inheriting `AccessibleMenuBase`.
+1. **`Plugin.cs`** — BepInEx entry point. Registers the `IInputContext`s in priority order, attaches
+   the map hotkey poller, then calls `Harmony.PatchAll()` to auto-register all `[HarmonyPatch]` classes.
+2. **`Input/` — the input router** (see below). The one place that owns keyboard dispatch.
+3. **`SpeechManager.Speak(string)`** — Single TTS integration point. Currently writes to clipboard
+   (`GUIUtility.systemCopyBuffer`) for an external screen reader. Swap here for real TTS.
+4. **`Patches/` — per-screen state + announcement.** `AccessibleMenuBase` provides text helpers
+   (`StripRichText` is public; `GetMenuItemText`/`AnnounceItem`/`InvokeItemButton` are `protected`).
+   Each screen's file holds its open/close/navigation announce patches and (for stateful screens) a
+   static manager the context delegates to (e.g. `MapNavigator`, `TutorialPopupManager`).
+
+### Central input router (`Input/`)
+
+- `IInputContext.cs` — the interface + `InputContextBase` no-op base. A context exposes `IsActive`
+  (queried live from game state) and handlers `OnMove(Vector2)`, `OnConfirm()`, `OnCancel()`,
+  `OnTab(bool)`, `OnNumber(int)`. A handler returning `true` consumes the event.
+- `InputRouter.cs` — priority-ordered context registry. Each event goes to the single
+  highest-priority context whose `IsActive` is true (no fall-through). Also the home of raw-key
+  helpers: `IsKeyboard`, `IsEnter`, `IsTab`, `IsDigit`, and the modifier reads
+  `ShiftHeld` / `CtrlHeld` / `AltHeld`. `Controller` holds the in-flight `InputController` for
+  contexts that call back into the game; `IsActive(context)` lets a component act only while its
+  screen owns input.
+- `RouterInputPatches.cs` — **the ONLY patches on `InputController`.** `DoMovement` (prefix,
+  swallows arrows iff handled) → `Move`; `DoEscape` (prefix, swallowable) → `Cancel`; `DoKeyBinding`
+  (postfix, non-swallowing) routes Enter→`Confirm`, Tab→`Tab`, digits 1–4→`Number`; a
+  `DoFirePerformed` prefix suppresses the game's bare-Ctrl "click" while the map owns input (Ctrl is
+  the map's look-ahead modifier).
+- `Input/Contexts/*InputContext.cs` — one per screen (thin; delegates to a `Patches/` manager).
+- `Input/MapHotkeyPoller.cs` — a `MonoBehaviour` that polls letters the game leaves **unbound**
+  (Alt+G/T/I on the map), since the InputAction system never fires for them.
+
+Registration order in `Plugin.Awake` **is** priority (highest first):
+`Tutorial > Settings > Corruption > Map > MainMenu`. A modal thus sits above the screen beneath it.
+
+### Screens supported
+
+| Screen | Context | Keys |
+|--------|---------|------|
+| Main menu / game-mode / save-slot | `MainMenuInputContext` | arrows (game nav, announced), Enter |
+| Settings | `SettingsInputContext` | arrows, Enter, Tab, Escape (cancels open dropdown) |
+| Tutorial popup | `TutorialInputContext` | Up/Down walk lines, Enter activates (modal focus trap) |
+| Map — nodes | `MapInputContext` | ←/→ reachable nodes; Ctrl+↑/↓ descend/ascend look-ahead, Ctrl+←/→ siblings; Enter travels; Alt+T node detail |
+| Map — party strip | `MapInputContext` | Tab toggles region; ↑/↓ read heroes; 1–4 jump to slot; Enter (open panel) deferred |
+| Map — global | `MapInputContext` + poller | Alt+G gold; Alt+I (and auto on open) position + trackers + tip |
+| Corruption prompt | `CorruptionInputContext` | ←/→ choose reward + accept; ↑/↓ toggle accept; Enter confirm |
 
 ### Extensibility pattern
 
-To add accessibility support for a new menu screen:
-1. Create `Patches/<MenuName>AccessibilityPatch.cs`
-2. Inherit `AccessibleMenuBase`
-3. Apply `[HarmonyPatch]` to the method that fires when the controller selection changes (analogous to `MainMenuManager.ControllerMovement`)
-4. Call `AnnounceItem(selectedTransform)` in the postfix
+- **Input**: add `Input/Contexts/XyzInputContext.cs : InputContextBase` and register it in
+  `Plugin.Awake` at the right priority. Do **not** add new `InputController` patches — route through
+  the context. For a modifier key use `InputRouter.CtrlHeld/AltHeld`; for an unbound letter, extend
+  the poller.
+- **Announce/state**: add `Patches/XyzAccessibilityPatch.cs` with the open/close + navigation
+  announce patches (may inherit `AccessibleMenuBase` for text helpers), and a static manager if the
+  screen has focus state.
 
 ### Key gotchas
 
-**`ForceKeyboardShortcutsPatch`** is essential — without it, `InputController.DoMovement` silently drops all keyboard arrow-key input because `GameManager.Instance.ConfigKeyboardShortcuts` defaults to `false`. The patch postfixes `SettingsManager.LoadPrefs` to force it `true`.
+**`ForceKeyboardShortcutsPatch`** is essential — without it, `InputController.DoMovement` silently
+drops all keyboard arrow-key input because `GameManager.Instance.ConfigKeyboardShortcuts` defaults
+to `false`. The patch postfixes `SettingsManager.LoadPrefs` to force it `true`.
 
-**Private member access** — Game members patched by string name (e.g. `"DoKeyBinding"`, `"DoFirePerformed"`, `"controllerList"`) must be accessed via `Traverse.Create(...).Field<T>(...)` or `.Method(...)`. Do not use reflection directly.
+**Public vs private member access** — many game members the mod uses are public (call directly).
+Private members patched/read by string name must go through `Traverse.Create(...).Field<T>(...)` /
+`.Method(...)`, not raw reflection. When a member won't compile though `../decompiled/` shows it,
+the decompile is stale — reflect the live DLL or re-decompile (see "Game code reference").
 
-**Harmony003 warning** — The analyzer incorrectly flags `_context.control` struct-field reads as modifications. This warning is safe to ignore.
+**Harmony003 warning** — the analyzer incorrectly flags `_context` struct-field reads in
+`RouterInputPatches` (DoMovement/DoKeyBinding) as modifications. These ~2 warnings are safe to ignore.
 
 ## Game code reference
 
-Decompiled game source is at `../decompiled/`. Key files:
+Decompiled game source is at `../decompiled/`. Key files (line numbers as of the 2026-07-19 re-decompile):
 
 | File | Relevant members |
 |------|-----------------|
-| `MainMenuManager.cs` | `ControllerMovement()` (l.1563), `controllerHorizontalIndex` (l.344), `controllerList` (l.342, private) |
-| `InputController.cs` | `DoKeyBinding()` (l.310, private), `DoFirePerformed()` (l.733, private) |
-| `BotonGeneric.cs` | `text` (l.18, public TMP_Text) |
+| `MainMenuManager.cs` | `ControllerMovement()` (l.1567), `controllerHorizontalIndex` (l.352), `controllerList` (l.350, private) |
+| `InputController.cs` | `DoKeyBinding()` (l.387, private), `DoFirePerformed()` (l.667, private) |
+| `BotonGeneric.cs` | `text` (l.17, public TMP_Text) |
 | `MenuButton.cs` | `buttonText` (l.8, public TMP_Text) |
+
+**Keeping `../decompiled/` current** — it is generated from the live `Assembly-CSharp.dll` and can
+fall behind after a game patch. If a member is present in `../decompiled/` but won't compile against
+the game DLL (or you otherwise suspect drift), the decompile is stale: **delete the folder and
+regenerate it** from the current DLL — do not decompile into the existing folder (a re-export
+overwrites matching files but leaves orphaned stale files for removed/renamed types). Regenerate
+with the ILSpy CLI:
+
+```bash
+# one-time (the latest ilspycmd package is broken, so pin a working version):
+dotnet tool install -g ilspycmd --version 8.2.0.7535
+MANAGED="C:\Program Files (x86)\Steam\steamapps\common\Across the Obelisk\AcrossTheObelisk_Data\Managed"
+ilspycmd -p -o ../decompiled_new -r "$MANAGED" "$MANAGED/Assembly-CSharp.dll"   # then delete ../decompiled and rename ../decompiled_new to it
+```
+
+`-p` produces a compilable per-type project matching the existing layout; `-r` resolves Unity deps.
+To confirm one symbol's real signature without a full re-decompile, reflect the DLL instead
+(`[Reflection.Assembly]::LoadFrom(...).GetType("X").GetMethods(...)`). Re-decompiling shifts the
+line numbers above, so refresh this table afterward.
 
 ## csproj — DLL reference rules
 
