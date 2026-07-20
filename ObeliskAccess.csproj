@@ -13,12 +13,16 @@
       https://nuget.samboy.dev/v3/index.json
     </RestoreAdditionalProjectSources>
     <RootNamespace>ObeliskAccess</RootNamespace>
+    <GameDir>C:\Program Files (x86)\Steam\steamapps\common\Across the Obelisk</GameDir>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="BepInEx.Analyzers" Version="1.*" PrivateAssets="all" />
     <PackageReference Include="BepInEx.Core" Version="5.*" />
     <PackageReference Include="BepInEx.PluginInfoProps" Version="2.*" />
+    <!-- Screen-reader speech (UniversalSpeech + SAPI fallback). net46 resolves the package's net35
+         build, which loads fine under BepInEx 5's Mono runtime. -->
+    <PackageReference Include="UnityAccessibilityLib" Version="2.0.0" />
   </ItemGroup>
   
   <ItemGroup Condition="'$(TargetFramework.TrimEnd(`0123456789`))' == 'net'">
@@ -62,9 +66,32 @@
   </ItemGroup>
 
   <Target Name="CopyToPlugins" AfterTargets="Build">
+    <ItemGroup>
+      <!-- The mod, plus its speech dependency, which BepInEx must find next to the plugin. -->
+      <PluginFiles Include="$(OutputPath)$(AssemblyName).dll" />
+      <PluginFiles Include="$(OutputPath)UnityAccessibilityLib.dll" />
+    </ItemGroup>
     <Copy
-      SourceFiles="$(OutputPath)$(AssemblyName).dll"
-      DestinationFolder="C:\Program Files (x86)\Steam\steamapps\common\Across the Obelisk\BepInEx\plugins\$(AssemblyName)"
+      SourceFiles="@(PluginFiles)"
+      DestinationFolder="$(GameDir)\BepInEx\plugins\$(AssemblyName)"
+    />
+  </Target>
+
+  <!-- UniversalSpeech is a native lib; its DLLs must sit next to the game executable (P/Invoke
+       resolves native DLLs from the exe's directory, not the plugin folder). Copy the committed
+       copies from native/ into the game root, but ONLY when absent, so a user's own/newer copy or a
+       different-arch build they placed is never overwritten. Guarded on the source existing so the
+       build doesn't fail before the binaries have been added to native/. -->
+  <Target Name="CopyNativeSpeech" AfterTargets="Build">
+    <Copy
+      SourceFiles="$(MSBuildProjectDirectory)\native\UniversalSpeech.dll"
+      DestinationFolder="$(GameDir)"
+      Condition="Exists('$(MSBuildProjectDirectory)\native\UniversalSpeech.dll') And !Exists('$(GameDir)\UniversalSpeech.dll')"
+    />
+    <Copy
+      SourceFiles="$(MSBuildProjectDirectory)\native\nvdaControllerClient.dll"
+      DestinationFolder="$(GameDir)"
+      Condition="Exists('$(MSBuildProjectDirectory)\native\nvdaControllerClient.dll') And !Exists('$(GameDir)\nvdaControllerClient.dll')"
     />
   </Target>
 

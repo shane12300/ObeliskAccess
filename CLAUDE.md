@@ -25,8 +25,16 @@ screen owns the keyboard and translates raw keys into semantic events; per-scree
 1. **`Plugin.cs`** — BepInEx entry point. Registers the `IInputContext`s in priority order, attaches
    the map hotkey poller, then calls `Harmony.PatchAll()` to auto-register all `[HarmonyPatch]` classes.
 2. **`Input/` — the input router** (see below). The one place that owns keyboard dispatch.
-3. **`SpeechManager.Speak(string)`** — Single TTS integration point. Currently writes to clipboard
-   (`GUIUtility.systemCopyBuffer`) for an external screen reader. Swap here for real TTS.
+3. **`SpeechManager`** — Single TTS integration point. Delegates to the `UnityAccessibilityLib`
+   NuGet package (net35 build, resolved for our net46 target), which speaks through an active screen
+   reader (NVDA/JAWS/…) via `UniversalSpeech`, falling back to Windows SAPI. `Speak(string)`
+   interrupts current speech (menus/navigation — last-write-wins); `SpeakQueued(string)` appends
+   without interrupting so the screen reader's own queue serialises a burst (combat announcements);
+   `RepeatLast()` / `Stop()` are also exposed. `Plugin.Awake` calls `SpeechManager.Initialize(Logger)`.
+   **Runtime requirement:** the 64-bit `UniversalSpeech.dll` must be placed in the game's root folder
+   (next to the executable). If absent, `Initialize` logs a warning and all speech becomes a silent
+   no-op — the mod still runs. The build copies `UnityAccessibilityLib.dll` into the plugin folder
+   alongside `ObeliskAccess.dll`.
 4. **`Patches/` — per-screen state + announcement.** `AccessibleMenuBase` provides text helpers
    (`StripRichText` is public; `GetMenuItemText`/`AnnounceItem`/`InvokeItemButton` are `protected`).
    Each screen's file holds its open/close/navigation announce patches and (for stateful screens) a
