@@ -4,7 +4,8 @@ Inventory from a full sweep of `../decompiled/` (2026-07-20), checked against cu
 
 **Adapted so far:** main menu (+ game-mode select, save slots), settings, tutorial popups,
 map (nodes / party strip / gold & position), corruption prompt, combat (navigation,
-announcements, review keys).
+announcements, review keys), narrative events (text walk, choices, roll narration, Alt+T
+hover info).
 
 Most unadapted surfaces expose the same controller contract the mod already piggybacks on:
 `ControllerMovement(...)` + `controllerList`/`_controllerList` + an index field + `IsActive()`.
@@ -18,9 +19,13 @@ Priority = how often a player hits it in a normal run × how hard it blocks a bl
 
 ## P0 — blocks completing a single-player run (core loop, every run)
 
-- [ ] **Narrative events** — `EventManager` (+ `Reply`): event text, reply options with
-      requirement/probability dice, continue button. Has `ControllerMovement`. The single biggest
-      gap: events are unreadable and unanswerable today.
+- [x] **Narrative events** — `EventManager` (+ `Reply`): event text, reply options with
+      requirement/probability dice, continue button. Implemented 2026-07-20
+      (`EventAccessibilityPatch` + `EventInputContext` + `EventHotkeyPoller`): tutorial-style
+      text walk with choices at the bottom, play-by-play roll narration, Alt+T hover-info
+      mirror. Tentatively verified in-game (one event incl. roll + probability); remaining
+      permutations (roll targets, blocked options, reward cards, chained events) to be
+      spot-checked during normal play.
 - [ ] **Post-combat card rewards** — `RewardsManager` (+ `CharacterReward`): per-hero reward card
       picks, dust. Has `ControllerMovement`. After nearly every fight.
 - [ ] **Loot / chest screen** — `LootManager` (+ `CharacterLoot`, `LootItem`): gold + item pickups

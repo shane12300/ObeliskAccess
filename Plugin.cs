@@ -26,6 +26,8 @@ public class Plugin : BaseUnityPlugin
         InputRouter.Register(new CorruptionInputContext());
         var combatContext = new CombatInputContext();
         InputRouter.Register(combatContext);
+        var eventContext = new EventInputContext();
+        InputRouter.Register(eventContext);
         var mapContext = new MapInputContext();
         InputRouter.Register(mapContext);
         InputRouter.Register(new MainMenuInputContext());
@@ -37,6 +39,10 @@ public class Plugin : BaseUnityPlugin
         // Combat's Alt review hotkeys are likewise unbound; a poller drives them (and the combat
         // event-announcement flush) while the combat context owns input.
         gameObject.AddComponent<CombatHotkeyPoller>().CombatContext = combatContext;
+
+        // The event screen's Alt+T/R hotkeys are unbound too; its poller also drives the
+        // event lifecycle tick (reply watcher, deferred reward-card reads).
+        gameObject.AddComponent<EventHotkeyPoller>().EventContext = eventContext;
 
         new Harmony(MyPluginInfo.PLUGIN_GUID).PatchAll();
     }

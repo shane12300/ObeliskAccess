@@ -1,0 +1,849 @@
+using System;
+using System.Collections.Generic;
+using System.Text;
+using System.Text.RegularExpressions;
+using HarmonyLib;
+using UnityEngine;
+
+namespace ObeliskAccess.Patches;
+
+/// <summary>
+/// Makes the map-event (story dialog) book screen accessible. Follows the tutorial-popup
+/// structure: on open the title + first body line are spoken and focus lands on that first line;
+/// Up/Down walk a flat list of title, description lines, the "requirements not met" counter,
+/// the choices, and finally the map-peek button; Enter activates. Dice rolls are narrated
+/// play-by-play with queued speech, and the outcome text is read as the game writes it.
+///
+/// Parity rule: every spoken string traces to on-screen TMP text or to a hover popup the game
+/// itself renders (probability dice, "not enough gold", card previews, roll-mode explainers).
+/// Internal-only data — raw roll thresholds, reward/follow-up fields, requirement ids — is
+/// never read, so a screen-reader user learns exactly what a sighted player would.
+/// </summary>
+internal static class EventScreenManager
+{
+    private enum Phase
+    {
+        None,      // no event open
+        Choosing,  // description + choices on screen, optionSelected == -1
+        Resolving, // choice made, costs paid, roll/animation running — input locked
+        Result     // outcome text written, Continue available
+    }
+
+    private struct Entry
+    {
+        public string Speech;
+        public Reply Reply;          // non-null => a choice row
+        public BotonGeneric Button;  // non-null => Continue or Hide/Show
+        public bool IsHideShow;      // Enter toggles the map peek instead of Clicked()
+    }
+
+    private struct PendingCardRead
+    {
+        public string CardId;
+        public float ReadAt;
+    }
+
+    private static readonly Regex _brTag = new Regex(@"<br\s*/?>", RegexOptions.Compiled);
+    private static readonly Regex _spriteTag =
+        new Regex(@"<sprite\s+name=""?([^"">]+?)""?\s*/?>", RegexOptions.Compiled);
+
+    private static readonly List<Entry> _entries = new List<Entry>();
+    private static readonly List<string> _textLines = new List<string>(); // title + description
+    private static readonly List<PendingCardRead> _pendingCardReads = new List<PendingCardRead>();
+
+    private static int _index;
+    private static Phase _phase = Phase.None;
+    private static int _replySnapshotHash;
+    private static bool _repliesAnnounced;
+    private static int _spokenResultLength;
+    private static int _rollCardsCalls;
+    private static string _selectedChoiceText = "";
+
+    public static bool Active => _phase != Phase.None && EventManager.Instance != null;
+
+    // ------------------------------------------------------------------ lifecycle
+
+    public static void OnEventOpened()
+    {
+        var em = EventManager.Instance;
+        if (em == null || em.title == null || em.description == null)
+            return;
+        // SetEvent bails without showing anything when the event data fails to resolve.
+        if (Traverse.Create(em).Field<EventData>("currentEvent").Value == null)
+            return;
+
+        Reset();
+        _phase = Phase.Choosing;
+
+        string title = Clean(em.title.text);
+        _textLines.Add(title.Length > 0 ? title : "Event");
+        _textLines.AddRange(SplitBookText(em.description.text));
+
+        RebuildEntries(preserveFocus: false);
+        _index = _entries.Count > 1 ? 1 : 0;
+
+        string announcement = _textLines[0];
+        if (_textLines.Count > 1)
+            announcement += ". " + _textLines[1];
+        SpeechManager.Speak(announcement);
+    }
+
+    public static void OnOptionSelected(int optionIndex)
+    {
+        var em = EventManager.Instance;
+        if (em == null || _phase != Phase.Choosing)
+            return;
+        // The game rejects selections after the first; only act on the accepted one.
+        if (em.optionSelected != optionIndex)
+            return;
+
+        var replies = GetVisibleReplies();
+        Reply selected = null;
+        foreach (var r in replies)
+        {
+            if (r.GetOptionIndex() == optionIndex)
+            {
+                selected = r;
+                break;
+            }
+        }
+        _selectedChoiceText = selected != null && selected.replyText != null
+            ? Clean(selected.replyText.text)
+            : "";
+
+        _phase = Phase.Resolving;
+        _rollCardsCalls = 0;
+        _spokenResultLength = 0;
+
+        // Covers Enter, mouse clicks, AND the game's 0.5s auto-select of a lone option.
+        SpeechManager.Speak("Selected: " + _selectedChoiceText);
+    }
+
+    public static void OnCardDrawn(int heroIndex)
+    {
+        if (_phase != Phase.Resolving)
+            return;
+        var em = EventManager.Instance;
+        if (em == null)
+            return;
+
+        try
+        {
+            var heroes = em.Heroes;
+            if (heroes == null || heroIndex < 0 || heroIndex >= heroes.Length || heroes[heroIndex] == null)
+                return;
+
+            var tr = Traverse.Create(em);
+            var rollManager = tr.Field<RollManager>("rollManager").Value;
+            if (rollManager?.charRollDatas == null || heroIndex >= rollManager.charRollDatas.Length)
+                return;
+            var data = rollManager.charRollDatas[heroIndex];
+            if (data == null || data.CardData == null)
+                return;
+
+            string line = heroes[heroIndex].SourceName + " draws " + Clean(data.CardData.CardName);
+            // The game only displays the number for energy-cost rolls; card-type rolls show none.
+            var replySelected = tr.Field<EventReplyData>("replySelected").Value;
+            if (replySelected == null || replySelected.SsRollCard == Enums.CardType.None)
+                line += ", " + data.Result;
+
+            SpeechManager.SpeakQueued(line + ".");
+        }
+        catch (Exception e)
+        {
+            Plugin.Logger.LogWarning($"Event card-draw announce failed: {e.Message}");
+        }
+    }
+
+    public static void OnResultTitle(bool success, int heroIndex)
+    {
+        if (_phase != Phase.Resolving && _phase != Phase.Result)
+            return;
+        var em = EventManager.Instance;
+        if (em == null)
+            return;
+
+        try
+        {
+            // Mirror the override the game applies before choosing which label to show.
+            if (SandboxManager.Instance != null && SandboxManager.Instance.AlwaysPassEventRoll)
+                success = true;
+
+            var tr = Traverse.Create(em);
+            var rollManager = tr.Field<RollManager>("rollManager").Value;
+            var replySelected = tr.Field<EventReplyData>("replySelected").Value;
+            bool isCritical = rollManager != null && replySelected != null
+                && rollManager.isCritical(replySelected, success);
+
+            var helper = success ? em.cardOK : em.cardKO;
+            var label = helper?.GetResult(heroIndex, isCritical);
+            string text = label != null ? Clean(label.text) : "";
+            if (text.Length == 0)
+                text = success ? "Success" : "Failure";
+
+            var heroes = em.Heroes;
+            if (heroIndex >= 0 && heroes != null && heroIndex < heroes.Length && heroes[heroIndex] != null)
+                SpeechManager.SpeakQueued(heroes[heroIndex].SourceName + ": " + text + ".");
+            else
+                SpeechManager.SpeakQueued(text + ".");
+        }
+        catch (Exception e)
+        {
+            Plugin.Logger.LogWarning($"Event result-title announce failed: {e.Message}");
+        }
+    }
+
+    public static void OnRollCardsStarted()
+    {
+        if (_phase != Phase.Resolving)
+            return;
+        _rollCardsCalls++;
+        // A second deal within one resolution is the Competition tie re-roll animation.
+        if (_rollCardsCalls > 1)
+            SpeechManager.SpeakQueued("Tie. Re-rolling.");
+    }
+
+    public static void OnFinish()
+    {
+        var em = EventManager.Instance;
+        if (em == null || _phase == Phase.None)
+            return;
+
+        _phase = Phase.Result;
+
+        // Speak only what Finish just appended; it runs twice when a roll had both winners
+        // and losers, and FinalResolution clears the text at the start of each resolution.
+        string full = em.result != null ? em.result.text : "";
+        if (full.Length < _spokenResultLength)
+            _spokenResultLength = 0;
+        if (full.Length > _spokenResultLength)
+        {
+            string delta = full.Substring(_spokenResultLength);
+            _spokenResultLength = full.Length;
+            foreach (var line in SplitBookText(delta))
+                SpeechManager.SpeakQueued(line);
+        }
+
+        RebuildEntries(preserveFocus: false);
+    }
+
+    public static void OnRewardCard(string cardId)
+    {
+        if (_phase == Phase.None)
+            return;
+        // The reward-card coroutine waits 0.2s and may swap the id (NG+ injury upgrade)
+        // before showing anything, so defer the read until the card is actually displayed.
+        _pendingCardReads.Add(new PendingCardRead
+        {
+            CardId = cardId,
+            ReadAt = Time.unscaledTime + 0.6f
+        });
+    }
+
+    public static void OnEventClosed()
+    {
+        if (_phase != Phase.None)
+            Reset();
+    }
+
+    /// <summary>
+    /// Per-frame upkeep, driven by <c>EventHotkeyPoller</c> regardless of which context owns
+    /// input: destroy safety net, the reply watcher (SetReplys is a coroutine with waits, a
+    /// random cull and an auto-select, so polling the visible set is the robust signal), and
+    /// the deferred reward-card reads.
+    /// </summary>
+    public static void Tick()
+    {
+        if (_phase == Phase.None)
+            return;
+        var em = EventManager.Instance;
+        if (em == null)
+        {
+            Reset();
+            return;
+        }
+
+        try
+        {
+            for (int i = _pendingCardReads.Count - 1; i >= 0; i--)
+            {
+                if (Time.unscaledTime < _pendingCardReads[i].ReadAt)
+                    continue;
+                string cardId = _pendingCardReads[i].CardId;
+                _pendingCardReads.RemoveAt(i);
+                SpeakRewardCard(em, cardId);
+            }
+
+            if (_phase != Phase.Choosing)
+                return;
+
+            int hash = ComputeReplyHash(em);
+            if (hash == _replySnapshotHash)
+                return;
+            _replySnapshotHash = hash;
+
+            var replies = GetVisibleReplies();
+            RebuildEntries(preserveFocus: true);
+
+            if (!_repliesAnnounced && replies.Count > 0)
+            {
+                _repliesAnnounced = true;
+                string msg = replies.Count == 1 ? "1 choice." : replies.Count + " choices.";
+                if (em.notMeeted != null && em.notMeeted.gameObject.activeSelf)
+                {
+                    string nm = Clean(em.notMeeted.text);
+                    if (nm.Length > 0)
+                        msg += " " + nm + ".";
+                }
+                SpeechManager.SpeakQueued(msg);
+            }
+        }
+        catch (Exception e)
+        {
+            Plugin.Logger.LogWarning($"Event tick failed: {e.Message}");
+        }
+    }
+
+    // ------------------------------------------------------------------ input
+
+    public static void Move(int dir)
+    {
+        if (!Active || _entries.Count == 0)
+            return;
+        // Input is locked while the roll/animation plays, like a sighted player watching it.
+        if (_phase == Phase.Resolving)
+            return;
+
+        _index += dir;
+        if (_index < 0)
+            _index = 0;
+        else if (_index >= _entries.Count)
+            _index = _entries.Count - 1;
+
+        SpeechManager.Speak(_entries[_index].Speech);
+    }
+
+    public static void Activate()
+    {
+        if (!Active || _entries.Count == 0 || _phase == Phase.Resolving)
+            return;
+        var em = EventManager.Instance;
+        if (_index < 0 || _index >= _entries.Count)
+            return;
+        var entry = _entries[_index];
+
+        if (entry.IsHideShow)
+        {
+            if (MapManager.Instance == null)
+                return;
+            MapManager.Instance.ShowHideEvent();
+            if (entry.Button != null)
+            {
+                string label = Clean(entry.Button.GetText()) + ", button";
+                _entries[_index] = new Entry
+                {
+                    Speech = label,
+                    Button = entry.Button,
+                    IsHideShow = true
+                };
+                SpeechManager.Speak(label);
+            }
+            return;
+        }
+
+        if (_phase == Phase.Choosing)
+        {
+            if (entry.Reply != null)
+            {
+                if (em.optionSelected != -1)
+                    return;
+                if (entry.Reply.replyButtonBlocked != null
+                    && entry.Reply.replyButtonBlocked.gameObject.activeSelf)
+                {
+                    // Clicking does nothing for sighted players either; they see this popup.
+                    SpeechManager.Speak(SafeText("notEnoughGold", "Not enough gold"));
+                    return;
+                }
+                entry.Reply.SelectThisOption();
+            }
+            else
+            {
+                SpeechManager.Speak("Press Down to reach the choices");
+            }
+            return;
+        }
+
+        // Result phase: activate the focused button, else fall back to Continue.
+        if (entry.Button != null)
+        {
+            entry.Button.Clicked();
+            return;
+        }
+        if (em.continueButton != null && em.continueButton.gameObject.activeSelf)
+            em.continueButton.Clicked();
+    }
+
+    /// <summary>
+    /// Alt+T: speaks the hover-only information a sighted player sees when mousing over the
+    /// focused choice — probability popup, blocked reason, card previews, roll-mode explainer.
+    /// </summary>
+    public static void SpeakFocusedDetail()
+    {
+        if (!Active || _entries.Count == 0 || _index < 0 || _index >= _entries.Count)
+            return;
+        var reply = _entries[_index].Reply;
+        if (reply == null)
+        {
+            SpeechManager.Speak("No additional details");
+            return;
+        }
+
+        var parts = new List<string>();
+        try
+        {
+            bool blocked = reply.replyButtonBlocked != null
+                && reply.replyButtonBlocked.gameObject.activeSelf;
+
+            if (reply.probDice != null && reply.probDice.gameObject.activeSelf
+                && reply.probPopup != null && !string.IsNullOrEmpty(reply.probPopup.text))
+                parts.Add(Clean(reply.probPopup.text));
+
+            if (blocked)
+                parts.Add(SafeText("notEnoughGold", "Not enough gold"));
+            else
+                AddCardPreviewParts(reply, parts);
+
+            if (reply.replyRoll != null && reply.replyRoll.gameObject.activeSelf)
+            {
+                var popup = reply.replyRoll.GetComponent<PopupText>();
+                if (popup != null && !string.IsNullOrEmpty(popup.id))
+                {
+                    string desc = SafeText(popup.id, "");
+                    if (desc.Length > 0)
+                        parts.Add(Clean(desc));
+                }
+            }
+        }
+        catch (Exception e)
+        {
+            Plugin.Logger.LogWarning($"Event detail read failed: {e.Message}");
+        }
+
+        SpeechManager.Speak(parts.Count > 0 ? string.Join(". ", parts.ToArray()) : "No additional details");
+    }
+
+    // ------------------------------------------------------------------ entry building
+
+    private static void RebuildEntries(bool preserveFocus)
+    {
+        var em = EventManager.Instance;
+        if (em == null)
+            return;
+
+        int focusedOption = -1;
+        int oldIndex = _index;
+        if (preserveFocus && _index >= 0 && _index < _entries.Count && _entries[_index].Reply != null)
+            focusedOption = _entries[_index].Reply.GetOptionIndex();
+
+        _entries.Clear();
+        foreach (var line in _textLines)
+            _entries.Add(new Entry { Speech = line });
+
+        int firstResultIndex = -1;
+
+        if (_phase == Phase.Choosing)
+        {
+            if (em.notMeeted != null && em.notMeeted.gameObject.activeSelf)
+            {
+                string nm = Clean(em.notMeeted.text);
+                if (nm.Length > 0)
+                    _entries.Add(new Entry { Speech = nm });
+            }
+            var replies = GetVisibleReplies();
+            for (int i = 0; i < replies.Count; i++)
+                _entries.Add(new Entry
+                {
+                    Speech = BuildChoiceSpeech(replies[i], i + 1, replies.Count),
+                    Reply = replies[i]
+                });
+        }
+        else if (_phase == Phase.Result)
+        {
+            if (_selectedChoiceText.Length > 0)
+                _entries.Add(new Entry { Speech = "Chosen: " + _selectedChoiceText });
+            var resultLines = SplitBookText(em.result != null ? em.result.text : "");
+            if (resultLines.Count > 0)
+                firstResultIndex = _entries.Count;
+            foreach (var line in resultLines)
+                _entries.Add(new Entry { Speech = line });
+            if (em.continueButton != null && em.continueButton.gameObject.activeSelf)
+                _entries.Add(new Entry
+                {
+                    Speech = Clean(em.continueButton.GetText()) + ", button",
+                    Button = em.continueButton
+                });
+        }
+
+        // The map-peek Hide/Show button is on screen for the whole event.
+        var mm = MapManager.Instance;
+        var hideShow = mm != null && mm.eventShowHideButton != null
+            ? mm.eventShowHideButton.GetComponent<BotonGeneric>()
+            : null;
+        if (hideShow != null && hideShow.gameObject.activeInHierarchy)
+            _entries.Add(new Entry
+            {
+                Speech = Clean(hideShow.GetText()) + ", button",
+                Button = hideShow,
+                IsHideShow = true
+            });
+
+        if (preserveFocus)
+        {
+            int restored = -1;
+            if (focusedOption >= 0)
+            {
+                for (int i = 0; i < _entries.Count; i++)
+                {
+                    if (_entries[i].Reply != null && _entries[i].Reply.GetOptionIndex() == focusedOption)
+                    {
+                        restored = i;
+                        break;
+                    }
+                }
+            }
+            _index = restored >= 0 ? restored : Mathf.Clamp(oldIndex, 0, Math.Max(0, _entries.Count - 1));
+        }
+        else if (_phase == Phase.Result && firstResultIndex >= 0)
+        {
+            _index = firstResultIndex;
+        }
+        else
+        {
+            _index = Mathf.Clamp(_index, 0, Math.Max(0, _entries.Count - 1));
+        }
+    }
+
+    private static string BuildChoiceSpeech(Reply reply, int n, int of)
+    {
+        var sb = new StringBuilder();
+        sb.Append("Choice ").Append(n).Append(" of ").Append(of).Append(": ");
+        sb.Append(reply.replyText != null ? Clean(reply.replyText.text) : "");
+
+        if (reply.replyRoll != null && reply.replyRoll.gameObject.activeSelf
+            && reply.replyRollText != null)
+        {
+            string roll = Clean(reply.replyRollText.text);
+            if (roll.Length > 0)
+                sb.Append(". Roll: ").Append(roll);
+        }
+        if (reply.replyButtonBlocked != null && reply.replyButtonBlocked.gameObject.activeSelf)
+            sb.Append(". Blocked");
+        if (reply.dlcText != null && reply.dlcText.gameObject.activeSelf)
+        {
+            string dlc = Clean(reply.dlcText.text);
+            if (dlc.Length > 0)
+                sb.Append(". ").Append(dlc);
+        }
+        return sb.ToString();
+    }
+
+    private static List<Reply> GetVisibleReplies()
+    {
+        var result = new List<Reply>();
+        var em = EventManager.Instance;
+        if (em == null || em.replysT == null)
+            return result;
+        foreach (var r in em.replysT.GetComponentsInChildren<Reply>(false))
+        {
+            if (r != null)
+                result.Add(r);
+        }
+        result.Sort((a, b) => a.GetOptionIndex().CompareTo(b.GetOptionIndex()));
+        return result;
+    }
+
+    private static int ComputeReplyHash(EventManager em)
+    {
+        int h = 17;
+        if (em.notMeeted != null && em.notMeeted.gameObject.activeSelf)
+            h = h * 31 + 1;
+        var replies = GetVisibleReplies();
+        h = h * 31 + replies.Count;
+        foreach (var r in replies)
+        {
+            h = h * 31 + r.GetOptionIndex();
+            h = h * 31 + ((r.replyButtonBlocked != null && r.replyButtonBlocked.gameObject.activeSelf) ? 1 : 0);
+        }
+        return h;
+    }
+
+    // ------------------------------------------------------------------ hover-info mirrors
+
+    /// <summary>
+    /// Mirrors <c>Reply.OnMouseEnter</c>'s card previews, names only: the shown card, or the
+    /// item the choice would corrupt (and what it becomes), or the item it would remove.
+    /// </summary>
+    private static void AddCardPreviewParts(Reply reply, List<string> parts)
+    {
+        var data = reply.GetEventReplyData();
+        if (data == null || Globals.Instance == null)
+            return;
+
+        if (data.ReplyShowCard != null)
+        {
+            var cd = Globals.Instance.GetCardData(data.ReplyShowCard.Id, instantiate: false);
+            if (cd != null)
+                parts.Add("Shows card: " + Clean(cd.CardName));
+            return;
+        }
+
+        if (data.SsCorruptItemSlot != Enums.ItemSlot.None)
+        {
+            Hero hero;
+            string itemId = FindHeroSlotItem(data.RequiredClass, data.SsCorruptItemSlot, out hero);
+            if (itemId == null)
+                return;
+            var cd = Functions.GetCardDataFromCardData(
+                Globals.Instance.GetCardData(itemId, instantiate: false), "");
+            if (cd == null || cd.UpgradesToRare == null)
+                return;
+            var corrupted = Globals.Instance.GetCardData(cd.UpgradesToRare.Id, instantiate: false);
+            if (corrupted != null)
+                parts.Add(Clean(cd.CardName) + " corrupts to " + Clean(corrupted.CardName));
+            return;
+        }
+
+        if (data.SsRemoveItemSlot != Enums.ItemSlot.None)
+        {
+            Hero hero;
+            string itemId = FindHeroSlotItem(data.RequiredClass, data.SsRemoveItemSlot, out hero);
+            if (itemId == null)
+                return;
+            var cd = Globals.Instance.GetCardData(itemId, instantiate: false);
+            if (cd != null && hero != null)
+                parts.Add("Removes " + Clean(cd.CardName) + " from " + hero.SourceName);
+        }
+    }
+
+    private static string FindHeroSlotItem(SubClassData requiredClass, Enums.ItemSlot slot, out Hero hero)
+    {
+        hero = null;
+        var em = EventManager.Instance;
+        if (em == null || requiredClass == null || Globals.Instance == null)
+            return null;
+        var subClass = Globals.Instance.GetSubClassData(requiredClass.Id);
+        if (subClass == null)
+            return null;
+
+        var heroes = em.Heroes;
+        if (heroes == null)
+            return null;
+        foreach (var h in heroes)
+        {
+            if (h == null || h.HeroData == null || h.HeroData.HeroSubClass.Id != subClass.Id)
+                continue;
+            hero = h;
+            string itemId;
+            switch (slot)
+            {
+                case Enums.ItemSlot.Weapon: itemId = h.Weapon; break;
+                case Enums.ItemSlot.Armor: itemId = h.Armor; break;
+                case Enums.ItemSlot.Jewelry: itemId = h.Jewelry; break;
+                case Enums.ItemSlot.Accesory: itemId = h.Accesory; break;
+                case Enums.ItemSlot.Pet: itemId = h.Pet; break;
+                default: itemId = ""; break;
+            }
+            return string.IsNullOrEmpty(itemId) ? null : itemId;
+        }
+        return null;
+    }
+
+    private static void SpeakRewardCard(EventManager em, string cardId)
+    {
+        // Pick the same helper the game picks (injuries go to the KO frame).
+        var pendingData = Globals.Instance != null
+            ? Globals.Instance.GetCardData(cardId, instantiate: false)
+            : null;
+        var helper = pendingData != null && pendingData.CardClass == Enums.CardClass.Injury
+            ? em.cardKO
+            : em.cardOK;
+
+        string caption = helper != null && helper.Text != null ? Clean(helper.Text.text) : "";
+
+        // Read the displayed card's name (covers the NG+ injury upgrade swap).
+        string cardName = "";
+        var item = helper != null && helper.parent != null
+            ? helper.parent.GetComponentInChildren<CardItem>()
+            : null;
+        var displayed = item != null ? item.GetCardData() : null;
+        if (displayed == null)
+            displayed = pendingData;
+        if (displayed != null)
+            cardName = Clean(displayed.CardName);
+
+        string line = (caption + " " + cardName).Trim();
+        if (line.Length > 0)
+            SpeechManager.SpeakQueued(line);
+    }
+
+    // ------------------------------------------------------------------ text helpers
+
+    /// <summary>
+    /// Splits book text into spoken lines: TMP <c>&lt;br&gt;</c> tags and real newlines both
+    /// break lines; each segment gets sprite-tag conversion then rich-text stripping.
+    /// </summary>
+    private static List<string> SplitBookText(string raw)
+    {
+        var result = new List<string>();
+        if (string.IsNullOrEmpty(raw))
+            return result;
+
+        string withBreaks = _brTag.Replace(raw, "\n");
+        foreach (var segment in withBreaks.Split('\n'))
+        {
+            string clean = Clean(segment);
+            if (clean.Length > 0)
+                result.Add(clean);
+        }
+        return result;
+    }
+
+    /// <summary>Sprite-tag conversion + rich-text strip, the pipeline for all event speech.</summary>
+    private static string Clean(string raw)
+    {
+        if (string.IsNullOrEmpty(raw))
+            return "";
+        return AccessibleMenuBase.StripRichText(ConvertSpriteTags(raw));
+    }
+
+    /// <summary>
+    /// Converts TMP <c>&lt;sprite name=X&gt;</c> icons to words before stripping, so reward
+    /// lines keep their units ("gold 75" instead of a bare "75"). Unknown names (perk icons)
+    /// fall back to the sprite name itself. Kept local — StripRichText's other callers rely
+    /// on tags vanishing entirely.
+    /// </summary>
+    private static string ConvertSpriteTags(string raw)
+    {
+        return _spriteTag.Replace(raw, m =>
+        {
+            switch (m.Groups[1].Value.ToLowerInvariant())
+            {
+                case "gold": return " gold ";
+                case "dust": return " dust ";
+                case "experience": return " experience ";
+                case "supply": return " supplies ";
+                case "heart": return " health ";
+                case "cards": return " "; // decorative deck icon on the roll banner
+                default: return " " + m.Groups[1].Value + " ";
+            }
+        });
+    }
+
+    private static string SafeText(string id, string fallback)
+    {
+        try
+        {
+            string text = Texts.Instance != null ? Texts.Instance.GetText(id) : "";
+            return string.IsNullOrEmpty(text) ? fallback : text;
+        }
+        catch
+        {
+            return fallback;
+        }
+    }
+
+    private static void Reset()
+    {
+        _phase = Phase.None;
+        _entries.Clear();
+        _textLines.Clear();
+        _pendingCardReads.Clear();
+        _index = 0;
+        _replySnapshotHash = 0;
+        _repliesAnnounced = false;
+        _spokenResultLength = 0;
+        _rollCardsCalls = 0;
+        _selectedChoiceText = "";
+    }
+}
+
+[HarmonyPatch(typeof(EventManager), nameof(EventManager.SetEvent))]
+public class EventOpenPatch
+{
+    static void Postfix()
+    {
+        EventScreenManager.OnEventOpened();
+    }
+}
+
+[HarmonyPatch(typeof(EventManager), nameof(EventManager.SelectOption))]
+public class EventSelectOptionPatch
+{
+    static void Postfix(int _index)
+    {
+        EventScreenManager.OnOptionSelected(_index);
+    }
+}
+
+[HarmonyPatch(typeof(EventManager), nameof(EventManager.NET_SelectAnswer))]
+public class EventNetSelectAnswerPatch
+{
+    static void Postfix(int _answerId)
+    {
+        EventScreenManager.OnOptionSelected(_answerId);
+    }
+}
+
+[HarmonyPatch(typeof(EventManager), "DoCard")]
+public class EventDoCardPatch
+{
+    static void Postfix(int heroIndex)
+    {
+        EventScreenManager.OnCardDrawn(heroIndex);
+    }
+}
+
+[HarmonyPatch(typeof(EventManager), "ShowResultTitle")]
+public class EventShowResultTitlePatch
+{
+    static void Postfix(bool success, int heroIndex)
+    {
+        EventScreenManager.OnResultTitle(success, heroIndex);
+    }
+}
+
+[HarmonyPatch(typeof(EventManager), "RollCards")]
+public class EventRollCardsPatch
+{
+    static void Postfix()
+    {
+        EventScreenManager.OnRollCardsStarted();
+    }
+}
+
+[HarmonyPatch(typeof(EventManager), "Finish")]
+public class EventFinishPatch
+{
+    static void Postfix()
+    {
+        EventScreenManager.OnFinish();
+    }
+}
+
+[HarmonyPatch(typeof(EventManager), "GenerateRewardCard")]
+public class EventRewardCardPatch
+{
+    static void Postfix(string cardId)
+    {
+        EventScreenManager.OnRewardCard(cardId);
+    }
+}
+
+[HarmonyPatch(typeof(EventManager), nameof(EventManager.CloseEvent))]
+public class EventClosePatch
+{
+    static void Postfix()
+    {
+        EventScreenManager.OnEventClosed();
+    }
+}

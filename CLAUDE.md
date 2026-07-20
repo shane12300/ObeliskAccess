@@ -57,11 +57,14 @@ screen owns the keyboard and translates raw keys into semantic events; per-scree
   `DoFirePerformed` prefix suppresses the game's bare-Ctrl "click" while the map owns input (Ctrl is
   the map's look-ahead modifier).
 - `Input/Contexts/*InputContext.cs` — one per screen (thin; delegates to a `Patches/` manager).
-- `Input/MapHotkeyPoller.cs` — a `MonoBehaviour` that polls letters the game leaves **unbound**
-  (Alt+G/T/I on the map), since the InputAction system never fires for them.
+- `Input/MapHotkeyPoller.cs`, `Input/CombatHotkeyPoller.cs`, `Input/EventHotkeyPoller.cs` —
+  `MonoBehaviour`s that poll letters the game leaves **unbound** (Alt+letter review keys), since
+  the InputAction system never fires for them; each is gated on `InputRouter.IsActive(context)`.
+  The combat/event pollers also run their manager's per-frame tick *outside* that gate.
 
 Registration order in `Plugin.Awake` **is** priority (highest first):
-`Tutorial > Settings > Corruption > Map > MainMenu`. A modal thus sits above the screen beneath it.
+`Tutorial > Settings > Corruption > Combat > Event > Map > MainMenu`. A modal thus sits above the
+screen beneath it.
 
 ### Screens supported
 
@@ -74,6 +77,7 @@ Registration order in `Plugin.Awake` **is** priority (highest first):
 | Map — party strip | `MapInputContext` | Tab toggles region; ↑/↓ read heroes; 1–4 jump to slot; Enter (open panel) deferred |
 | Map — global | `MapInputContext` + poller | Alt+G gold; Alt+I (and auto on open) position + trackers + tip |
 | Corruption prompt | `CorruptionInputContext` | ←/→ choose reward + accept; ↑/↓ toggle accept; Enter confirm |
+| Map event (story dialog) | `EventInputContext` + poller | ↑/↓ walk title/text/choices (choices at bottom); Enter select/Continue; Alt+T hover info (probability, blocked reason, card previews, roll explainer); Alt+R repeat; rolls narrated play-by-play |
 
 ### Extensibility pattern
 
