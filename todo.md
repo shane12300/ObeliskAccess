@@ -44,6 +44,7 @@ Priority = how often a player hits it in a normal run × how hard it blocks a bl
       ready-up, treasures, supply. Implemented 2026-07-20 (`TownAccessibilityPatch` +
       `TownInputContext` + `TownHotkeyPoller`): Up/Down hub items incl. treasures, Tab party
       strip, tutorial-step alerts spoken and answerable, arrival overview, Alt+T/G/I/R.
+      **Verified in-game 2026-07-20 — works correctly.**
 - [x] **Card shop / craft** — `CardCraftManager`: buy/upgrade/craft cards, filters. Implemented
       2026-07-20 for craftType 0–4 (`CardCraftAccessibilityPatch` + `CardCraftInputContext` +
       `CardCraftHotkeyPoller`): Altar A/B preview, Church confirm-remove, Forge/Armory grids
@@ -52,6 +53,11 @@ Priority = how often a player hits it in a normal run × how hard it blocks a bl
       NOT covered: obelisk-challenge setup nav (craftType 5, stays a P2 item), corruption
       flows (6/7 — the existing corruption handling owns those), post-divination reward screen
       (the P0 rewards item), deck save/load slots at the starting town.
+      **Verified in-game 2026-07-20 — all five service screens work correctly**, with the one
+      exception noted below.
+  - [ ] **Filters dialogue (Alt+F) needs rework** — functional, but not displaying as neatly
+        as it should. A complex change: the user is considering a complete redesign of the
+        filter menu rather than incremental tweaks. Deferred for now (user feedback 2026-07-20).
 - [ ] **End of run** — `FinishRunManager` + `FinishProgression` (+ `ProgressionRow`,
       `UnlockedBar`): victory/defeat summary, unlock reveal, back to menu. Has `ControllerMovement`.
 
@@ -98,7 +104,7 @@ Priority = how often a player hits it in a normal run × how hard it blocks a bl
 - [x] **Town upgrades / sell supply** — `TownUpgradeWindow`. Implemented 2026-07-20
       (`TownUpgradeAccessibilityPatch` + `TownUpgradeInputContext`): Left/Right column,
       Up/Down chain, owned/available/locked reasons, buy via the game's confirm alert,
-      sell-supply quantity sub-mode.
+      sell-supply quantity sub-mode. **Verified in-game 2026-07-20 — works correctly.**
 - [ ] **Divination minigames** — `CardPlayerManager` (pick-a-card), `CardPlayerPairsManager`
       (memory pairs). Both have `ControllerMovement`.
 - [ ] **Intro & cinematics** — `IntroNewGameManager`, `CinematicManager`: speak story text,
