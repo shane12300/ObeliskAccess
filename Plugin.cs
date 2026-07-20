@@ -24,10 +24,16 @@ public class Plugin : BaseUnityPlugin
         InputRouter.Register(new TutorialInputContext());
         InputRouter.Register(new SettingsInputContext());
         InputRouter.Register(new CorruptionInputContext());
+        var cardCraftContext = new CardCraftInputContext();
+        InputRouter.Register(cardCraftContext);
         var combatContext = new CombatInputContext();
         InputRouter.Register(combatContext);
         var eventContext = new EventInputContext();
         InputRouter.Register(eventContext);
+        var townUpgradeContext = new TownUpgradeInputContext();
+        InputRouter.Register(townUpgradeContext);
+        var townContext = new TownInputContext();
+        InputRouter.Register(townContext);
         var mapContext = new MapInputContext();
         InputRouter.Register(mapContext);
         InputRouter.Register(new MainMenuInputContext());
@@ -43,6 +49,16 @@ public class Plugin : BaseUnityPlugin
         // The event screen's Alt+T/R hotkeys are unbound too; its poller also drives the
         // event lifecycle tick (reply watcher, deferred reward-card reads).
         gameObject.AddComponent<EventHotkeyPoller>().EventContext = eventContext;
+
+        // The town hub's Alt review keys are unbound letters too; its poller also drives the
+        // hub lifecycle tick (arrival announce, sub-screen close detection).
+        var townPoller = gameObject.AddComponent<TownHotkeyPoller>();
+        townPoller.TownContext = townContext;
+        townPoller.TownUpgradeContext = townUpgradeContext;
+
+        // The service screens' Alt review keys (and Alt+F filters) are unbound letters too; the
+        // poller also drives screen-open detection, since ShowCardCraft is async.
+        gameObject.AddComponent<CardCraftHotkeyPoller>().CardCraftContext = cardCraftContext;
 
         new Harmony(MyPluginInfo.PLUGIN_GUID).PatchAll();
     }

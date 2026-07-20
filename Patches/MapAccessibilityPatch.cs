@@ -291,6 +291,12 @@ public static class MapNavigator
             SpeechManager.Speak("Empty slot");
             return;
         }
+        SpeechManager.Speak(BuildHeroLine(h));
+    }
+
+    /// <summary>One spoken hero summary line; shared with the town party strip.</summary>
+    internal static string BuildHeroLine(Hero h)
+    {
         var sb = new StringBuilder();
         sb.Append(h.SourceName);
         sb.Append(", ").Append(h.HpCurrent).Append(" of ").Append(h.Hp).Append(" health");
@@ -303,7 +309,7 @@ public static class MapNavigator
             sb.Append(", ").Append(injuries).Append(injuries == 1 ? " injury" : " injuries");
         if (h.IsReadyForLevelUp())
             sb.Append(", ready to level up");
-        SpeechManager.Speak(sb.ToString());
+        return sb.ToString();
     }
 
     private static void CountCards(Hero h, out int deck, out int injuries)

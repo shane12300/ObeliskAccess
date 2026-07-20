@@ -372,6 +372,17 @@ public class SettingsOpenPatch
     }
 }
 
+[HarmonyPatch(typeof(AlertManager), nameof(AlertManager.AlertConfirm))]
+public class AlertConfirmSinglePatch
+{
+    static void Postfix(AlertManager __instance)
+    {
+        string message = AccessibleMenuBase.StripRichText(__instance.alertText.text);
+        string accept = AccessibleMenuBase.StripRichText(__instance.alertTextSingleButton.text);
+        SpeechManager.Speak(message + ". Enter to " + accept + ".");
+    }
+}
+
 [HarmonyPatch(typeof(AlertManager), nameof(AlertManager.AlertConfirmDouble))]
 public class AlertConfirmDoublePatch
 {

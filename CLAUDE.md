@@ -57,14 +57,23 @@ screen owns the keyboard and translates raw keys into semantic events; per-scree
   `DoFirePerformed` prefix suppresses the game's bare-Ctrl "click" while the map owns input (Ctrl is
   the map's look-ahead modifier).
 - `Input/Contexts/*InputContext.cs` — one per screen (thin; delegates to a `Patches/` manager).
-- `Input/MapHotkeyPoller.cs`, `Input/CombatHotkeyPoller.cs`, `Input/EventHotkeyPoller.cs` —
-  `MonoBehaviour`s that poll letters the game leaves **unbound** (Alt+letter review keys), since
-  the InputAction system never fires for them; each is gated on `InputRouter.IsActive(context)`.
-  The combat/event pollers also run their manager's per-frame tick *outside* that gate.
+- `Input/MapHotkeyPoller.cs`, `Input/CombatHotkeyPoller.cs`, `Input/EventHotkeyPoller.cs`,
+  `Input/TownHotkeyPoller.cs`, `Input/CardCraftHotkeyPoller.cs` — `MonoBehaviour`s that poll
+  letters the game leaves **unbound** (Alt+letter review keys), since the InputAction system never
+  fires for them; each is gated on `InputRouter.IsActive(context)`. The combat/event/town/craft
+  pollers also run their manager's per-frame tick *outside* that gate (lifecycle detection —
+  town arrival, craft-screen open — must survive a modal owning input).
 
 Registration order in `Plugin.Awake` **is** priority (highest first):
-`Tutorial > Settings > Corruption > Combat > Event > Map > MainMenu`. A modal thus sits above the
-screen beneath it.
+`Tutorial > Settings > Corruption > CardCraft > Combat > Event > TownUpgrade > Town > Map >
+MainMenu`. A modal thus sits above the screen beneath it. (Matches the game's own modality order
+`… Event > Town > Map …`; CardCraft sits above Event because event shops open over the map.)
+
+**Alerts**: `AlertConfirm`/`AlertConfirmDouble` are announced globally (patches in
+`SettingsMenuAccessibilityPatch.cs`). The town-family contexts (Town/TownUpgrade/CardCraft) do
+NOT suspend while an alert is up — they answer it through `Patches/AlertHelper.cs`
+(Enter=`SetConfirmAnswer(true)`, Escape=`CloseAlert()`), because those screens spawn their own
+confirm dialogs. Other contexts still exclude alerts in `IsActive` (known gap outside town).
 
 ### Screens supported
 
@@ -78,6 +87,9 @@ screen beneath it.
 | Map — global | `MapInputContext` + poller | Alt+G gold; Alt+I (and auto on open) position + trackers + tip |
 | Corruption prompt | `CorruptionInputContext` | ←/→ choose reward + accept; ↑/↓ toggle accept; Enter confirm |
 | Map event (story dialog) | `EventInputContext` + poller | ↑/↓ walk title/text/choices (choices at bottom); Enter select/Continue; Alt+T hover info (probability, blocked reason, card previews, roll explainer); Alt+R repeat; rolls narrated play-by-play |
+| Town hub | `TownInputContext` + poller | ↑/↓ hub items (5 buildings, upgrades, Ready, treasures); Enter opens/claims (confirm alerts answered in place); Tab party strip (↑/↓ heroes, 1–4 slots); Alt+T/G/I/R; arrival overview |
+| Town services (Altar/Church/Forge/Divination/Armory) | `CardCraftInputContext` + poller | One context for `CardCraftManager` craftType 0–4 (also covers map-event shops). ↑/↓ items with page auto-advance; ←/→ pages (or A/B variant in Altar preview); Enter single-press buy; Tab regions (Forge deck ref; Armory equipped+controls); 1–4 hero; Alt+F filters (Forge); Alt+T full card/item detail; purchases announced via `Hero.*` postfixes |
+| Town upgrades window | `TownUpgradeInputContext` | ←/→ building column, ↑/↓ its 6-upgrade chain; states with locked reasons; Enter buys via game confirm alert; Tab grid/sell/exit; sell-supply ↑/↓ quantity sub-mode |
 
 ### Extensibility pattern
 

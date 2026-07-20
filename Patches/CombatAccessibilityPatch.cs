@@ -1,6 +1,5 @@
 using System.Collections.Generic;
 using System.Text;
-using System.Text.RegularExpressions;
 using BattleMatch;
 using Cards;
 using HarmonyLib;
@@ -70,8 +69,6 @@ public static class CombatNavigator
     private static readonly Dictionary<string, float> _recentNegated = new Dictionary<string, float>();
     private const float NEGATED_DEDUPE_WINDOW = 1.5f;
 
-    private static readonly Regex _brTag = new Regex(@"<br\s*/?>", RegexOptions.Compiled);
-    private static readonly Regex _spriteTag = new Regex(@"<sprite name=([^>/ ]+)[^>]*>", RegexOptions.Compiled);
 
     // ======================= lifecycle =======================
 
@@ -1083,35 +1080,11 @@ public static class CombatNavigator
         return AccessibleMenuBase.StripRichText(CleanDesc(desc));
     }
 
-    /// <summary>Recover <c>&lt;sprite name=X&gt;</c> keyword words before tags are stripped, else they vanish.</summary>
-    private static string CleanDesc(string raw)
-    {
-        if (string.IsNullOrEmpty(raw))
-            return "";
-        return _spriteTag.Replace(raw, m =>
-        {
-            string key = m.Groups[1].Value;
-            string word = Texts.Instance != null ? Texts.Instance.GetText(key) : key;
-            return string.IsNullOrEmpty(word) ? key : word;
-        });
-    }
+    // Markup handling lives in the shared CardSpeech helper (also used by the town screens);
+    // these wrappers keep the many combat call sites unchanged.
+    private static string CleanDesc(string raw) => CardSpeech.CleanDescription(raw);
 
-    /// <summary>Split markup into logical lines (mirrors the tutorial popup's line walker).</summary>
-    private static List<string> SplitLines(string raw)
-    {
-        var result = new List<string>();
-        if (string.IsNullOrEmpty(raw))
-            return result;
-
-        string withBreaks = _brTag.Replace(raw, "\n");
-        foreach (var segment in withBreaks.Split('\n'))
-        {
-            string clean = AccessibleMenuBase.StripRichText(segment);
-            if (clean.Length > 0)
-                result.Add(clean);
-        }
-        return result;
-    }
+    private static List<string> SplitLines(string raw) => CardSpeech.SplitLines(raw);
 
     private static int Clamp(int v, int lo, int hi) => v < lo ? lo : (v > hi ? hi : v);
 
@@ -1318,21 +1291,8 @@ public static class CombatNavigator
 
     private static void SpeakCardKeynotes(CardRealtimeData cd)
     {
-        var kn = cd != null ? cd.KeyNotes : null;
-        if (kn == null || kn.Count == 0) { SpeechManager.Speak("No keywords"); return; }
-
-        var parts = new List<string>();
-        foreach (var k in kn)
-        {
-            if (k == null)
-                continue;
-            string n = AccessibleMenuBase.StripRichText(k.KeynoteName);
-            string d = AccessibleMenuBase.StripRichText(CleanDesc(k.Description));
-            if (string.IsNullOrEmpty(n) && string.IsNullOrEmpty(d))
-                continue;
-            parts.Add(string.IsNullOrEmpty(d) ? n : n + ": " + d);
-        }
-        SpeechManager.Speak(parts.Count > 0 ? string.Join(". ", parts.ToArray()) : "No keywords");
+        string detail = CardSpeech.KeynoteDetail(cd);
+        SpeechManager.Speak(detail.Length > 0 ? detail : "No keywords");
     }
 
     private static void SpeakResists(Character c)

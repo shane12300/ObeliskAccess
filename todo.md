@@ -5,7 +5,7 @@ Inventory from a full sweep of `../decompiled/` (2026-07-20), checked against cu
 **Adapted so far:** main menu (+ game-mode select, save slots), settings, tutorial popups,
 map (nodes / party strip / gold & position), corruption prompt, combat (navigation,
 announcements, review keys), narrative events (text walk, choices, roll narration, Alt+T
-hover info).
+hover info), town (hub, all five service screens, upgrades window, treasures).
 
 Most unadapted surfaces expose the same controller contract the mod already piggybacks on:
 `ControllerMovement(...)` + `controllerList`/`_controllerList` + an index field + `IsActive()`.
@@ -31,16 +31,27 @@ Priority = how often a player hits it in a normal run × how hard it blocks a bl
 - [ ] **Loot / chest screen** — `LootManager` (+ `CharacterLoot`, `LootItem`): gold + item pickups
       per hero. Has `ControllerMovement`.
 - [ ] **Generic confirmation alerts** — `AlertManager`: Yes/No dialogs used everywhere (resign,
-      reload, overwrite…). Has `ControllerMovement` + `IsActive()`. Already a known router gap
-      (alerts outside settings have no accessible Enter/Escape). Highest modality priority after
-      the virtual keyboard — register near the top.
+      reload, overwrite…). Has `ControllerMovement` + `IsActive()`. Partially closed 2026-07-20:
+      `AlertConfirm`/`AlertConfirmDouble` are now spoken globally, and the town-family contexts
+      (hub / upgrades / card-craft) stay active during alerts and answer them via `AlertHelper`
+      (Enter=`SetConfirmAnswer(true)`, Escape=`CloseAlert()`). Remaining gap: alerts raised on
+      screens whose contexts still suspend on `AlertManager.IsActive()` (map, combat, events,
+      main menu) — fold those onto `AlertHelper` or add a dedicated top-priority alert context.
 - [ ] **Hero selection / run setup** — `HeroSelectionManager` (+ `BoxSelection`, `BoxPlayer`):
       pick party, ready, begin adventure, seed. Has `ControllerMovement`. Without it a run can't
       even be configured (currently only default-party flows work).
-- [ ] **Town hub** — `TownManager` (+ `TownBuilding`): enter Forge/Church/Altar/Cart/Armory,
-      ready-up, treasures, supply. Has `ControllerMovement`. Between-act core loop.
-- [ ] **Card shop / craft** — `CardCraftManager`: buy/upgrade/craft cards, filters; also drives
-      obelisk-challenge setup nav. Has `ControllerMovement`. The main gold sink each town visit.
+- [x] **Town hub** — `TownManager` (+ `TownBuilding`): enter Forge/Church/Altar/Cart/Armory,
+      ready-up, treasures, supply. Implemented 2026-07-20 (`TownAccessibilityPatch` +
+      `TownInputContext` + `TownHotkeyPoller`): Up/Down hub items incl. treasures, Tab party
+      strip, tutorial-step alerts spoken and answerable, arrival overview, Alt+T/G/I/R.
+- [x] **Card shop / craft** — `CardCraftManager`: buy/upgrade/craft cards, filters. Implemented
+      2026-07-20 for craftType 0–4 (`CardCraftAccessibilityPatch` + `CardCraftInputContext` +
+      `CardCraftHotkeyPoller`): Altar A/B preview, Church confirm-remove, Forge/Armory grids
+      with page auto-advance (Down past last item) and Left/Right paging, Divination tiers,
+      Alt+F filter modal (Forge), hero switch 1–4, purchase announces via `Hero.*` postfixes.
+      NOT covered: obelisk-challenge setup nav (craftType 5, stays a P2 item), corruption
+      flows (6/7 — the existing corruption handling owns those), post-divination reward screen
+      (the P0 rewards item), deck save/load slots at the starting town.
 - [ ] **End of run** — `FinishRunManager` + `FinishProgression` (+ `ProgressionRow`,
       `UnlockedBar`): victory/defeat summary, unlock reveal, back to menu. Has `ControllerMovement`.
 
@@ -84,7 +95,10 @@ Priority = how often a player hits it in a normal run × how hard it blocks a bl
       `CardCraftManager.ControllerMovement`): reroll, perks, packs, ready.
 - [ ] **Weekly modifiers** — `WeeklySelector` (draw/reveal).
 - [ ] **Sandbox modifiers** — `SandboxManager`. Has `ControllerMovement` + `IsActive()`.
-- [ ] **Town upgrades / sell supply** — `TownUpgradeWindow`. Has `ControllerMovement`.
+- [x] **Town upgrades / sell supply** — `TownUpgradeWindow`. Implemented 2026-07-20
+      (`TownUpgradeAccessibilityPatch` + `TownUpgradeInputContext`): Left/Right column,
+      Up/Down chain, owned/available/locked reasons, buy via the game's confirm alert,
+      sell-supply quantity sub-mode.
 - [ ] **Divination minigames** — `CardPlayerManager` (pick-a-card), `CardPlayerPairsManager`
       (memory pairs). Both have `ControllerMovement`.
 - [ ] **Intro & cinematics** — `IntroNewGameManager`, `CinematicManager`: speak story text,
