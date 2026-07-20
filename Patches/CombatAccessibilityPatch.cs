@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Text;
 using System.Text.RegularExpressions;
 using BattleMatch;
+using Cards;
 using HarmonyLib;
 using ObeliskAccess.Input.Contexts;
 using TMPro;
@@ -21,17 +22,34 @@ public static class CombatNavigator
 {
     private enum DrillMode { None, CardLines, CharCategory }
 
+    /// <summary>Board region the focused element belongs to; announced when crossing into it.</summary>
+    private enum Section { None, Hand, Heroes, Enemies }
+
+    /// <summary>
+    /// One drill step; AuraData+Charges (health/block/buff/curse entries) or Trait is set so Alt+T
+    /// can read that entry's detail.
+    /// </summary>
+    private struct DrillEntry
+    {
+        public string Speech;
+        public AuraCurseData AuraData;
+        public int Charges;
+        public TraitData Trait;
+    }
+
     // ---- focus dedupe ----
     private static int _lastIndex = -1;
     private static int _lastInstanceId;
+    private static Section _lastSection = Section.None;
 
     // ---- current focus + drill-in state ----
     private static Transform _focusedTransform;
     private static DrillMode _drill = DrillMode.None;
     private static readonly List<string> _cardLines = new List<string>();
     private static int _cardLineIndex;
-    private static readonly List<string> _categories = new List<string>();
+    private static readonly List<DrillEntry> _charEntries = new List<DrillEntry>();
     private static int _catIndex;
+    private static Character _drillChar; // owner of _charEntries, for charge-dependent descriptions
 
     // ---- combat lifecycle ----
     private static int _lastRound = -1;
@@ -42,6 +60,15 @@ public static class CombatNavigator
     private static readonly List<CtEntry> _ctBuffer = new List<CtEntry>();
     private static float _lastCtTime;
     private const float CT_FLUSH_DELAY = 0.35f;
+
+    // ---- aura-loss watching ----
+    // Charge decreases (end-of-turn tick-down, consumption) are direct field writes with no floating
+    // text — the only visible sign is the icon counter. A per-frame snapshot diff catches them all.
+    private struct AuraSnap { public int Charges; public string Name; }
+    private static readonly Dictionary<Character, Dictionary<string, AuraSnap>> _auraWatch
+        = new Dictionary<Character, Dictionary<string, AuraSnap>>();
+    private static readonly Dictionary<string, float> _recentNegated = new Dictionary<string, float>();
+    private const float NEGATED_DEDUPE_WINDOW = 1.5f;
 
     private static readonly Regex _brTag = new Regex(@"<br\s*/?>", RegexOptions.Compiled);
     private static readonly Regex _spriteTag = new Regex(@"<sprite name=([^>/ ]+)[^>]*>", RegexOptions.Compiled);
@@ -65,9 +92,14 @@ public static class CombatNavigator
             _overviewAnnounced = false;
         }
 
-        Character actor = mm.IsHeroTurn
-            ? (Character)mm.CurrentHero
-            : Traverse.Create(mm).Field<NPC>("theNPC").Value;
+        // IsHeroTurn is stale here (SetActiveCharacter sets heroActive/npcActive but heroTurn only
+        // flips later, during the draw) — resolve the actor from the indices it *did* just set.
+        int heroIdx = Traverse.Create(mm).Field<int>("heroActive").Value;
+        int npcIdx = Traverse.Create(mm).Field<int>("npcActive").Value;
+        bool isHero = heroIdx >= 0;
+        var team = isHero ? mm.GetTeamHero() : mm.GetTeamNPC();
+        int idx = isHero ? heroIdx : npcIdx;
+        Character actor = (team != null && idx >= 0 && idx < team.Count) ? team[idx] : null;
 
         var sb = new StringBuilder();
         int round = mm.CurrentRound;
@@ -78,7 +110,17 @@ public static class CombatNavigator
         }
 
         string name = actor != null ? AccessibleMenuBase.StripRichText(actor.SourceName) : "";
-        sb.Append(name).Append(mm.IsHeroTurn ? ", your turn" : "'s turn");
+        if (name.Length == 0)
+        {
+            // Don't emit a dangling "'s turn" with no name; speak the round change if there was one.
+            if (sb.Length > 0)
+            {
+                FlushPendingEvents();
+                SpeechManager.SpeakQueued(sb.ToString());
+            }
+            return;
+        }
+        sb.Append(name).Append(isHero ? ", your turn" : "'s turn");
 
         // Queue (not interrupt): enemy turns come back-to-back, and an interrupting turn line would
         // cut off the previous action's event announcement mid-utterance. Flush pending events first
@@ -103,14 +145,18 @@ public static class CombatNavigator
         ResetFocus();
         _overviewAnnounced = false;
         _lastRound = -1;
+        _auraWatch.Clear();
+        _recentNegated.Clear();
     }
 
     private static void ResetFocus()
     {
         _lastIndex = -1;
         _lastInstanceId = 0;
+        _lastSection = Section.None;
         _drill = DrillMode.None;
         _cardLines.Clear();
+        _charEntries.Clear();
     }
 
     // ======================= focus reading =======================
@@ -163,15 +209,119 @@ public static class CombatNavigator
         _cardLines.Clear();
 
         string speech = DescribeFocus(t);
-        if (!string.IsNullOrEmpty(speech))
-            SpeechManager.Speak(speech);
+        if (string.IsNullOrEmpty(speech))
+            return;
+
+        // Announce the board region when crossing into it ("Hand", "Heroes", …).
+        Section section = GetSection(t);
+        if (section != _lastSection)
+        {
+            _lastSection = section;
+            string label = SectionLabel(section);
+            if (label != null)
+                speech = label + ". " + speech;
+        }
+
+        SpeechManager.Speak(speech);
     }
+
+    private static Section GetSection(Transform t)
+    {
+        if (IsDiscardPileEntry(t) || IsDrawPileEntry(t))
+            return Section.None; // the pile descriptions name themselves
+
+        var card = t.GetComponent<CardItem>();
+        if (card != null)
+        {
+            if (t.GetComponentInParent<NPCItem>() != null)
+                return Section.Enemies; // an enemy's intent card floats over its portrait
+            return Section.Hand;
+        }
+
+        var ci = t.GetComponentInParent<CharacterItem>();
+        if (ci != null && ci.Character != null)
+            return ci.IsHero ? Section.Heroes : Section.Enemies;
+
+        return Section.None;
+    }
+
+    private static string SectionLabel(Section s) => s switch
+    {
+        Section.Hand => "Hand",
+        Section.Heroes => "Heroes",
+        Section.Enemies => "Enemies",
+        _ => null,
+    };
+
+    // The game navigates two pile widgets alongside the hand: the draw-deck object, and ONE entry
+    // inside the discard-pile stack (played/discarded cards leave the hand immediately — what looks
+    // like "a played card on the left" is the discard pile itself, whose focused child happens to be
+    // the first card discarded). Describe them as piles, not as cards.
+
+    private static bool IsDiscardPileEntry(Transform t)
+    {
+        var mm = MatchManager.Instance;
+        if (mm == null)
+            return false;
+        var pile = Traverse.Create(mm).Field<GameObject>("GO_DiscardPile").Value;
+        return pile != null && t != pile.transform && t.IsChildOf(pile.transform);
+    }
+
+    private static bool IsDrawPileEntry(Transform t)
+    {
+        var mm = MatchManager.Instance;
+        if (mm == null)
+            return false;
+        var decks = Traverse.Create(mm).Field<GameObject>("GO_DecksObject").Value;
+        return decks != null && t == decks.transform;
+    }
+
+    /// <summary>The visually-topmost card of the active hero's discard pile (most recently discarded).</summary>
+    private static CardRealtimeData TopDiscardCard()
+    {
+        var mm = MatchManager.Instance;
+        var hero = mm != null ? mm.CurrentHero : null;
+        var pile = hero != null && hero.BattleCards != null
+            ? hero.BattleCards.GetPile(DeckType.DeckDiscard)
+            : null;
+        if (pile == null || pile.Count == 0)
+            return null;
+        return mm.GetCardData(pile[pile.Count - 1], createInDict: false);
+    }
+
+    private static string DescribeDrawPile()
+    {
+        int n = MatchManager.Instance.CountHeroDeck();
+        return "Draw pile, " + n + (n == 1 ? " card" : " cards");
+    }
+
+    private static string DescribeDiscardPile()
+    {
+        int n = MatchManager.Instance.CountHeroDiscard();
+        var sb = new StringBuilder();
+        sb.Append("Discard pile, ").Append(n).Append(n == 1 ? " card" : " cards");
+        var top = TopDiscardCard();
+        if (top != null)
+            sb.Append(". Top card, ").Append(AccessibleMenuBase.StripRichText(top.CardName));
+        return sb.ToString();
+    }
+
+    private enum CardSuffix { None, Hand }
 
     private static string DescribeFocus(Transform t)
     {
+        if (IsDiscardPileEntry(t))
+            return DescribeDiscardPile();
+        if (IsDrawPileEntry(t))
+            return DescribeDrawPile();
+
         var card = t.GetComponent<CardItem>();
         if (card != null)
-            return DescribeCard(card);
+        {
+            // Enemy intent cards get no playability chatter.
+            CardSuffix suffix = t.GetComponentInParent<NPCItem>() == null ? CardSuffix.Hand : CardSuffix.None;
+            return DescribeCard(card, suffix);
+        }
 
         var ci = t.GetComponentInParent<CharacterItem>();
         if (ci != null && ci.Character != null)
@@ -181,10 +331,36 @@ public static class CombatNavigator
         if (icon != null)
             return DescribeIcon(icon);
 
+        var ip = t.GetComponent<InitiativePortrait>();
+        if (ip != null)
+            return DescribeInitiativePortrait(ip);
+
         return FallbackLabel(t);
     }
 
-    private static string DescribeCard(CardItem card)
+    /// <summary>The turn-order strip at the top of the screen: portrait + speed number per character.</summary>
+    private static string DescribeInitiativePortrait(InitiativePortrait ip)
+    {
+        Character c = ip.Hero != null ? (Character)ip.Hero : (ip.npcItem != null ? ip.npcItem.NPC : null);
+
+        var sb = new StringBuilder("Initiative, ");
+        sb.Append(c != null ? Name(c) : "unknown");
+
+        string speed = ip.speedTM != null ? AccessibleMenuBase.StripRichText(ip.speedTM.text) : "";
+        if (speed.Length > 0)
+            sb.Append(", speed ").Append(speed);
+
+        int pos = ip.GetPos();
+        if (pos >= 0)
+        {
+            sb.Append(", position ").Append(pos + 1);
+            if (ip.portraitElements > 0)
+                sb.Append(" of ").Append(ip.portraitElements);
+        }
+        return sb.ToString();
+    }
+
+    private static string DescribeCard(CardItem card, CardSuffix suffix = CardSuffix.None)
     {
         var cd = card.CardData;
         if (cd == null)
@@ -198,7 +374,7 @@ public static class CombatNavigator
         if (!string.IsNullOrEmpty(target))
             sb.Append(", ").Append(target);
 
-        if (!card.IsPlayableRightNow())
+        if (suffix == CardSuffix.Hand && !card.IsPlayableRightNow())
             sb.Append(", unplayable");
 
         return sb.ToString();
@@ -231,8 +407,27 @@ public static class CombatNavigator
     {
         Character c = icon.TheHero != null ? (Character)icon.TheHero : icon.TheNPC;
         string owner = c != null ? AccessibleMenuBase.StripRichText(c.SourceName) : "";
-        return owner.Length > 0 ? owner + " item" : "item";
+
+        string type = icon.itemType;
+        if (string.IsNullOrEmpty(type))
+            type = icon.gameObject.name.ToLower(); // enchantment icons carry no itemType
+        if (type == "accesory")
+            type = "accessory";
+
+        var sb = new StringBuilder();
+        if (owner.Length > 0)
+            sb.Append(owner).Append(", ");
+        sb.Append(type);
+
+        var cd = IconCard(icon);
+        if (cd != null)
+            sb.Append(", ").Append(AccessibleMenuBase.StripRichText(cd.CardName));
+        return sb.ToString();
     }
+
+    /// <summary>The item card an ItemCombatIcon represents (shown enlarged on hover for sighted players).</summary>
+    private static CardRealtimeData IconCard(ItemCombatIcon icon)
+        => Traverse.Create(icon).Field<CardRealtimeData>("cardData").Value;
 
     private static string FallbackLabel(Transform t)
     {
@@ -342,24 +537,24 @@ public static class CombatNavigator
         if (cast == null)
             return;
 
-        int dmg = 0;
-        bool blocked = false, evaded = false;
+        int dmg = 0, blocked = 0;
+        bool evaded = false;
         foreach (var r in cast.GetDamageResults())
         {
             if (r == null)
                 continue;
             dmg += r.DamageDone;
-            if (r.FullyBlocked) blocked = true;
+            blocked += r.DamageBlocked;
             if (r.FullyEvaded) evaded = true;
         }
 
         string owner = OwnerName(src);
         if (dmg > 0)
-            Buffer(owner, "takes " + dmg);
+            Buffer(owner, blocked > 0 ? "takes " + dmg + ", blocked " + blocked : "takes " + dmg);
         else if (evaded)
             Buffer(owner, "evaded");
-        else if (blocked)
-            Buffer(owner, "blocked");
+        else if (blocked > 0)
+            Buffer(owner, "blocked " + blocked);
 
         if (cast.heal > 0)
             Buffer(owner, "heals " + cast.heal);
@@ -369,12 +564,108 @@ public static class CombatNavigator
             Buffer(owner, effect);
     }
 
-    public static void BufferText(CombatText src, string text)
+    public static void BufferText(CombatText src, string text, Enums.CombatScrollEffectType type)
     {
-        string clean = AccessibleMenuBase.StripRichText(text);
+        if (string.IsNullOrEmpty(text))
+            return;
+
+        // Crossed-out text (<s>…</s>) is how the game shows an effect being removed OR failing to
+        // apply (immunity) — "negated" covers both readings.
+        bool negated = text.Contains("<s>");
+
+        string clean = AccessibleMenuBase.StripRichText(text).Replace("\n", ", ").Trim(' ', ',');
         if (string.IsNullOrEmpty(clean))
             return;
-        Buffer(OwnerName(src), clean);
+
+        string owner = OwnerName(src);
+
+        // Block expiry floats as "-Block".
+        if (type == Enums.CombatScrollEffectType.Block && clean.StartsWith("-"))
+        {
+            Buffer(owner, clean.Substring(1).Trim() + " removed");
+            return;
+        }
+
+        if (negated)
+        {
+            // Remember the names so the aura-loss watcher doesn't announce the same removal again.
+            foreach (var n in clean.Split(','))
+            {
+                string trimmed = n.Trim();
+                if (trimmed.Length > 0)
+                    _recentNegated[owner.ToLower() + "|" + trimmed.ToLower()] = Time.time;
+            }
+            Buffer(owner, clean + " negated");
+            return;
+        }
+
+        // Aura/curse gains are announced (with exact amounts) from the SetAuraCurse patch below —
+        // buffering the name-only floating text too would double-announce them.
+        if (type == Enums.CombatScrollEffectType.Aura || type == Enums.CombatScrollEffectType.Curse)
+            return;
+
+        Buffer(owner, clean);
+    }
+
+    /// <summary>
+    /// Announces every successful effect application with the amount actually gained (the floating
+    /// text has no numbers, and trait/item applications produce no floating text at all). The gain
+    /// is a delta — "gains Block 5, total 10" — because charges stack across applications.
+    /// </summary>
+    public static void OnAuraApplied(Character target, AuraCurseData acData, bool fromTrait,
+        Character.AuraSetResult result, int chargesBefore)
+    {
+        if (target == null || acData == null)
+            return;
+        if (result != Character.AuraSetResult.Added && result != Character.AuraSetResult.Updated)
+            return;
+
+        var mm = MatchManager.Instance;
+        if (mm == null || mm.MatchIsOver)
+            return;
+
+        int total = target.EffectCharges(acData.Id);
+        int gained = total - chargesBefore;
+        if (gained <= 0)
+            return;
+
+        string name = AccessibleMenuBase.StripRichText(acData.ACName);
+        if (string.IsNullOrEmpty(name))
+            name = acData.Id;
+
+        string msg = "gains " + name + " " + gained;
+        if (total != gained)
+            msg += ", total " + total;
+        Buffer(Name(target), msg);
+    }
+
+    /// <summary>Deaths and resurrections, from the combat-log channel both kill paths feed.</summary>
+    public static void OnLogEvent(Character hero, Character npc, Enums.EventActivation ev)
+    {
+        if (ev != Enums.EventActivation.Killed && ev != Enums.EventActivation.Resurrect)
+            return;
+        Character c = hero ?? npc;
+        if (c == null)
+            return;
+        Buffer(Name(c), ev == Enums.EventActivation.Killed ? "killed" : "resurrected");
+    }
+
+    /// <summary>Enemy (and automatic hero/pet/item) casts: name the card being played.</summary>
+    public static void OnAutomaticCast(CardRealtimeData card, Transform from)
+    {
+        if (card == null)
+            return;
+
+        string caster = "";
+        if (from != null)
+        {
+            var hi = from.GetComponent<HeroItem>();
+            var ni = from.GetComponent<NPCItem>();
+            Character c = hi != null ? (Character)hi.Hero : (ni != null ? ni.NPC : null);
+            if (c != null)
+                caster = Name(c);
+        }
+        Buffer(caster, "plays " + AccessibleMenuBase.StripRichText(card.CardName));
     }
 
     private static void Buffer(string owner, string text)
@@ -385,11 +676,85 @@ public static class CombatNavigator
 
     public static void TickFlush()
     {
+        TickAuraWatch();
+
         if (_ctBuffer.Count == 0)
             return;
         if (Time.time - _lastCtTime < CT_FLUSH_DELAY)
             return;
         Flush();
+    }
+
+    private static void TickAuraWatch()
+    {
+        var mm = MatchManager.Instance;
+        if (mm == null || mm.MatchIsOver)
+        {
+            if (_auraWatch.Count > 0)
+            {
+                _auraWatch.Clear();
+                _recentNegated.Clear();
+            }
+            return;
+        }
+        WatchTeam(mm.GetTeamHero());
+        WatchTeam(mm.GetTeamNPC());
+    }
+
+    private static void WatchTeam(Team team)
+    {
+        if (team == null)
+            return;
+
+        for (int i = 0; i < team.Count; i++)
+        {
+            Character c = team[i];
+            if (c == null)
+                continue;
+            if (!c.Alive)
+            {
+                _auraWatch.Remove(c); // no loss chatter after "X killed"
+                continue;
+            }
+
+            var current = new Dictionary<string, AuraSnap>();
+            var list = c.AuraCurseList;
+            if (list != null)
+            {
+                foreach (var a in list)
+                {
+                    if (a == null || a.ACData == null || a.AuraCharges <= 0)
+                        continue;
+                    // Block losses have their own channels (damage "blocked N", expiry "-Block").
+                    if (string.Equals(a.ACData.Id, "block", System.StringComparison.OrdinalIgnoreCase))
+                        continue;
+                    current[a.ACData.Id] = new AuraSnap { Charges = a.AuraCharges, Name = AuraName(a) };
+                }
+            }
+
+            if (_auraWatch.TryGetValue(c, out var previous))
+            {
+                foreach (var kv in previous)
+                {
+                    int now = current.TryGetValue(kv.Key, out var snap) ? snap.Charges : 0;
+                    int lost = kv.Value.Charges - now;
+                    if (lost <= 0)
+                        continue; // gains announce from the SetAuraCurse patch
+
+                    // A dispel/cleanse already announced this one as "negated".
+                    string dedupeKey = Name(c).ToLower() + "|" + kv.Value.Name.ToLower();
+                    if (_recentNegated.TryGetValue(dedupeKey, out float t)
+                        && Time.time - t < NEGATED_DEDUPE_WINDOW)
+                        continue;
+
+                    string msg = "loses " + kv.Value.Name + " " + lost;
+                    if (now > 0)
+                        msg += ", total " + now;
+                    Buffer(Name(c), msg);
+                }
+            }
+            _auraWatch[c] = current;
+        }
     }
 
     /// <summary>Flush buffered events immediately, so they precede a queued turn/end announcement.</summary>
@@ -431,12 +796,17 @@ public static class CombatNavigator
         SpeechManager.SpeakQueued(sb.ToString());
     }
 
-    private static string OwnerName(CombatText src)
+    private static Character OwnerCharacter(CombatText src)
     {
         if (src == null)
-            return "";
+            return null;
         var ci = Traverse.Create(src).Field<CharacterItem>("characterItem").Value;
-        var c = ci != null ? ci.Character : null;
+        return ci != null ? ci.Character : null;
+    }
+
+    private static string OwnerName(CombatText src)
+    {
+        var c = OwnerCharacter(src);
         return c != null ? AccessibleMenuBase.StripRichText(c.SourceName) : "";
     }
 
@@ -452,10 +822,31 @@ public static class CombatNavigator
 
         if (_drill == DrillMode.None)
         {
+            if (IsDiscardPileEntry(t))
+            {
+                // Drill the pile's visually-topmost card, matching what was announced.
+                BeginCardLines(TopDiscardCard());
+                return;
+            }
             var card = t.GetComponent<CardItem>();
             if (card != null)
             {
-                BeginCardLines(card);
+                BeginCardLines(card.CardData);
+                return;
+            }
+            var icon = t.GetComponent<ItemCombatIcon>();
+            if (icon != null)
+            {
+                BeginCardLines(IconCard(icon)); // walk the item card's description
+                return;
+            }
+            var ip = t.GetComponent<InitiativePortrait>();
+            if (ip != null)
+            {
+                // Drill an initiative portrait as its character.
+                CharacterItem ipItem = ip.heroItem != null ? (CharacterItem)ip.heroItem : ip.npcItem;
+                if (ipItem != null && ipItem.Character != null)
+                    BeginCharCategories(ipItem);
                 return;
             }
             var ci = t.GetComponentInParent<CharacterItem>();
@@ -472,10 +863,10 @@ public static class CombatNavigator
             _cardLineIndex = Clamp(_cardLineIndex + dir, 0, _cardLines.Count - 1);
             SpeechManager.Speak(_cardLines[_cardLineIndex]);
         }
-        else if (_drill == DrillMode.CharCategory && _categories.Count > 0)
+        else if (_drill == DrillMode.CharCategory && _charEntries.Count > 0)
         {
-            _catIndex = Clamp(_catIndex + dir, 0, _categories.Count - 1);
-            SpeechManager.Speak(_categories[_catIndex]);
+            _catIndex = Clamp(_catIndex + dir, 0, _charEntries.Count - 1);
+            SpeechManager.Speak(_charEntries[_catIndex].Speech);
         }
     }
 
@@ -486,7 +877,7 @@ public static class CombatNavigator
 
         _drill = DrillMode.None;
         _cardLines.Clear();
-        _categories.Clear();
+        _charEntries.Clear();
 
         // Re-announce the focused element so the player knows where they are.
         if (_focusedTransform != null)
@@ -498,10 +889,9 @@ public static class CombatNavigator
         return true;
     }
 
-    private static void BeginCardLines(CardItem card)
+    private static void BeginCardLines(CardRealtimeData cd)
     {
         _cardLines.Clear();
-        var cd = card.CardData;
         if (cd != null)
         {
             foreach (var line in SplitLines(CleanDesc(cd.DescriptionNormalized)))
@@ -514,28 +904,108 @@ public static class CombatNavigator
 
     private static void BeginCharCategories(CharacterItem ci)
     {
-        _categories.Clear();
-        BuildCharCategories(ci.Character, ci, _categories);
+        _charEntries.Clear();
+        _drillChar = ci.Character;
+        BuildCharEntries(ci.Character, ci, _charEntries);
         _drill = DrillMode.CharCategory;
         _catIndex = 0;
-        if (_categories.Count > 0)
-            SpeechManager.Speak(_categories[0]);
+        if (_charEntries.Count > 0)
+            SpeechManager.Speak(_charEntries[0].Speech);
     }
 
-    private static void BuildCharCategories(Character c, CharacterItem ci, List<string> into)
+    private static void BuildCharEntries(Character c, CharacterItem ci, List<DrillEntry> into)
     {
-        into.Add("Health, " + c.GetHp() + " of " + c.GetMaxHP());
+        into.Add(new DrillEntry { Speech = "Health, " + c.GetHp() + " of " + c.GetMaxHP() });
 
         int block = c.GetBlock();
-        into.Add(block > 0 ? "Block " + block : "No block");
+        var blockData = Globals.Instance != null ? Globals.Instance.GetAuraCurseData("block") : null;
+        into.Add(new DrillEntry
+        {
+            Speech = block > 0 ? "Block " + block : "No block",
+            AuraData = blockData,
+            Charges = block,
+        });
 
-        into.Add(BuildStatusLine(c, buffs: true));
-        into.Add(BuildStatusLine(c, buffs: false));
+        // One entry per buff, then per curse, so Alt+T can read the focused effect's description.
+        AddAuraEntries(c, buffs: true, into);
+        AddAuraEntries(c, buffs: false, into);
 
         if (!ci.IsHero)
-            into.Add(BuildIntentLine(ci as NPCItem));
+            into.Add(new DrillEntry { Speech = BuildIntentLine(ci as NPCItem) });
 
-        into.Add("Resists: " + BuildResistLine(c));
+        into.Add(new DrillEntry { Speech = "Resists: " + BuildResistLine(c) });
+
+        AddTraitEntries(c, into);
+    }
+
+    /// <summary>
+    /// Traits live outside the buff/curse list; a sighted player sees them in the trait-info line
+    /// ("Well trained 1/1") and on hover. One entry per trait, with the usage counter the game shows.
+    /// </summary>
+    private static void AddTraitEntries(Character c, List<DrillEntry> into)
+    {
+        var traits = c.Traits;
+        if (traits == null || Globals.Instance == null)
+            return;
+
+        var mm = MatchManager.Instance;
+        foreach (var id in traits)
+        {
+            if (string.IsNullOrEmpty(id))
+                continue;
+            var td = Globals.Instance.GetTraitData(id, c);
+            if (td == null)
+                continue;
+
+            string name = AccessibleMenuBase.StripRichText(td.TraitName);
+            if (string.IsNullOrEmpty(name))
+                name = td.Id;
+
+            var sb = new StringBuilder("Trait, ").Append(name);
+
+            int max = td.TimesPerTurn > 0 ? td.TimesPerTurn : td.TimesPerRound;
+            if (td.Id == "welltrained")
+                max = Trait.GetWellTrainedTimesPerTurn(c); // perks can raise it above the base value
+            if (max > 0 && !td.HideTimesPerTurnText && mm != null)
+            {
+                string key = Globals.Instance.GetCanonicalTraitId(id, c);
+                int used;
+                if (!mm.activatedTraits.TryGetValue(key, out used))
+                    mm.activatedTraitsRound.TryGetValue(key, out used);
+                sb.Append(", used ").Append(used).Append(" of ").Append(max);
+            }
+
+            into.Add(new DrillEntry { Speech = sb.ToString(), Trait = td });
+        }
+    }
+
+    private static void AddAuraEntries(Character c, bool buffs, List<DrillEntry> into)
+    {
+        int added = 0;
+        var list = c.AuraCurseList;
+        if (list != null)
+        {
+            foreach (var a in list)
+            {
+                if (a == null || a.ACData == null || a.AuraCharges <= 0)
+                    continue;
+                if (string.Equals(a.ACData.Id, "block", System.StringComparison.OrdinalIgnoreCase))
+                    continue;
+                if (a.ACData.IsAura != buffs)
+                    continue;
+
+                into.Add(new DrillEntry
+                {
+                    Speech = (buffs ? "Buff, " : "Curse, ") + AuraName(a) + ", " + a.AuraCharges,
+                    AuraData = a.ACData,
+                    Charges = a.AuraCharges,
+                });
+                added++;
+            }
+        }
+
+        if (added == 0)
+            into.Add(new DrillEntry { Speech = buffs ? "No buffs" : "No curses" });
     }
 
     private static string BuildStatusLine(Character c, bool buffs)
@@ -582,6 +1052,35 @@ public static class CombatNavigator
     {
         string name = AccessibleMenuBase.StripRichText(a.ACData.ACName);
         return string.IsNullOrEmpty(name) ? a.ACData.Id : name;
+    }
+
+    /// <summary>
+    /// A status description with its numeric placeholders (&lt;ChargesMultiplier&gt; and friends)
+    /// filled in, using the game's own popup substitution machinery — otherwise StripRichText
+    /// deletes the tokens and the spoken text has holes ("Damage done and Heal received + .").
+    /// </summary>
+    private static string AuraDescription(AuraCurseData acData, int charges, Character owner)
+    {
+        string desc = acData != null ? acData.Description : null;
+        if (string.IsNullOrEmpty(desc))
+            return "";
+
+        var pm = PopupManager.Instance;
+        if (pm != null && owner != null)
+        {
+            try
+            {
+                var repl = new Dictionary<string, string>();
+                var tr = Traverse.Create(pm);
+                tr.Method("UpdateReplacements", repl, charges, -1000, acData, owner).GetValue();
+                desc = tr.Method("ApplyReplacements", desc, repl).GetValue<string>();
+            }
+            catch
+            {
+                // fall back to the raw description; leftover tokens are stripped below
+            }
+        }
+        return AccessibleMenuBase.StripRichText(CleanDesc(desc));
     }
 
     /// <summary>Recover <c>&lt;sprite name=X&gt;</c> keyword words before tags are stripped, else they vanish.</summary>
@@ -663,19 +1162,38 @@ public static class CombatNavigator
         if (mm == null)
             return;
 
-        Character actor = mm.IsHeroTurn
-            ? (Character)mm.CurrentHero
-            : Traverse.Create(mm).Field<NPC>("theNPC").Value;
-
-        int heroes = CountAlive(mm.GetTeamHero());
-        int enemies = CountAlive(mm.GetTeamNPC());
-
         var sb = new StringBuilder();
         sb.Append("Round ").Append(mm.CurrentRound);
-        if (actor != null)
-            sb.Append(", ").Append(Name(actor)).Append(mm.IsHeroTurn ? " active" : "'s turn");
-        sb.Append(". ").Append(heroes).Append(heroes == 1 ? " hero, " : " heroes, ");
-        sb.Append(enemies).Append(enemies == 1 ? " enemy" : " enemies");
+
+        // Full initiative order, exactly as the on-screen strip shows it: the active character first
+        // (it is pinned to the top of the game's sorted order), upcoming actors by speed, and those
+        // who already acted this round at the end.
+        var im = mm.InitiativesManager;
+        var order = im != null
+            ? Traverse.Create(im).Field<List<InitiativesManager.CharacterForOrderNew>>("CharOrder").Value
+            : null;
+
+        if (order != null && order.Count > 0)
+        {
+            sb.Append(". Turn order: ");
+            bool first = true;
+            foreach (var entry in order)
+            {
+                var c = entry != null ? entry.character : null;
+                if (c == null || !c.Alive)
+                    continue;
+
+                if (!first)
+                    sb.Append("; ");
+                sb.Append(Name(c));
+                if (first)
+                    sb.Append(", active");
+                else if (c.RoundMoved >= mm.CurrentRound)
+                    sb.Append(", acted");
+                first = false;
+            }
+        }
+
         SpeechManager.Speak(sb.ToString());
     }
 
@@ -742,28 +1260,55 @@ public static class CombatNavigator
 
     private static string Name(Character c) => AccessibleMenuBase.StripRichText(c.SourceName);
 
-    private static int CountAlive(Team team)
-    {
-        if (team == null)
-            return 0;
-        int n = 0;
-        for (int i = 0; i < team.Count; i++)
-            if (team[i] != null && team[i].Alive)
-                n++;
-        return n;
-    }
-
     // ======================= Alt+T tooltip (hover detail) =======================
     // The extra information a sighted player gets on hover: a card's keyword definitions, or a
     // character's resistances/immunities.
 
     public static void SpeakTooltip()
     {
+        // Drilled onto a specific buff/curse/block/trait → read that entry's full description.
+        if (_drill == DrillMode.CharCategory && _catIndex >= 0 && _catIndex < _charEntries.Count)
+        {
+            var entry = _charEntries[_catIndex];
+            if (entry.AuraData != null)
+            {
+                string name = AccessibleMenuBase.StripRichText(entry.AuraData.ACName);
+                if (string.IsNullOrEmpty(name))
+                    name = entry.AuraData.Id;
+                string desc = AuraDescription(entry.AuraData, entry.Charges, _drillChar);
+                SpeechManager.Speak(
+                    name + ", " + entry.Charges
+                    + (desc.Length > 0 ? ". " + desc : ". No description"));
+                return;
+            }
+            if (entry.Trait != null)
+            {
+                string name = AccessibleMenuBase.StripRichText(entry.Trait.TraitName);
+                if (string.IsNullOrEmpty(name))
+                    name = entry.Trait.Id;
+                string desc = AccessibleMenuBase.StripRichText(CleanDesc(entry.Trait.Description));
+                SpeechManager.Speak(name + (desc.Length > 0 ? ". " + desc : ". No description"));
+                return;
+            }
+        }
+
         var t = _focusedTransform;
         if (t == null) { SpeechManager.Speak("Nothing focused"); return; }
 
+        if (IsDiscardPileEntry(t)) { SpeakCardKeynotes(TopDiscardCard()); return; }
+
         var card = t.GetComponent<CardItem>();
-        if (card != null) { SpeakCardKeynotes(card); return; }
+        if (card != null) { SpeakCardKeynotes(card.CardData); return; }
+
+        var icon = t.GetComponent<ItemCombatIcon>();
+        if (icon != null) { SpeakCardKeynotes(IconCard(icon)); return; }
+
+        var ip = t.GetComponent<InitiativePortrait>();
+        if (ip != null)
+        {
+            Character ipChar = ip.Hero != null ? (Character)ip.Hero : (ip.npcItem != null ? ip.npcItem.NPC : null);
+            if (ipChar != null) { SpeakResists(ipChar); return; }
+        }
 
         var ci = t.GetComponentInParent<CharacterItem>();
         if (ci != null && ci.Character != null) { SpeakResists(ci.Character); return; }
@@ -771,9 +1316,8 @@ public static class CombatNavigator
         SpeechManager.Speak("No additional details");
     }
 
-    private static void SpeakCardKeynotes(CardItem card)
+    private static void SpeakCardKeynotes(CardRealtimeData cd)
     {
-        var cd = card.CardData;
         var kn = cd != null ? cd.KeyNotes : null;
         if (kn == null || kn.Count == 0) { SpeechManager.Speak("No keywords"); return; }
 
@@ -853,8 +1397,13 @@ public class CombatEndPatch
     static void Postfix(bool won) => CombatNavigator.OnCombatEnd(won);
 }
 
+// The CombatText patches target the private Launch* methods, NOT the public SetDamageNew/SetText:
+// the public methods queue-and-replay themselves (SetText re-enters with forceIt=true when a queued
+// message dequeues), so a postfix there fires twice per message. Launch* runs exactly once per text
+// actually displayed — and also inherits the game's own duplicate suppression.
+
 /// <summary>Buffers damage/heal floating numbers for coalesced announcement.</summary>
-[HarmonyPatch(typeof(CombatText), nameof(CombatText.SetDamageNew))]
+[HarmonyPatch(typeof(CombatText), "LaunchInstance")]
 public class CombatDamageTextPatch
 {
     static void Postfix(CombatText __instance, CastResolutionForCombatText _cast)
@@ -862,9 +1411,40 @@ public class CombatDamageTextPatch
 }
 
 /// <summary>Buffers status/effect floating words (ticks, applications, "Immune"/"Evaded").</summary>
-[HarmonyPatch(typeof(CombatText), nameof(CombatText.SetText))]
+[HarmonyPatch(typeof(CombatText), "LaunchInstanceText")]
 public class CombatStatusTextPatch
 {
-    static void Postfix(CombatText __instance, string text)
-        => CombatNavigator.BufferText(__instance, text);
+    static void Postfix(CombatText __instance, string text, Enums.CombatScrollEffectType type)
+        => CombatNavigator.BufferText(__instance, text, type);
+}
+
+/// <summary>Announces character deaths and resurrections.</summary>
+[HarmonyPatch(typeof(MatchManager), nameof(MatchManager.CreateLogEntry))]
+public class CombatLogEventPatch
+{
+    static void Postfix(Character _theHero, Character _theNPC, Enums.EventActivation _event)
+        => CombatNavigator.OnLogEvent(_theHero, _theNPC, _event);
+}
+
+/// <summary>Announces which card an enemy (or an automatic hero effect) plays.</summary>
+[HarmonyPatch(typeof(MatchManager), nameof(MatchManager.CastAutomatic))]
+public class CombatAutomaticCastPatch
+{
+    static void Postfix(CardRealtimeData theCardRealtimeData, Transform from)
+        => CombatNavigator.OnAutomaticCast(theCardRealtimeData, from);
+}
+
+/// <summary>
+/// Announces effect applications with exact amounts. The prefix snapshots the pre-application
+/// charge count so the postfix can speak the delta actually gained.
+/// </summary>
+[HarmonyPatch(typeof(Character), nameof(Character.SetAuraCurse))]
+public class CombatAuraAppliedPatch
+{
+    static void Prefix(Character __instance, AuraCurseData _acData, out int __state)
+        => __state = _acData != null ? __instance.EffectCharges(_acData.Id) : 0;
+
+    static void Postfix(Character __instance, AuraCurseData _acData, bool fromTrait,
+        Character.AuraSetResult __result, int __state)
+        => CombatNavigator.OnAuraApplied(__instance, _acData, fromTrait, __result, __state);
 }

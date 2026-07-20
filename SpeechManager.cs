@@ -33,6 +33,11 @@ public static class SpeechManager
         // RepeatLast() (the library otherwise only stores Dialogue/Narrator types).
         Lib.ShouldStoreForRepeatPredicate = _ => true;
 
+        // The library suppresses a message identical to the previous one within a 0.5s window.
+        // That silently ate the second of two identical reads (e.g. arrowing quickly across two
+        // copies of the same card). We do our own focus-level dedupe, so disable it.
+        Lib.DuplicateWindowSeconds = 0;
+
         _ready = Lib.Initialize();
         if (!_ready)
         {
