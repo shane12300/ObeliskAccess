@@ -14,6 +14,23 @@ dotnet build
 
 The output DLL (`bin/Debug/net46/ObeliskAccess.dll`) must be copied to the game's BepInEx plugins folder to test. There are no automated tests.
 
+## todo.md maintenance
+
+Whenever a feature is completed and the user asks to commit it, check `todo.md`. If the feature
+appears there, move its entry to the `## Completed` section at the bottom of the file (mark it
+`[x]` and note which priority section it came from). If the entry has attached work that still
+needs doing (sub-items, remaining verification, deferred follow-ups), keep that work in its
+original priority section as its own `[ ]` item, adding explanatory text that identifies which
+system/feature it belongs to, and add a pointer to it from the Completed entry.
+
+## changelog.md maintenance
+
+After every commit, update `changelog.md` with the work done. The changelog is **user-facing**:
+describe what changed in the mod from a player's perspective (new screens made accessible, new
+keys, behaviour fixes) — not code-level changes. Add entries under the **current** version
+heading; **never** change or add a version number unless the user explicitly says to. The
+current working version is 1.0, marked as the initial release.
+
 ## Architecture
 
 Input handling and speech are split into two concerns: a **central input router** decides which

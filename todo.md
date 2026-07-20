@@ -19,13 +19,11 @@ Priority = how often a player hits it in a normal run × how hard it blocks a bl
 
 ## P0 — blocks completing a single-player run (core loop, every run)
 
-- [x] **Narrative events** — `EventManager` (+ `Reply`): event text, reply options with
-      requirement/probability dice, continue button. Implemented 2026-07-20
-      (`EventAccessibilityPatch` + `EventInputContext` + `EventHotkeyPoller`): tutorial-style
-      text walk with choices at the bottom, play-by-play roll narration, Alt+T hover-info
-      mirror. Tentatively verified in-game (one event incl. roll + probability); remaining
-      permutations (roll targets, blocked options, reward cards, chained events) to be
-      spot-checked during normal play.
+- [ ] **Narrative events — remaining spot-checks** — follow-up for the already-implemented
+      map-event (story dialog) accessibility layer (`EventAccessibilityPatch` +
+      `EventInputContext` + `EventHotkeyPoller`; see Completed section). Tentatively verified
+      in-game with one event incl. roll + probability; remaining permutations (roll targets,
+      blocked options, reward cards, chained events) to be spot-checked during normal play.
 - [ ] **Post-combat card rewards** — `RewardsManager` (+ `CharacterReward`): per-hero reward card
       picks, dust. Has `ControllerMovement`. After nearly every fight.
 - [ ] **Loot / chest screen** — `LootManager` (+ `CharacterLoot`, `LootItem`): gold + item pickups
@@ -40,26 +38,24 @@ Priority = how often a player hits it in a normal run × how hard it blocks a bl
 - [ ] **Hero selection / run setup** — `HeroSelectionManager` (+ `BoxSelection`, `BoxPlayer`):
       pick party, ready, begin adventure, seed. Has `ControllerMovement`. Without it a run can't
       even be configured (currently only default-party flows work).
-- [x] **Town hub** — `TownManager` (+ `TownBuilding`): enter Forge/Church/Altar/Cart/Armory,
-      ready-up, treasures, supply. Implemented 2026-07-20 (`TownAccessibilityPatch` +
-      `TownInputContext` + `TownHotkeyPoller`): Up/Down hub items incl. treasures, Tab party
-      strip, tutorial-step alerts spoken and answerable, arrival overview, Alt+T/G/I/R.
-      **Verified in-game 2026-07-20 — works correctly.**
-- [x] **Card shop / craft** — `CardCraftManager`: buy/upgrade/craft cards, filters. Implemented
-      2026-07-20 for craftType 0–4 (`CardCraftAccessibilityPatch` + `CardCraftInputContext` +
-      `CardCraftHotkeyPoller`): Altar A/B preview, Church confirm-remove, Forge/Armory grids
-      with page auto-advance (Down past last item) and Left/Right paging, Divination tiers,
-      Alt+F filter modal (Forge), hero switch 1–4, purchase announces via `Hero.*` postfixes.
-      NOT covered: obelisk-challenge setup nav (craftType 5, stays a P2 item), corruption
-      flows (6/7 — the existing corruption handling owns those), post-divination reward screen
-      (the P0 rewards item), deck save/load slots at the starting town.
-      **Verified in-game 2026-07-20 — all five service screens work correctly**, with the one
-      exception noted below.
-  - [ ] **Filters dialogue (Alt+F) needs rework** — functional, but not displaying as neatly
-        as it should. A complex change: the user is considering a complete redesign of the
-        filter menu rather than incremental tweaks. Deferred for now (user feedback 2026-07-20).
+- [ ] **Filters dialogue (Alt+F) needs rework** — follow-up for the already-implemented card
+      shop / craft accessibility layer (`CardCraftManager` service screens — Forge filter
+      modal, `CardCraftAccessibilityPatch`; see Completed section). Functional, but not
+      displaying as neatly as it should. A complex change: the user is considering a complete
+      redesign of the filter menu rather than incremental tweaks. Deferred for now (user
+      feedback 2026-07-20).
 - [ ] **End of run** — `FinishRunManager` + `FinishProgression` (+ `ProgressionRow`,
       `UnlockedBar`): victory/defeat summary, unlock reveal, back to menu. Has `ControllerMovement`.
+
+## Combat improvements — fixes to the already-adapted combat screen
+
+- [ ] **X-cost mechanic doesn't read correctly** — cards with the X mechanic (spend all
+      remaining energy) are not announced correctly; fix how their cost/description is spoken.
+- [ ] **Discover / discard needs fixing** — the discover and discard card-selection flows are
+      broken for the accessibility layer (see also the `UIDiscardSelector` / `UIAddcardSelector`
+      items under P1 in-combat selector popups).
+- [ ] **General exploration of cards in combat** — sweep different card types/keywords to
+      ensure each reads correctly and is understandable via speech.
 
 ## P1 — frequent; run is possible but seriously degraded without these
 
@@ -101,10 +97,6 @@ Priority = how often a player hits it in a normal run × how hard it blocks a bl
       `CardCraftManager.ControllerMovement`): reroll, perks, packs, ready.
 - [ ] **Weekly modifiers** — `WeeklySelector` (draw/reveal).
 - [ ] **Sandbox modifiers** — `SandboxManager`. Has `ControllerMovement` + `IsActive()`.
-- [x] **Town upgrades / sell supply** — `TownUpgradeWindow`. Implemented 2026-07-20
-      (`TownUpgradeAccessibilityPatch` + `TownUpgradeInputContext`): Left/Right column,
-      Up/Down chain, owned/available/locked reasons, buy via the game's confirm alert,
-      sell-supply quantity sub-mode. **Verified in-game 2026-07-20 — works correctly.**
 - [ ] **Divination minigames** — `CardPlayerManager` (pick-a-card), `CardPlayerPairsManager`
       (memory pairs). Both have `ControllerMovement`.
 - [ ] **Intro & cinematics** — `IntroNewGameManager`, `CinematicManager`: speak story text,
@@ -144,3 +136,33 @@ Priority = how often a player hits it in a normal run × how hard it blocks a bl
 - **HUD overlays** (`PlayerUIManager`, `SideCharacters`, `PlayerStatusManager`) — persistent
   visuals; surfaced via Alt+G/Alt+I-style summaries per screen, not focus navigation.
 - **`LogosManager` / `TrailerManager`** — boot splash/attract mode; nothing to navigate.
+
+## Completed
+
+Finished features, moved here from the priority sections above. Any follow-up work a completed
+feature still requires stays in its original priority section (with a note pointing back here).
+
+- [x] **Narrative events** (was P0) — `EventManager` (+ `Reply`): event text, reply options with
+      requirement/probability dice, continue button. Implemented 2026-07-20
+      (`EventAccessibilityPatch` + `EventInputContext` + `EventHotkeyPoller`): tutorial-style
+      text walk with choices at the bottom, play-by-play roll narration, Alt+T hover-info
+      mirror. *Remaining work — spot-checks of untested permutations — tracked under P0.*
+- [x] **Town hub** (was P0) — `TownManager` (+ `TownBuilding`): enter Forge/Church/Altar/Cart/
+      Armory, ready-up, treasures, supply. Implemented 2026-07-20 (`TownAccessibilityPatch` +
+      `TownInputContext` + `TownHotkeyPoller`): Up/Down hub items incl. treasures, Tab party
+      strip, tutorial-step alerts spoken and answerable, arrival overview, Alt+T/G/I/R.
+      **Verified in-game 2026-07-20 — works correctly.**
+- [x] **Card shop / craft** (was P0) — `CardCraftManager`: buy/upgrade/craft cards, filters.
+      Implemented 2026-07-20 for craftType 0–4 (`CardCraftAccessibilityPatch` +
+      `CardCraftInputContext` + `CardCraftHotkeyPoller`): Altar A/B preview, Church
+      confirm-remove, Forge/Armory grids with page auto-advance (Down past last item) and
+      Left/Right paging, Divination tiers, Alt+F filter modal (Forge), hero switch 1–4,
+      purchase announces via `Hero.*` postfixes. NOT covered: obelisk-challenge setup nav
+      (craftType 5, stays a P2 item), corruption flows (6/7 — the existing corruption handling
+      owns those), post-divination reward screen (the P0 rewards item), deck save/load slots
+      at the starting town. **Verified in-game 2026-07-20 — all five service screens work
+      correctly.** *Remaining work — Alt+F filter menu redesign — tracked under P0.*
+- [x] **Town upgrades / sell supply** (was P2) — `TownUpgradeWindow`. Implemented 2026-07-20
+      (`TownUpgradeAccessibilityPatch` + `TownUpgradeInputContext`): Left/Right column,
+      Up/Down chain, owned/available/locked reasons, buy via the game's confirm alert,
+      sell-supply quantity sub-mode. **Verified in-game 2026-07-20 — works correctly.**
