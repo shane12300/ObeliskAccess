@@ -23,6 +23,9 @@ to Windows built-in speech if none is running).
 - Hold Ctrl with the arrow keys to look ahead along the road before committing: Ctrl+Down
   descends into upcoming nodes, Ctrl+Up backs out, and Ctrl+Left/Right compares branching
   paths.
+- Every node is announced with map coordinates: the first number is its position left to
+  right (1 is leftmost), the second is how far into the map it sits (1 is the first group
+  of nodes you can travel to, 2 the group after, and so on).
 - Alt+T reads full detail about the focused node.
 - Tab switches to the party strip: Up/Down reads each hero's condition, and 1–4 jumps
   straight to a party slot.

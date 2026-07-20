@@ -36,6 +36,7 @@ public static class MapNavigator
     private static readonly List<LookLevel> _look = new List<LookLevel>();
     private static int _partyIndex;
     private static string _cachedCurrentNode;
+    private static readonly Dictionary<Node, Vector2Int> _coords = new Dictionary<Node, Vector2Int>();
 
     public static bool InLookAhead => _look.Count > 0;
 
@@ -50,6 +51,7 @@ public static class MapNavigator
         _partyIndex = 0;
         _look.Clear();
         _cachedCurrentNode = AtOManager.Instance?.currentMapNode;
+        RebuildCoordinates();
         RebuildReachable();
         SpeakMapInfo();
     }
@@ -62,6 +64,7 @@ public static class MapNavigator
             _cachedCurrentNode = cur;
             _reachIndex = 0;
             _look.Clear();
+            RebuildCoordinates();
             RebuildReachable();
         }
         else if (_reachable.Count == 0)
@@ -224,6 +227,116 @@ public static class MapNavigator
         }
         SpeechManager.Speak("Traveling to " + NodeType(node));
         m.PlayerSelectedNode(node);
+    }
+
+    // ---------------------------------------------------------------- coordinates
+
+    /// <summary>Assigns every drawn node a spoken coordinate: column = its left-to-right rank
+    /// among the nodes of its row (1 = leftmost), row = how far into the map it sits (1 = the
+    /// first selectable group, i.e. the nodes one travel from the map's entry; 2 = the group
+    /// after, …). The entry node itself gets no coordinate — it can never be focused. Rows are
+    /// BFS distance from the entry node over the drawn connection graph, treated as undirected so
+    /// it works whether the map data stores links one-way or mirrored. Nodes cut off from the
+    /// entry get no coordinate and are simply spoken without one.</summary>
+    private static void RebuildCoordinates()
+    {
+        _coords.Clear();
+        var dict = MapManager.Instance?.GetMapNodeDict();
+        if (dict == null)
+            return;
+
+        var byId = new Dictionary<string, Node>();
+        foreach (var n in dict.Values)
+        {
+            if (!IsVisible(n) || n.nodeData?.NodeId == null)
+                continue;
+            byId[n.nodeData.NodeId.ToLowerInvariant()] = n;
+        }
+        if (byId.Count == 0)
+            return;
+
+        var adj = new Dictionary<Node, List<Node>>();
+        foreach (var n in byId.Values)
+            adj[n] = new List<Node>();
+        foreach (var n in byId.Values)
+        {
+            if (n.nodeData.NodesConnected == null)
+                continue;
+            foreach (var conn in n.nodeData.NodesConnected)
+            {
+                if (conn?.NodeId == null || conn.NodeId == n.nodeData.NodeId)
+                    continue;
+                if (!byId.TryGetValue(conn.NodeId.ToLowerInvariant(), out var t))
+                    continue;
+                if (!adj[n].Contains(t))
+                    adj[n].Add(t);
+                if (!adj[t].Contains(n))
+                    adj[t].Add(n);
+            }
+        }
+
+        var root = FindEntryNode(byId);
+        if (root == null)
+            return;
+
+        var row = new Dictionary<Node, int> { [root] = 0 };
+        var queue = new Queue<Node>();
+        queue.Enqueue(root);
+        while (queue.Count > 0)
+        {
+            var n = queue.Dequeue();
+            foreach (var m in adj[n])
+            {
+                if (row.ContainsKey(m))
+                    continue;
+                row[m] = row[n] + 1;
+                queue.Enqueue(m);
+            }
+        }
+
+        var rows = new Dictionary<int, List<Node>>();
+        foreach (var kv in row)
+        {
+            if (kv.Value == 0)
+                continue; // the entry node itself is never focusable — no coordinate
+            if (!rows.TryGetValue(kv.Value, out var group))
+                rows[kv.Value] = group = new List<Node>();
+            group.Add(kv.Key);
+        }
+        foreach (var kv in rows)
+        {
+            kv.Value.Sort(CompareByScreenX);
+            for (int i = 0; i < kv.Value.Count; i++)
+                _coords[kv.Value[i]] = new Vector2Int(i + 1, kv.Key);
+        }
+    }
+
+    /// <summary>The drawn node the party entered this map on: the earliest entry of the run's
+    /// visit history that is currently drawn (earlier maps' nodes are not drawn, so this lands on
+    /// the current map's first node). Falls back to the node the party stands on.</summary>
+    private static Node FindEntryNode(Dictionary<string, Node> byId)
+    {
+        var visited = AtOManager.Instance?.mapVisitedNodes;
+        if (visited != null)
+            foreach (var id in visited)
+                if (id != null && byId.TryGetValue(id.ToLowerInvariant(), out var n))
+                    return n;
+        var active = MapManager.Instance?.nodeActive;
+        return IsVisible(active) ? active : null;
+    }
+
+    /// <summary>Spoken "column, row" for a node, or null if it has no computed coordinate.</summary>
+    private static string CoordText(Node node)
+    {
+        if (node == null)
+            return null;
+        if (!_coords.TryGetValue(node, out var c))
+        {
+            RebuildCoordinates();
+            if (!_coords.TryGetValue(node, out c))
+                return null;
+        }
+        return c.x + ", " + c.y;
     }
 
     // ---------------------------------------------------------------- party strip
@@ -418,6 +531,9 @@ public static class MapNavigator
         }
 
         sb.Append(", ").Append(StateWord(node));
+        string coord = CoordText(node);
+        if (coord != null)
+            sb.Append(", at ").Append(coord);
         SpeechManager.Speak(sb.ToString());
     }
 
@@ -555,7 +671,9 @@ public static class MapNavigator
             return;
         }
         string state = reachable ? "reachable" : (IsVisited(node) ? "visited" : "locked");
-        SpeechManager.Speak(prefix + NodeType(node) + ", " + state);
+        string coord = CoordText(node);
+        SpeechManager.Speak(prefix + NodeType(node) + ", " + state
+            + (coord != null ? ", at " + coord : ""));
     }
 
     private static string ShaderToRarity(Enums.MapIconShader shader)
