@@ -24,6 +24,8 @@ public class Plugin : BaseUnityPlugin
         InputRouter.Register(new TutorialInputContext());
         InputRouter.Register(new SettingsInputContext());
         InputRouter.Register(new CorruptionInputContext());
+        var combatContext = new CombatInputContext();
+        InputRouter.Register(combatContext);
         var mapContext = new MapInputContext();
         InputRouter.Register(mapContext);
         InputRouter.Register(new MainMenuInputContext());
@@ -31,6 +33,10 @@ public class Plugin : BaseUnityPlugin
         // The map's Alt+G/T/I hotkeys use letters the game leaves unbound, so a frame poller sees
         // them; it fires only while the map context owns input.
         gameObject.AddComponent<MapHotkeyPoller>().MapContext = mapContext;
+
+        // Combat's Alt review hotkeys are likewise unbound; a poller drives them (and the combat
+        // event-announcement flush) while the combat context owns input.
+        gameObject.AddComponent<CombatHotkeyPoller>().CombatContext = combatContext;
 
         new Harmony(MyPluginInfo.PLUGIN_GUID).PatchAll();
     }

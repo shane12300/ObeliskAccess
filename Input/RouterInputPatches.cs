@@ -30,6 +30,24 @@ public class RouterDoMovementPatch
 [HarmonyPatch(typeof(InputController), "DoKeyBinding")]
 public class RouterDoKeyBindingPatch
 {
+    /// <summary>
+    /// In combat the game binds R/E/S/A/W/Q to multiplayer emote pings. Those letters double as the
+    /// mod's Alt review hotkeys (Alt+R repeat, Alt+E energy, Alt+S statuses), so while combat owns
+    /// input and Alt is held, skip the game's handling — the poller still sees the key.
+    /// </summary>
+    static bool Prefix(InputAction.CallbackContext _context)
+    {
+        var kb = Keyboard.current;
+        if (kb == null || !InputRouter.AltHeld)
+            return true;
+        if (!ObeliskAccess.Input.Contexts.CombatInputContext.IsCurrentlyActive)
+            return true;
+
+        InputControl control = _context.control;
+        return !(control == kb[Key.R] || control == kb[Key.E] || control == kb[Key.S]
+              || control == kb[Key.A] || control == kb[Key.W] || control == kb[Key.Q]);
+    }
+
     static void Postfix(InputController __instance, InputAction.CallbackContext _context)
     {
         if (Keyboard.current == null)
@@ -50,6 +68,24 @@ public class RouterDoKeyBindingPatch
 }
 
 /// <summary>
+/// The game maps a bare Alt press to <c>DoButtonNorth</c>, which right-clicks whatever is under the
+/// cursor — and in combat the cursor sits on the focused card, so every Alt review hotkey would pop
+/// the card-inspection window (stealing input until Escape). Suppress it while combat owns input;
+/// Alt is the mod's review modifier there. The multiplayer chat keyboard's Alt-as-delete is left
+/// working.
+/// </summary>
+[HarmonyPatch(typeof(InputController), "DoButtonNorth")]
+public class RouterDoButtonNorthPatch
+{
+    static bool Prefix()
+    {
+        if (KeyboardManager.Instance != null && KeyboardManager.Instance.IsActive())
+            return true;
+        return !ObeliskAccess.Input.Contexts.CombatInputContext.IsCurrentlyActive;
+    }
+}
+
+/// <summary>
 /// The game maps a bare Ctrl press to a "click" (<c>DoFirePerformed</c>). The map context
 /// repurposes Ctrl as its look-ahead modifier, so this prefix suppresses that click while the map
 /// owns input and Ctrl is held — otherwise Ctrl+arrow would also click whatever node the cursor
@@ -60,7 +96,12 @@ public class RouterDoFirePerformedPatch
 {
     static bool Prefix()
     {
-        return !(ObeliskAccess.Input.Contexts.MapInputContext.IsCurrentlyActive && InputRouter.CtrlHeld);
+        // Both the map and combat repurpose Ctrl as a look-ahead / drill-in modifier, so suppress the
+        // bare-Ctrl click while either owns input and Ctrl is held.
+        bool ctrlModifierScreen =
+            ObeliskAccess.Input.Contexts.MapInputContext.IsCurrentlyActive
+            || ObeliskAccess.Input.Contexts.CombatInputContext.IsCurrentlyActive;
+        return !(ctrlModifierScreen && InputRouter.CtrlHeld);
     }
 }
 
