@@ -83,8 +83,9 @@ screen owns the keyboard and translates raw keys into semantic events; per-scree
 
 Registration order in `Plugin.Awake` **is** priority (highest first):
 `Tutorial > Settings > Corruption > CardCraft > Combat > Event > TownUpgrade > Town > Map >
-MainMenu`. A modal thus sits above the screen beneath it. (Matches the game's own modality order
-`… Event > Town > Map …`; CardCraft sits above Event because event shops open over the map.)
+Rewards > MainMenu`. A modal thus sits above the screen beneath it. (Matches the game's own
+modality order `… Event > Town > Map > Rewards …`; CardCraft sits above Event because event shops
+open over the map.)
 
 **Alerts**: `AlertConfirm`/`AlertConfirmDouble` are announced globally (patches in
 `SettingsMenuAccessibilityPatch.cs`). The town-family contexts (Town/TownUpgrade/CardCraft) do
@@ -107,6 +108,7 @@ confirm dialogs. Other contexts still exclude alerts in `IsActive` (known gap ou
 | Town hub | `TownInputContext` + poller | ↑/↓ hub items (5 buildings, upgrades, Ready, treasures); Enter opens/claims (confirm alerts answered in place); Tab party strip (↑/↓ heroes, 1–4 slots); Alt+T/G/I/R; arrival overview |
 | Town services (Altar/Church/Forge/Divination/Armory) | `CardCraftInputContext` + poller | One context for `CardCraftManager` craftType 0–4 (also covers map-event shops). ↑/↓ items with page auto-advance; ←/→ pages (or A/B variant in Altar preview); Enter single-press buy; Tab regions (Forge deck ref; Armory equipped+controls); 1–4 hero; Alt+F filters (Forge); Alt+T full card/item detail; purchases announced via `Hero.*` postfixes |
 | Town upgrades window | `TownUpgradeInputContext` | ←/→ building column, ↑/↓ its 6-upgrade chain; states with locked reasons; Enter buys via game confirm alert; Tab grid/sell/exit; sell-supply ↑/↓ quantity sub-mode |
+| Rewards screen (post-combat / event / divination) | `RewardsInputContext` + poller | Table: ↑/↓ hero rows (Restart pseudo-row last), ←/→ cards→dust→Deck; Enter takes (Singularity overwrite + MP restart confirms answered in place); Ctrl+↑/↓ card detail drill, Escape exits; Alt+T full detail, Alt+I overview, Alt+R repeat; picks and auto-close announced via `NET_*`/`CheckAllAssigned` postfixes; poller waits out the ~2s row animation before announcing arrival |
 
 ### Extensibility pattern
 

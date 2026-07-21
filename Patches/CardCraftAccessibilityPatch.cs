@@ -1069,8 +1069,8 @@ internal static class CardCraftScreenManager
         int goldAfter = cm?.GetPlayerGold() ?? goldBefore;
         if (goldAfter < goldBefore || e.Cost == 0)
             SpeechManager.SpeakQueued("Divination purchased. " + goldAfter + " gold remaining");
-        // The game then opens its reward screen (not yet adapted) or, in multiplayer, waits for
-        // the other players.
+        // The game then opens its reward screen (handled by RewardsScreenManager) or, in
+        // multiplayer, waits for the other players.
     }
 
     // ---------------------------------------------------------------- selection plumbing

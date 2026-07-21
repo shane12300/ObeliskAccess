@@ -96,11 +96,12 @@ public class RouterDoFirePerformedPatch
 {
     static bool Prefix()
     {
-        // Both the map and combat repurpose Ctrl as a look-ahead / drill-in modifier, so suppress the
-        // bare-Ctrl click while either owns input and Ctrl is held.
+        // The map, combat and rewards screens repurpose Ctrl as a look-ahead / drill-in modifier,
+        // so suppress the bare-Ctrl click while one of them owns input and Ctrl is held.
         bool ctrlModifierScreen =
             ObeliskAccess.Input.Contexts.MapInputContext.IsCurrentlyActive
-            || ObeliskAccess.Input.Contexts.CombatInputContext.IsCurrentlyActive;
+            || ObeliskAccess.Input.Contexts.CombatInputContext.IsCurrentlyActive
+            || ObeliskAccess.Input.Contexts.RewardsInputContext.IsCurrentlyActive;
         return !(ctrlModifierScreen && InputRouter.CtrlHeld);
     }
 }

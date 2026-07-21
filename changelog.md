@@ -20,4 +20,8 @@
 - Towns made accessible: arrival overview, town hub, all five services (Altar, Church,
   Forge, Divination, Armory), the town upgrades window, and spoken confirmation prompts
   answerable in place.
+- Reward screens (post-combat, story-event, and divination card picks) made accessible:
+  arrow-key navigation over each hero's card, dust, and deck-view choices, full card detail
+  (Alt+T or Ctrl+Up/Down line by line), a screen overview (Alt+I), spoken pick
+  confirmations, and the game's usual hover sounds while moving between choices.
 - Alt+R repeats the last spoken message on screens that support it.

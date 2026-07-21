@@ -5,7 +5,8 @@ Inventory from a full sweep of `../decompiled/` (2026-07-20), checked against cu
 **Adapted so far:** main menu (+ game-mode select, save slots), settings, tutorial popups,
 map (nodes / party strip / gold & position), corruption prompt, combat (navigation,
 announcements, review keys), narrative events (text walk, choices, roll narration, Alt+T
-hover info), town (hub, all five service screens, upgrades window, treasures).
+hover info), town (hub, all five service screens, upgrades window, treasures), reward
+screen (post-combat / event / divination card picks).
 
 Most unadapted surfaces expose the same controller contract the mod already piggybacks on:
 `ControllerMovement(...)` + `controllerList`/`_controllerList` + an index field + `IsActive()`.
@@ -24,8 +25,6 @@ Priority = how often a player hits it in a normal run × how hard it blocks a bl
       `EventInputContext` + `EventHotkeyPoller`; see Completed section). Tentatively verified
       in-game with one event incl. roll + probability; remaining permutations (roll targets,
       blocked options, reward cards, chained events) to be spot-checked during normal play.
-- [ ] **Post-combat card rewards** — `RewardsManager` (+ `CharacterReward`): per-hero reward card
-      picks, dust. Has `ControllerMovement`. After nearly every fight.
 - [ ] **Loot / chest screen** — `LootManager` (+ `CharacterLoot`, `LootItem`): gold + item pickups
       per hero. Has `ControllerMovement`.
 - [ ] **Generic confirmation alerts** — `AlertManager`: Yes/No dialogs used everywhere (resign,
@@ -156,7 +155,8 @@ feature still requires stays in its original priority section (with a note point
       Left/Right paging, Divination tiers, Alt+F filter modal (Forge), hero switch 1–4,
       purchase announces via `Hero.*` postfixes. NOT covered: obelisk-challenge setup nav
       (craftType 5, stays a P2 item), corruption flows (6/7 — the existing corruption handling
-      owns those), post-divination reward screen (the P0 rewards item), deck save/load slots
+      owns those), post-divination reward screen (since completed — see the rewards entry
+      below), deck save/load slots
       at the starting town. **Verified in-game 2026-07-20 — all five service screens work
       correctly.** *Remaining work — Alt+F filter menu redesign — tracked under P0.*
 - [x] **Town upgrades / sell supply** (was P2) — `TownUpgradeWindow`. Implemented 2026-07-20
@@ -174,3 +174,14 @@ feature still requires stays in its original priority section (with a note point
       **Verified in-game 2026-07-21 — user reports it much better.** *Remaining work —
       "Upgrades to" drill category and outside-combat card-inspect adaptation — tracked
       under P1.*
+- [x] **Post-combat card rewards** (was P0) — `RewardsManager` (+ `CharacterReward`): per-hero
+      reward card picks, dust. Implemented 2026-07-21 (`RewardsAccessibilityPatch` +
+      `RewardsInputContext` + `RewardsHotkeyPoller`): table navigation — Up/Down hero rows with
+      Restart as a final pseudo-row, Left/Right across cards → dust → Deck button; Enter takes
+      the focused choice (Singularity overwrite and multiplayer restart confirms answered in
+      place via `AlertHelper`); Ctrl+↑/↓ card-detail drill; Alt+T full detail, Alt+I overview,
+      Alt+R repeat; arrival overview waits out the row animation; picks and the auto-close
+      announced; the game's hover sounds mirrored on focus moves. Also covers map-event rewards
+      and town Divination rounds (same scene). The Deck button opens the game's character
+      window, which is not yet accessible — that's the P1 "Character sheet" item.
+      **Verified in-game 2026-07-21 — works correctly.**
