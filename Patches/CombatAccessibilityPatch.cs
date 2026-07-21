@@ -828,13 +828,13 @@ public static class CombatNavigator
             var card = t.GetComponent<CardItem>();
             if (card != null)
             {
-                BeginCardLines(card.CardData);
+                BeginCardLines(card.CardData, card.GetEnergyCost());
                 return;
             }
             var icon = t.GetComponent<ItemCombatIcon>();
             if (icon != null)
             {
-                BeginCardLines(IconCard(icon)); // walk the item card's description
+                BeginCardLines(IconCard(icon)); // walk the item card's detail lines
                 return;
             }
             var ip = t.GetComponent<InitiativePortrait>();
@@ -886,14 +886,10 @@ public static class CombatNavigator
         return true;
     }
 
-    private static void BeginCardLines(CardRealtimeData cd)
+    private static void BeginCardLines(CardRealtimeData cd, int? liveCost = null)
     {
         _cardLines.Clear();
-        if (cd != null)
-        {
-            foreach (var line in SplitLines(CleanDesc(cd.DescriptionNormalized)))
-                _cardLines.Add(line);
-        }
+        _cardLines.AddRange(CardSpeech.DetailLines(cd, liveCost));
         _drill = DrillMode.CardLines;
         _cardLineIndex = 0;
         SpeechManager.Speak(_cardLines.Count > 0 ? _cardLines[0] : "No description");
@@ -1268,13 +1264,13 @@ public static class CombatNavigator
         var t = _focusedTransform;
         if (t == null) { SpeechManager.Speak("Nothing focused"); return; }
 
-        if (IsDiscardPileEntry(t)) { SpeakCardKeynotes(TopDiscardCard()); return; }
+        if (IsDiscardPileEntry(t)) { SpeakCardDetail(TopDiscardCard()); return; }
 
         var card = t.GetComponent<CardItem>();
-        if (card != null) { SpeakCardKeynotes(card.CardData); return; }
+        if (card != null) { SpeakCardDetail(card.CardData, card.GetEnergyCost()); return; }
 
         var icon = t.GetComponent<ItemCombatIcon>();
-        if (icon != null) { SpeakCardKeynotes(IconCard(icon)); return; }
+        if (icon != null) { SpeakCardDetail(IconCard(icon)); return; }
 
         var ip = t.GetComponent<InitiativePortrait>();
         if (ip != null)
@@ -1289,10 +1285,9 @@ public static class CombatNavigator
         SpeechManager.Speak("No additional details");
     }
 
-    private static void SpeakCardKeynotes(CardRealtimeData cd)
+    private static void SpeakCardDetail(CardRealtimeData cd, int? liveCost = null)
     {
-        string detail = CardSpeech.KeynoteDetail(cd);
-        SpeechManager.Speak(detail.Length > 0 ? detail : "No keywords");
+        SpeechManager.Speak(CardSpeech.FullDetail(cd, liveCost));
     }
 
     private static void SpeakResists(Character c)

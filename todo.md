@@ -67,14 +67,11 @@ Priority = how often a player hits it in a normal run × how hard it blocks a bl
       Has `ControllerMovement` + `IsActive()`. Level-ups happen every run.
 - [ ] **Card-inspect screen** — `CardScreenManager`: full card zoom + related cards. Has
       `ControllerMovement`. In combat we deliberately suppress it and speak instead — remaining
-      speech gaps:
-  - [ ] **Alt+T on a card**: also speak rarity and upgrade state (not upgraded / blue A / gold B /
-        corrupted) — one extra clause.
+      speech gaps (rarity/upgrade state, keywords, related cards now covered by the card detail
+      speech enrichment; see Completed section):
   - [ ] **Drill category "Upgrades to"** (Ctrl+↑/↓): each path's name + description + differences
         (`CardItem.ShowDifferences`, `CardItem.cs:4155`; data `CardRealtimeData.UpgradesTo1/2/
         UpgradedFrom/UpgradesToRare` via `Globals.Instance.GetCardData(id, instantiate: false)`).
-  - [ ] **Drill category "Related cards"** (`CardRealtimeData.HaveRelatedCards`/`RelatedCards`):
-        name + description of each ("this card creates Burn — what does Burn do?").
   - [ ] Outside combat (rewards/shop/sheet), consider letting the real screen open and adapting it.
 - [ ] **In-combat selector popups** — navigated via `MatchManager.ControllerMovement` branches,
       not their own contexts:
@@ -166,3 +163,14 @@ feature still requires stays in its original priority section (with a note point
       (`TownUpgradeAccessibilityPatch` + `TownUpgradeInputContext`): Left/Right column,
       Up/Down chain, owned/available/locked reasons, buy via the game's confirm alert,
       sell-supply quantity sub-mode. **Verified in-game 2026-07-20 — works correctly.**
+- [x] **Card detail speech enrichment** (was P1, two sub-items of "Card-inspect screen") —
+      Alt+T and the Ctrl+↑/↓ drill now speak everything the game shows on and around a hovered
+      card. Implemented 2026-07-21 (`CardSpeech.DetailLines`/`FullDetail`, shared by combat and
+      town/shop screens): brief line incl. rarity + upgrade state, card type + target,
+      description (incl. the "X equals ..." explainer), require line ("Requires Stanza"),
+      cost-modification reasons (reductions / until-discarded / Exhaustion), per-keyword
+      glossary, and related-card previews. Combat drill walks these as discrete lines; Alt+T
+      speaks them as one interruptible utterance with the live in-combat cost.
+      **Verified in-game 2026-07-21 — user reports it much better.** *Remaining work —
+      "Upgrades to" drill category and outside-combat card-inspect adaptation — tracked
+      under P1.*

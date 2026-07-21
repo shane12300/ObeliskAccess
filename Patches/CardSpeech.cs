@@ -63,9 +63,10 @@ internal static class CardSpeech
 
     /// <summary>
     /// One navigation line: "Fireball, 2 energy, uncommon, upgraded A". Items skip the energy
-    /// clause (equipment has no cast cost).
+    /// clause (equipment has no cast cost). <paramref name="liveCost"/> overrides the printed cost
+    /// with the in-combat final cost (reductions/exhaustion applied) when the caller has it.
     /// </summary>
-    public static string BriefLine(CardRealtimeData cd)
+    public static string BriefLine(CardRealtimeData cd, int? liveCost = null)
     {
         if (cd == null)
             return "Unknown card";
@@ -73,7 +74,7 @@ internal static class CardSpeech
         var sb = new StringBuilder();
         sb.Append(AccessibleMenuBase.StripRichText(cd.CardName));
         if (cd.CardClass != Enums.CardClass.Item)
-            sb.Append(", ").Append(cd.EnergyCost).Append(" energy");
+            sb.Append(", ").Append(liveCost ?? cd.EnergyCost).Append(" energy");
         sb.Append(", ").Append(cd.CardRarity.ToString().ToLowerInvariant());
 
         string up = UpgradeWord(cd.CardUpgraded);
@@ -83,42 +84,155 @@ internal static class CardSpeech
     }
 
     /// <summary>
-    /// The Alt+T read: brief line, target, full description, then expanded keywords. Single string,
-    /// clauses joined with ". ".
+    /// Card type plus aux types ("attack, ranged attack"), as the card face and hover popup show
+    /// them. Empty for equipment items (the game hides the type row) and typeless cards.
     /// </summary>
-    public static string FullDetail(CardRealtimeData cd)
+    public static string TypeLine(CardRealtimeData cd)
     {
-        if (cd == null)
-            return "No card details";
+        if (cd == null || cd.CardClass == Enums.CardClass.Item || cd.CardType == Enums.CardType.None)
+            return "";
 
-        var parts = new List<string> { BriefLine(cd) };
+        var names = new List<string> { TypeName(cd.CardType) };
+        var aux = cd.CardTypeAux;
+        if (aux != null)
+        {
+            foreach (var t in aux)
+            {
+                if (t != Enums.CardType.None)
+                    names.Add(TypeName(t));
+            }
+        }
+        return string.Join(", ", names.ToArray());
+    }
 
-        string target = AccessibleMenuBase.StripRichText(cd.Target);
-        if (!string.IsNullOrEmpty(target))
-            parts.Add(target);
-
-        var lines = SplitLines(CleanDescription(cd.DescriptionNormalized));
-        if (lines.Count > 0)
-            parts.Add(string.Join(". ", lines.ToArray()));
-
-        string keynotes = KeynoteDetail(cd);
-        if (keynotes.Length > 0)
-            parts.Add(keynotes);
-
-        return string.Join(". ", parts.ToArray());
+    private static string TypeName(Enums.CardType t)
+    {
+        string s = Texts.Instance != null ? Texts.Instance.GetText(t.ToString()) : null;
+        return string.IsNullOrEmpty(s) ? t.ToString() : AccessibleMenuBase.StripRichText(s);
     }
 
     /// <summary>
-    /// Expanded keyword glossary: "Burn: takes damage each turn. Chill: ...". Empty string when the
-    /// card has none (callers speak their own fallback if they need one).
+    /// The on-card requirement label ("Requires Stanza") the game renders in its own text slot,
+    /// outside the description. Empty when the card requires nothing.
     /// </summary>
-    public static string KeynoteDetail(CardRealtimeData cd)
+    public static string RequireLine(CardRealtimeData cd)
     {
-        var kn = cd != null ? cd.KeyNotes : null;
-        if (kn == null || kn.Count == 0)
+        // The game only calls GetRequireText for hero-class cards (monster cards reuse the slot
+        // for priority text; items hide it).
+        if (cd == null || cd.CardClass == Enums.CardClass.Monster || cd.CardClass == Enums.CardClass.Item)
+            return "";
+        return CleanFlat(cd.GetRequireText());
+    }
+
+    /// <summary>
+    /// Why the spoken cost differs from the printed one (mirrors the hover popup's cost block:
+    /// reductions, zero-cost effects, Exhaustion). Empty outside combat or when unmodified.
+    /// </summary>
+    public static string CostModLine(CardRealtimeData cd)
+    {
+        if (cd == null || cd.CardClass == Enums.CardClass.Item)
             return "";
 
         var parts = new List<string>();
+        if (cd.EnergyReductionToZeroPermanent)
+            parts.Add("cost reduced to 0");
+        else if (cd.EnergyReductionToZeroTemporal)
+            parts.Add("cost reduced to 0 until discarded");
+
+        int reduction = cd.EnergyReductionPermanent + cd.EnergyReductionTemporal;
+        if (reduction > 0)
+            parts.Add("cost reduced by " + reduction
+                + (cd.EnergyReductionPermanent == 0 ? " until discarded" : ""));
+
+        if (cd.ExhaustCounter > 0)
+            parts.Add("exhaustion increases cost by " + cd.ExhaustCounter);
+
+        return string.Join(", ", parts.ToArray());
+    }
+
+    /// <summary>
+    /// One line per related card ("Related card: Spark, 0 energy, common. Deal 3 lightning
+    /// damage") — the full-card previews sighted players get beside the hovered card.
+    /// </summary>
+    public static List<string> RelatedCardLines(CardRealtimeData cd)
+    {
+        var result = new List<string>();
+        if (cd == null || !cd.HaveRelatedCards || cd.RelatedCards == null || Globals.Instance == null)
+            return result;
+
+        foreach (var id in cd.RelatedCards)
+        {
+            if (string.IsNullOrEmpty(id))
+                continue;
+            var rc = Globals.Instance.GetCardData(id, instantiate: false);
+            if (rc == null)
+                continue;
+            var sb = new StringBuilder("Related card: ");
+            sb.Append(BriefLine(rc));
+            string desc = CleanFlat(rc.DescriptionNormalized);
+            if (desc.Length > 0)
+                sb.Append(". ").Append(desc);
+            result.Add(sb.ToString());
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// Everything the game shows on and around a hovered card, as discrete lines in reading
+    /// order: brief line; type + target; description (one line per sentence, including the
+    /// "X equals ..." explainer); require; cost modifications; one line per keyword; one line
+    /// per related card. The combat drill walks these; <see cref="FullDetail"/> joins them.
+    /// </summary>
+    public static List<string> DetailLines(CardRealtimeData cd, int? liveCost = null)
+    {
+        var lines = new List<string>();
+        if (cd == null)
+        {
+            lines.Add("No card details");
+            return lines;
+        }
+
+        lines.Add(BriefLine(cd, liveCost));
+
+        string type = TypeLine(cd);
+        string target = AccessibleMenuBase.StripRichText(cd.Target);
+        if (type.Length > 0 && target.Length > 0)
+            lines.Add(type + ", " + target);
+        else if (type.Length > 0)
+            lines.Add(type);
+        else if (!string.IsNullOrEmpty(target))
+            lines.Add(target);
+
+        lines.AddRange(SplitLines(CleanDescription(cd.DescriptionNormalized)));
+
+        string require = RequireLine(cd);
+        if (require.Length > 0)
+            lines.Add(require);
+
+        string costMod = CostModLine(cd);
+        if (costMod.Length > 0)
+            lines.Add(costMod);
+
+        lines.AddRange(KeynoteLines(cd));
+        lines.AddRange(RelatedCardLines(cd));
+        return lines;
+    }
+
+    /// <summary>
+    /// The Alt+T read: <see cref="DetailLines"/> as one interruptible utterance, clauses joined
+    /// with ". ".
+    /// </summary>
+    public static string FullDetail(CardRealtimeData cd, int? liveCost = null)
+        => string.Join(". ", DetailLines(cd, liveCost).ToArray());
+
+    /// <summary>One glossary line per keyword: "Burn: takes damage each turn".</summary>
+    public static List<string> KeynoteLines(CardRealtimeData cd)
+    {
+        var result = new List<string>();
+        var kn = cd != null ? cd.KeyNotes : null;
+        if (kn == null)
+            return result;
+
         foreach (var k in kn)
         {
             if (k == null)
@@ -127,8 +241,8 @@ internal static class CardSpeech
             string d = CleanFlat(k.Description);
             if (string.IsNullOrEmpty(n) && string.IsNullOrEmpty(d))
                 continue;
-            parts.Add(string.IsNullOrEmpty(d) ? n : n + ": " + d);
+            result.Add(string.IsNullOrEmpty(d) ? n : n + ": " + d);
         }
-        return string.Join(". ", parts.ToArray());
+        return result;
     }
 }
