@@ -48,15 +48,8 @@ Priority = how often a player hits it in a normal run × how hard it blocks a bl
 
 - [ ] **X-cost mechanic doesn't read correctly** — cards with the X mechanic (spend all
       remaining energy) are not announced correctly; fix how their cost/description is spoken.
-- [ ] **Discover / discard needs fixing** — the discover and discard card-selection flows are
-      broken for the accessibility layer (see also the `UIDiscardSelector` / `UIAddcardSelector`
-      items under P1 in-combat selector popups).
 - [ ] **General exploration of cards in combat** — sweep different card types/keywords to
       ensure each reads correctly and is understandable via speech.
-- [ ] **Look-and-discard card effects** — cards whose effects let you look at cards (e.g. peek
-      at the top of a deck) and choose which to discard have no accessible flow yet; add
-      navigation + speech for that look/peek-then-discard selection. Related to the
-      discover/discard item above and the `UIDeckCards` / `UIDiscardSelector` popups under P1.
 - [ ] **Enemy intents** — match the sighted flow: without the Sight effect, sighted players
       still see how many actions an enemy intends, so always announce the action count; when
       Sight is active, speak the full card detail of each intended action instead of the
@@ -89,12 +82,10 @@ Priority = how often a player hits it in a normal run × how hard it blocks a bl
         (`CardItem.ShowDifferences`, `CardItem.cs:4155`; data `CardRealtimeData.UpgradesTo1/2/
         UpgradedFrom/UpgradesToRare` via `Globals.Instance.GetCardData(id, instantiate: false)`).
   - [ ] Outside combat (rewards/shop/sheet), consider letting the real screen open and adapting it.
-- [ ] **In-combat selector popups** — navigated via `MatchManager.ControllerMovement` branches,
-      not their own contexts:
-  - [ ] `UIDiscardSelector` — "choose a card to discard" (many card effects).
-  - [ ] `UIDeckCards` — draw/discard-pile viewer.
-  - [ ] `UIAddcardSelector` — "add a card" chooser.
-  - [ ] `UIEnergySelector` — X-cost / energy choice.
+- [ ] **In-combat selector popups — remaining** — follow-up for the completed card-selection
+      windows (`UIDiscardSelector` / `UIDeckCards`; see Completed). Still needing contexts:
+  - [ ] `UIEnergySelector` — X-cost / energy choice (relates to the X-cost readout item under
+        Combat improvements).
   - [ ] `UICombatDeath` / `MatchManager.ShowDeathScreen` — hero death / defeat screen.
 - [ ] **Pause menu** — `OptionsManager` (ESC in run): Resign / Settings / Score / Exit, plus
       "can't exit" guards. Has `InputMoveController`.
@@ -208,6 +199,23 @@ feature still requires stays in its original priority section (with a note point
       mod's one deliberate behaviour deviation, documented in the README under "Design
       philosophy". Mouse/gamepad/multiplayer selection paths unaffected. **Verified in-game
       2026-07-24.**
+- [x] **In-combat card-selection windows** (was P1 "In-combat selector popups" —
+      `UIDiscardSelector`, `UIDeckCards`, `UIAddcardSelector` — plus the Combat-improvements
+      items "Discover / discard needs fixing" and "Look-and-discard card effects") — implemented
+      2026-07-24 (`CombatSelectorAccessibilityPatch` + `CombatSelectorInputContext`, registered
+      above Combat): covers discard-from-hand (discard / top-deck / vanish), look-at-top-of-deck
+      windows (incl. pure peeks), the discover "choose a card to add" window, and the
+      draw/discard pile viewers. Left/Right review cards ("selected" flagged), Enter toggles
+      (mandatory single picks auto-confirm), Space confirms (or speaks "select N more"), digits
+      still toggle natively with spoken results, Ctrl+↑/↓ drill, Alt+T/R; game's Enter/Space
+      suppressed under the windows. `UIAddcardSelector` is dead code in the current game build —
+      discover runs through `UIDeckCards` type 3. Root-caused and fixed the cast blocker: on
+      deck-effect cards the hero drop-target is eclipsed by `DeckInHero` overlay colliders that
+      swallow the synthetic Enter click, so with a held card Enter on a character now casts via
+      `ControllerExecute()` directly; card pickup is also announced now. Added a Debug mode
+      toggle (Accessibility tab, default off) gating the troubleshooting logs added during this
+      work. **Verified in-game 2026-07-24 — works correctly.** *Remaining work —
+      `UIEnergySelector` and the death screen — tracked under P1.*
 - [x] **Post-combat card rewards** (was P0) — `RewardsManager` (+ `CharacterReward`): per-hero
       reward card picks, dust. Implemented 2026-07-21 (`RewardsAccessibilityPatch` +
       `RewardsInputContext` + `RewardsHotkeyPoller`): table navigation — Up/Down hero rows with

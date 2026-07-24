@@ -47,6 +47,7 @@ public static class InputRouter
     public static bool Cancel() => ActiveContext()?.OnCancel() ?? false;
     public static bool Tab(bool backwards) => ActiveContext()?.OnTab(backwards) ?? false;
     public static bool Number(int n) => ActiveContext()?.OnNumber(n) ?? false;
+    public static bool Space() => ActiveContext()?.OnSpace() ?? false;
 
     /// <summary>True when the given context is the one that currently owns input. Lets a component
     /// (e.g. the map hotkey poller) act only while its screen actually has focus, respecting priority.</summary>
@@ -64,6 +65,9 @@ public static class InputRouter
 
     public static bool IsTab(InputControl control)
         => Keyboard.current != null && control == Keyboard.current[Key.Tab];
+
+    public static bool IsSpace(InputControl control)
+        => Keyboard.current != null && control == Keyboard.current[Key.Space];
 
     public static bool ShiftHeld
         => Keyboard.current != null

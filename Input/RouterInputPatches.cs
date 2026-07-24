@@ -33,20 +33,26 @@ public class RouterDoMovementPatch
 public class RouterDoKeyBindingPatch
 {
     /// <summary>
-    /// Two suppressions of the game's own key handling (our postfix still routes the key either
+    /// Suppressions of the game's own key handling (our postfix still routes the key either
     /// way — Harmony runs postfixes even when a prefix skips the original):
     ///
     /// Enter: outside combat the game maps Enter to <c>DoFirePerformed</c>, a synthetic click at
     /// the current mouse-cursor position. The loot and rewards screens swallow all arrows and
     /// never warp the cursor, so that click always lands on a stale position — it can take an
     /// item, grab the gold, switch the loot picker, or open the (inaccessible) deck window under
-    /// our feet. Swallow the game's Enter while either screen owns input. Real mouse clicks and
-    /// gamepad A don't go through this path.
+    /// our feet. Swallow the game's Enter while either screen owns input. In the combat card
+    /// selector windows the game instead maps Enter to "confirm the window"
+    /// (<c>BattleKeyboard.KeyboardEnter</c>); the mod repurposes Enter as select-focused-card, so
+    /// swallow it there too. Real mouse clicks and gamepad A don't go through this path.
+    ///
+    /// Space: the game maps it to end-turn (<c>BattleKeyboard.KeyboardSpace</c>). While a combat
+    /// card selector window is up the mod repurposes Space as the confirm key, so swallow the
+    /// game's handling — the postfix routes it to the context.
     ///
     /// Letters: in combat the game binds R/E/S/A/W/Q to multiplayer emote pings. Those letters
     /// double as the mod's Alt review hotkeys (Alt+R repeat, Alt+E energy, Alt+S statuses), so
-    /// while combat owns input and Alt is held, skip the game's handling — the poller still sees
-    /// the key.
+    /// while combat or a selector window owns input and Alt is held, skip the game's handling —
+    /// the poller still sees the key.
     /// </summary>
     static bool Prefix(InputAction.CallbackContext _context)
     {
@@ -55,15 +61,20 @@ public class RouterDoKeyBindingPatch
             return true;
 
         InputControl control = _context.control;
+        bool selectorActive = ObeliskAccess.Input.Contexts.CombatSelectorInputContext.IsCurrentlyActive;
 
         if (InputRouter.IsEnter(control)
-            && (ObeliskAccess.Input.Contexts.LootInputContext.IsCurrentlyActive
+            && (selectorActive
+                || ObeliskAccess.Input.Contexts.LootInputContext.IsCurrentlyActive
                 || ObeliskAccess.Input.Contexts.RewardsInputContext.IsCurrentlyActive))
+            return false;
+
+        if (selectorActive && InputRouter.IsSpace(control))
             return false;
 
         if (!InputRouter.AltHeld)
             return true;
-        if (!ObeliskAccess.Input.Contexts.CombatInputContext.IsCurrentlyActive)
+        if (!ObeliskAccess.Input.Contexts.CombatInputContext.IsCurrentlyActive && !selectorActive)
             return true;
 
         return !(control == kb[Key.R] || control == kb[Key.E] || control == kb[Key.S]
@@ -84,6 +95,8 @@ public class RouterDoKeyBindingPatch
             InputRouter.Tab(InputRouter.ShiftHeld);
         else if (InputRouter.IsDigit(control, out int n))
             InputRouter.Number(n);
+        else if (InputRouter.IsSpace(control))
+            InputRouter.Space();
         // Digits are inert on the map by default (the game only acts on them during combat), so a
         // non-swallowing postfix is enough — nothing else to suppress.
     }
@@ -103,7 +116,8 @@ public class RouterDoButtonNorthPatch
     {
         if (KeyboardManager.Instance != null && KeyboardManager.Instance.IsActive())
             return true;
-        return !ObeliskAccess.Input.Contexts.CombatInputContext.IsCurrentlyActive;
+        return !(ObeliskAccess.Input.Contexts.CombatInputContext.IsCurrentlyActive
+              || ObeliskAccess.Input.Contexts.CombatSelectorInputContext.IsCurrentlyActive);
     }
 }
 
@@ -123,6 +137,7 @@ public class RouterDoFirePerformedPatch
         bool ctrlModifierScreen =
             ObeliskAccess.Input.Contexts.MapInputContext.IsCurrentlyActive
             || ObeliskAccess.Input.Contexts.CombatInputContext.IsCurrentlyActive
+            || ObeliskAccess.Input.Contexts.CombatSelectorInputContext.IsCurrentlyActive
             || ObeliskAccess.Input.Contexts.RewardsInputContext.IsCurrentlyActive
             || ObeliskAccess.Input.Contexts.LootInputContext.IsCurrentlyActive;
         return !(ctrlModifierScreen && InputRouter.CtrlHeld);

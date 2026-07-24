@@ -49,4 +49,21 @@
   or open the deck window and leave the keyboard unresponsive. The stray click is now
   suppressed, and if the deck window does open (e.g. by mouse), it is announced along with
   how to close it.
-- Alt+R repeats the last spoken message on screens that support it.
+- In-combat card-selection windows made accessible: cards that make you discard from hand
+  (including put-on-deck and vanish variants), cards that look at the top of your deck and let
+  you discard or vanish some of them, discover-style "choose a card to add" picks, and the
+  draw/discard pile viewers. Left and Right arrows walk the candidate cards (already-picked
+  ones are announced as "selected"), Enter selects or deselects, and Space confirms — or tells
+  you how many more cards you must pick. When exactly one card must be chosen, Enter takes it
+  and confirms in one press. The game's own number keys still work and now speak their result.
+  Full card detail stays available with Alt+T or line by line with Ctrl+Up/Down, and Alt+R
+  repeats. Pure "look only" peeks and the pile viewers are read-only: browse with the arrows,
+  continue with Space or close with Escape.
+- Fixed: cards with these deck effects could not be cast with the keyboard at all — after
+  picking the card up, pressing Enter on the target hero silently did nothing (the game's
+  deck icons that appear over each hero were swallowing the click). Enter on a character now
+  casts reliably, and picking a card up is announced ("Expert Tracker picked up. Move to a
+  target and press Enter.") instead of being silent.
+- New "Debug mode" option at the bottom of the Accessibility settings tab (off by default).
+  When on, the mod writes extra troubleshooting detail to its log file to help diagnose
+  problems; normal play is unaffected either way.

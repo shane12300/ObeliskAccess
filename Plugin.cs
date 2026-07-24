@@ -30,6 +30,10 @@ public class Plugin : BaseUnityPlugin
         InputRouter.Register(new CorruptionInputContext());
         var cardCraftContext = new CardCraftInputContext();
         InputRouter.Register(cardCraftContext);
+        // The in-combat card-selection windows (discard / look-at-deck / discover / pile viewers)
+        // are modals over combat, so their context sits directly above it.
+        var combatSelectorContext = new CombatSelectorInputContext();
+        InputRouter.Register(combatSelectorContext);
         var combatContext = new CombatInputContext();
         InputRouter.Register(combatContext);
         var eventContext = new EventInputContext();
@@ -54,8 +58,11 @@ public class Plugin : BaseUnityPlugin
         gameObject.AddComponent<SettingsHotkeyPoller>().SettingsContext = settingsContext;
 
         // Combat's Alt review hotkeys are likewise unbound; a poller drives them (and the combat
-        // event-announcement flush) while the combat context owns input.
-        gameObject.AddComponent<CombatHotkeyPoller>().CombatContext = combatContext;
+        // event-announcement flush) while the combat context owns input. The same poller drives
+        // the card-selection windows' arrival tick and their Alt+T/Alt+R keys.
+        var combatPoller = gameObject.AddComponent<CombatHotkeyPoller>();
+        combatPoller.CombatContext = combatContext;
+        combatPoller.SelectorContext = combatSelectorContext;
 
         // The event screen's Alt+T/R hotkeys are unbound too; its poller also drives the
         // event lifecycle tick (reply watcher, deferred reward-card reads).
@@ -79,6 +86,31 @@ public class Plugin : BaseUnityPlugin
         // drives readiness detection, the turn watch, and the finish announcement.
         gameObject.AddComponent<LootHotkeyPoller>().LootContext = lootContext;
 
-        new Harmony(MyPluginInfo.PLUGIN_GUID).PatchAll();
+        var harmony = new Harmony(MyPluginInfo.PLUGIN_GUID);
+        harmony.PatchAll();
+
+        // Debug mode: confirm the card-selection window patches actually attached.
+        if (AccessibilityOptions.DebugEnabled)
+        {
+            LogPatchState(typeof(UIDeckCards), "TurnOn");
+            LogPatchState(typeof(UIDiscardSelector), "TurnOn");
+            LogPatchState(typeof(MatchManager), "SelectCardToDiscard");
+        }
+    }
+
+    /// <summary>Troubleshooting log line, written only while the Debug mode option is on.</summary>
+    internal static void LogDebug(string message)
+    {
+        if (AccessibilityOptions.DebugEnabled)
+            Logger.LogInfo(message);
+    }
+
+    private static void LogPatchState(System.Type type, string method)
+    {
+        var m = AccessTools.Method(type, method);
+        var info = m != null ? Harmony.GetPatchInfo(m) : null;
+        int post = info?.Postfixes?.Count ?? 0;
+        int pre = info?.Prefixes?.Count ?? 0;
+        Logger.LogInfo($"[selector] {type.Name}.{method}: found={m != null} prefixes={pre} postfixes={post}");
     }
 }

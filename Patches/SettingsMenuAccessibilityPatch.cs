@@ -378,6 +378,7 @@ internal static class SettingsMenuManager
                 AddOption(AccessibilityOptions.ShortStatusPhrasing, "Short status phrasing");
                 AddOption(AccessibilityOptions.SkipRoutineDecay, "Skip routine status decay");
                 AddOption(AccessibilityOptions.SkipEnemyStatusChanges, "Skip enemy status changes");
+                AddOption(AccessibilityOptions.DebugMode, "Debug mode");
                 break;
         }
     }

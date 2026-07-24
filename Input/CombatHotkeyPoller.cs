@@ -12,10 +12,15 @@ namespace ObeliskAccess.Input;
 /// Also drives the combat-event announcement flush every frame — deliberately outside the
 /// active-context gate, because damage/heal/status text arrives while the board is animating (a
 /// "busy" state where the context may momentarily read as suppressed) and must still be spoken.
+///
+/// Additionally drives <see cref="CombatSelectorManager.Tick"/> (arrival detection for the
+/// card-selection windows, whose cards spawn over several frames) and the selector's own Alt
+/// review keys (Alt+T full card detail, Alt+R repeat) while the selector context owns input.
 /// </summary>
 public class CombatHotkeyPoller : MonoBehaviour
 {
     public IInputContext CombatContext;
+    public IInputContext SelectorContext;
 
     private void Update()
     {
@@ -25,6 +30,18 @@ public class CombatHotkeyPoller : MonoBehaviour
 
         // Flush any buffered combat events regardless of focus/modal state.
         CombatNavigator.TickFlush();
+
+        // Selector-window lifecycle tick (cheap no-op when no window is up).
+        CombatSelectorManager.Tick();
+
+        if (InputRouter.IsActive(SelectorContext))
+        {
+            if (!(kb.leftAltKey.isPressed || kb.rightAltKey.isPressed))
+                return;
+            if (kb.tKey.wasPressedThisFrame) CombatSelectorManager.SpeakFullDetail();
+            else if (kb.rKey.wasPressedThisFrame) SpeechManager.RepeatLast();
+            return;
+        }
 
         if (!InputRouter.IsActive(CombatContext))
             return;

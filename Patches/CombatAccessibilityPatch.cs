@@ -43,6 +43,12 @@ public static class CombatNavigator
 
     // ---- current focus + drill-in state ----
     private static Transform _focusedTransform;
+
+    /// <summary>The element combat navigation last focused. The combat input context uses it to
+    /// resolve the intended target of an Enter press without depending on the game's click raycast
+    /// (which deck-effect cards break — see <c>CombatInputContext.OnConfirm</c>).</summary>
+    public static Transform FocusedTransform => _focusedTransform;
+
     private static DrillMode _drill = DrillMode.None;
     private static readonly List<string> _cardLines = new List<string>();
     private static int _cardLineIndex;

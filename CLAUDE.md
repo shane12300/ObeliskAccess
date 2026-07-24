@@ -82,10 +82,10 @@ screen owns the keyboard and translates raw keys into semantic events; per-scree
   town arrival, craft-screen open — must survive a modal owning input).
 
 Registration order in `Plugin.Awake` **is** priority (highest first):
-`Tutorial > Settings > Corruption > CardCraft > Combat > Event > TownUpgrade > Town > Map >
-Rewards > MainMenu`. A modal thus sits above the screen beneath it. (Matches the game's own
-modality order `… Event > Town > Map > Rewards …`; CardCraft sits above Event because event shops
-open over the map.)
+`Tutorial > Settings > Corruption > CardCraft > CombatSelector > Combat > Event > TownUpgrade >
+Town > Map > Rewards > MainMenu`. A modal thus sits above the screen beneath it. (Matches the
+game's own modality order `… Event > Town > Map > Rewards …`; CardCraft sits above Event because
+event shops open over the map; CombatSelector is the in-combat card-selection modal over Combat.)
 
 **Alerts**: `AlertConfirm`/`AlertConfirmDouble` are announced globally (patches in
 `SettingsMenuAccessibilityPatch.cs`). The town-family contexts (Town/TownUpgrade/CardCraft) do
@@ -98,7 +98,7 @@ confirm dialogs. Other contexts still exclude alerts in `IsActive` (known gap ou
 | Screen | Context | Keys |
 |--------|---------|------|
 | Main menu / game-mode / save-slot | `MainMenuInputContext` | arrows (game nav, announced), Enter |
-| Settings | `SettingsInputContext` + poller | arrows, Enter, Tab (4 tabs: Graphics/Audio/Gameplay/Accessibility — the last is a mod-owned virtual tab of `AccessibilityOptions` combat-narration toggles), Alt+T option tooltip, Escape (cancels open dropdown) |
+| Settings | `SettingsInputContext` + poller | arrows, Enter, Tab (4 tabs: Graphics/Audio/Gameplay/Accessibility — the last is a mod-owned virtual tab of `AccessibilityOptions` combat-narration toggles + a debug-logging toggle), Alt+T option tooltip, Escape (cancels open dropdown) |
 | Tutorial popup | `TutorialInputContext` | Up/Down walk lines, Enter activates (modal focus trap) |
 | Map — nodes | `MapInputContext` | ←/→ reachable nodes; Ctrl+↑/↓ descend/ascend look-ahead, Ctrl+←/→ siblings; Enter travels; Alt+T node detail |
 | Map — party strip | `MapInputContext` | Tab toggles region; ↑/↓ read heroes; 1–4 jump to slot; Enter (open panel) deferred |
@@ -110,6 +110,7 @@ confirm dialogs. Other contexts still exclude alerts in `IsActive` (known gap ou
 | Town upgrades window | `TownUpgradeInputContext` | ←/→ building column, ↑/↓ its 6-upgrade chain; states with locked reasons; Enter buys via game confirm alert; Tab grid/sell/exit; sell-supply ↑/↓ quantity sub-mode |
 | Rewards screen (post-combat / event / divination) | `RewardsInputContext` + poller | Table: ↑/↓ hero rows (Restart pseudo-row last), ←/→ cards→dust→Deck; Enter takes (Singularity overwrite + MP restart confirms answered in place); Ctrl+↑/↓ card detail drill, Escape exits; Alt+T full detail, Alt+I overview, Alt+R repeat; picks and auto-close announced via `NET_*`/`CheckAllAssigned` postfixes; poller waits out the ~2s row animation before announcing arrival |
 | Loot screen (boss/chest item picks, Obelisk-challenge chests) | `LootInputContext` + poller | Arrows walk the loot row (items → gold pile → Restart); Enter takes for the hero whose turn it is (MP restart confirm answered in place); Tab party review (equipped items per hero; Enter reorders picker in SP; 1–4 jump); Ctrl+↑/↓ item detail drill, Escape exits; Alt+T/I/G/R; item announces carry an equipped-slot comparison; picks announced via `Looted`/`LootGold` prefix+postfix pairs; poller's tick detects arrival (active-slot poll), turn changes, and finish |
+| In-combat card-selection windows (discard-from-hand / look-at-deck / discover / pile viewers) | `CombatSelectorInputContext` (above Combat; state in `CombatSelectorManager`, `Patches/CombatSelectorAccessibilityPatch.cs`) | Covers `UIDiscardSelector` + `UIDeckCards` types 0–3 (`UIAddcardSelector` is dead code — discover runs through `UIDeckCards` type 3). ←/→ review cards ("selected" flagged); Enter toggles via `SelectCardToDiscard/Addcard` (mandatory single picks auto-confirm; toggles announced from prefix/postfix snapshot pairs, so digits/mouse/MP echoes speak too); Space confirms via `AssignDiscardAction`/`AssignLookDiscardAction` (or speaks "select N more"); game's Enter (window confirm) + Space (end turn) suppressed in the `DoKeyBinding` prefix while active; Ctrl+↑/↓ drill, Alt+T/R via `CombatHotkeyPoller`, whose tick also announces the async card spawn-in. Deck-effect cast fix: with a held card, Enter on a character casts via `ControllerExecute()` directly (the `DeckInHero` overlay colliders eclipse the hero and eat the synthetic click); pickup announced |
 
 ### Extensibility pattern
 

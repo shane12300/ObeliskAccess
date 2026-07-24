@@ -62,10 +62,44 @@ public class CombatInputContext : InputContextBase
         if (controller == null)
             return false;
 
-        // The game's Enter only confirms modals — it never activates the focused element. Fire the
-        // game's own click path (raycast under the warped cursor), which picks up / plays the focused
-        // card, confirms a target, or presses End Turn. Same idiom as MainMenuInputContext.
+        var m = MatchManager.Instance;
+
+        // A card is held and focus is on a character: complete the cast through the game's own
+        // ControllerExecute (what CharacterItem.fOnMouseUp calls). The normal click raycast can't
+        // be trusted here — deck-effect cards (Look/discard) overlay each hero with DeckInHero
+        // icons whose colliders eclipse the character, and DeckInHero ignores clicks while a card
+        // is dragged, so the raycast path silently eats the Enter.
+        if (m != null && m.CardDrag && m.controllerClickedCard)
+        {
+            var t = CombatNavigator.FocusedTransform;
+            var target = t != null
+                ? (t.GetComponent<CharacterItem>() ?? t.GetComponentInParent<CharacterItem>())
+                : null;
+            if (target != null)
+            {
+                m.ControllerExecute();
+                return true;
+            }
+        }
+
+        // Otherwise: the game's Enter only confirms modals — it never activates the focused
+        // element. Fire the game's own click path (raycast under the warped cursor), which picks
+        // up / plays the focused card, confirms a target, or presses End Turn. Same idiom as
+        // MainMenuInputContext.
+        bool wasDragging = m != null && m.CardDrag;
         Traverse.Create(controller).Method("DoFirePerformed").GetValue();
+
+        // The pickup half of a two-step cast is otherwise silent — say what happened.
+        if (m != null && !wasDragging && m.CardDrag)
+        {
+            var card = CombatNavigator.FocusedTransform != null
+                ? CombatNavigator.FocusedTransform.GetComponent<CardItem>()
+                : null;
+            string name = card != null && card.CardData != null
+                ? AccessibleMenuBase.StripRichText(card.CardData.CardName)
+                : "Card";
+            SpeechManager.Speak(name + " picked up. Move to a target and press Enter.");
+        }
         return true;
     }
 }
