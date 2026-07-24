@@ -5,6 +5,24 @@ output so the game is playable without sight. Speech goes through NVDA, JAWS, or
 screen reader falling back to Windows built-in
 speech (SAPI) if none is running.
 
+## Design philosophy
+
+The mod's core rule is that **the game itself is never changed — only made perceivable**. Every
+spoken string traces to something the game already shows on screen or in a hover popup; every
+keyboard action lands on the same code path a mouse click would. The mod adds no information a
+sighted player doesn't have, hides nothing they do have, and never alters rules, odds, prices,
+or outcomes. A blind player and a sighted player at the same screen are playing exactly the
+same game.
+
+There is **one deliberate exception**. In single player, when a story event has only one
+available choice, the base game selects it automatically half a second after the event appears.
+That half second is calibrated to a sighted player, who has already seen the whole screen; for a
+screen-reader user it cut the event text off mid-sentence and made the choice impossible to
+review before it fired. The mod suppresses this auto-select, so single-choice events wait for
+Enter like every other event. We consider this a *restoration* of parity rather than a break
+from it: both kinds of player now get to take in the event before it resolves. Mouse and gamepad
+clicks, multiplayer, and every other part of event handling behave exactly as in the base game.
+
 ## Requirements
 
 - **Across the Obelisk** (Steam)
@@ -78,6 +96,9 @@ speech (SAPI) if none is running.
 - Dice rolls are narrated play-by-play, including your chance of success.
 - Alt+T on a choice explains it in depth: success probability, why an option is blocked,
   and previews of any cards a choice would give you.
+- Events with only one choice wait for you. The base game would pick a lone option
+  automatically after half a second; the mod disables that so you can hear the full event
+  and review the choice first (see **Design philosophy** above).
 
 ### Combat
 

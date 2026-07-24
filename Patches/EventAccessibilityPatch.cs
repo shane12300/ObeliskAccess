@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using HarmonyLib;
 using UnityEngine;
+using UnityEngine.InputSystem;
 
 namespace ObeliskAccess.Patches;
 
@@ -115,7 +116,9 @@ internal static class EventScreenManager
         _rollCardsCalls = 0;
         _spokenResultLength = 0;
 
-        // Covers Enter, mouse clicks, AND the game's 0.5s auto-select of a lone option.
+        // Covers Enter, mouse clicks, and multiplayer partners' picks. (The game's 0.5s
+        // auto-select of a lone option used to arrive here too — it is now suppressed by
+        // EventAutoSelectSuppressPatch; single-choice events wait for Enter.)
         SpeechManager.Speak("Selected: " + _selectedChoiceText);
     }
 
@@ -364,7 +367,15 @@ internal static class EventScreenManager
                     SpeechManager.Speak(SafeText("notEnoughGold", "Not enough gold"));
                     return;
                 }
-                entry.Reply.SelectThisOption();
+                UserSelectionInProgress = true;
+                try
+                {
+                    entry.Reply.SelectThisOption();
+                }
+                finally
+                {
+                    UserSelectionInProgress = false;
+                }
             }
             else
             {
@@ -546,6 +557,14 @@ internal static class EventScreenManager
         }
         return sb.ToString();
     }
+
+    /// <summary>
+    /// True while our own Enter handling is inside <c>Reply.SelectThisOption</c> — lets the
+    /// auto-select suppression patch tell the mod's deliberate pick from the game's timer.
+    /// </summary>
+    internal static bool UserSelectionInProgress;
+
+    internal static int VisibleReplyCount() => GetVisibleReplies().Count;
 
     private static List<Reply> GetVisibleReplies()
     {
@@ -791,6 +810,44 @@ public class EventNetSelectAnswerPatch
     static void Postfix(int _answerId)
     {
         EventScreenManager.OnOptionSelected(_answerId);
+    }
+}
+
+/// <summary>
+/// The mod's one deliberate behaviour change (documented in the README under "Design
+/// philosophy"): in single player the game auto-selects a lone event choice 0.5 seconds after
+/// showing it (tail of the EventManager reply-layout coroutine). That window is calibrated to a
+/// sighted player who has already seen the whole screen — for a screen-reader user it cuts off
+/// the event text mid-sentence and makes the option unreviewable (Alt+T can never be reached).
+/// This prefix swallows exactly that call, so lone-option events wait for Enter like every other
+/// event. The gate mirrors the game's own auto-select conditions (single player, nothing selected
+/// yet, exactly one visible choice) and exempts every deliberate selection path: the mod's Enter
+/// handling (flag), a real mouse click, and gamepad A — the latter two arrive as this same method
+/// via Reply.OnMouseUp and the game's synthetic cursor click. A blocked call is one-shot; the
+/// game has no retry, and all its other paths (multiplayer, tutorial, hidden-option events)
+/// already run without the auto-select, so waiting is a fully supported state.
+/// </summary>
+[HarmonyPatch(typeof(Reply), nameof(Reply.SelectThisOption))]
+public class EventAutoSelectSuppressPatch
+{
+    static bool Prefix()
+    {
+        if (GameManager.Instance == null || GameManager.Instance.IsMultiplayer())
+            return true;
+        if (EventScreenManager.UserSelectionInProgress)
+            return true;
+        var mouse = Mouse.current;
+        if (mouse != null && mouse.leftButton.wasReleasedThisFrame)
+            return true;
+        var pad = Gamepad.current;
+        if (pad != null && pad.buttonSouth.wasPressedThisFrame)
+            return true;
+        var em = EventManager.Instance;
+        if (em == null || em.optionSelected != -1)
+            return true;
+        if (EventScreenManager.VisibleReplyCount() != 1)
+            return true;
+        return false; // the game's 0.5s auto-select of the lone option — suppressed
     }
 }
 

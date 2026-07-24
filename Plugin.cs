@@ -38,6 +38,8 @@ public class Plugin : BaseUnityPlugin
         InputRouter.Register(mapContext);
         var rewardsContext = new RewardsInputContext();
         InputRouter.Register(rewardsContext);
+        var lootContext = new LootInputContext();
+        InputRouter.Register(lootContext);
         InputRouter.Register(new MainMenuInputContext());
 
         // The map's Alt+G/T/I hotkeys use letters the game leaves unbound, so a frame poller sees
@@ -65,6 +67,10 @@ public class Plugin : BaseUnityPlugin
         // The rewards screen's Alt+T/I/R review keys are unbound letters too; its poller also
         // drives readiness detection (the reward rows animate in over a couple of seconds).
         gameObject.AddComponent<RewardsHotkeyPoller>().RewardsContext = rewardsContext;
+
+        // The loot screen's Alt+T/I/G/R review keys are unbound letters too; its poller also
+        // drives readiness detection, the turn watch, and the finish announcement.
+        gameObject.AddComponent<LootHotkeyPoller>().LootContext = lootContext;
 
         new Harmony(MyPluginInfo.PLUGIN_GUID).PatchAll();
     }

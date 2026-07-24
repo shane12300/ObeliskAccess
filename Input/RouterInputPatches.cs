@@ -10,8 +10,10 @@ namespace ObeliskAccess.Input;
 /// <see cref="InputRouter"/> routes to the active <see cref="IInputContext"/>.
 ///
 /// Movement and Escape are prefixes that swallow the key when a context consumes it (so the game's
-/// own navigation/escape does not also run). Enter/Tab are handled in a postfix, matching the
-/// previous behaviour where the game does not act on those keys itself.
+/// own navigation/escape does not also run). Enter/Tab are handled in a postfix: the game ignores
+/// Tab and digits itself, but Enter falls through to a synthetic cursor click outside combat, so
+/// the prefix swallows the game's Enter on screens where that click would land on a stale cursor
+/// position (see Prefix docs).
 /// </summary>
 [HarmonyPatch(typeof(InputController), "DoMovement")]
 public class RouterDoMovementPatch
@@ -31,19 +33,39 @@ public class RouterDoMovementPatch
 public class RouterDoKeyBindingPatch
 {
     /// <summary>
-    /// In combat the game binds R/E/S/A/W/Q to multiplayer emote pings. Those letters double as the
-    /// mod's Alt review hotkeys (Alt+R repeat, Alt+E energy, Alt+S statuses), so while combat owns
-    /// input and Alt is held, skip the game's handling — the poller still sees the key.
+    /// Two suppressions of the game's own key handling (our postfix still routes the key either
+    /// way — Harmony runs postfixes even when a prefix skips the original):
+    ///
+    /// Enter: outside combat the game maps Enter to <c>DoFirePerformed</c>, a synthetic click at
+    /// the current mouse-cursor position. The loot and rewards screens swallow all arrows and
+    /// never warp the cursor, so that click always lands on a stale position — it can take an
+    /// item, grab the gold, switch the loot picker, or open the (inaccessible) deck window under
+    /// our feet. Swallow the game's Enter while either screen owns input. Real mouse clicks and
+    /// gamepad A don't go through this path.
+    ///
+    /// Letters: in combat the game binds R/E/S/A/W/Q to multiplayer emote pings. Those letters
+    /// double as the mod's Alt review hotkeys (Alt+R repeat, Alt+E energy, Alt+S statuses), so
+    /// while combat owns input and Alt is held, skip the game's handling — the poller still sees
+    /// the key.
     /// </summary>
     static bool Prefix(InputAction.CallbackContext _context)
     {
         var kb = Keyboard.current;
-        if (kb == null || !InputRouter.AltHeld)
+        if (kb == null)
+            return true;
+
+        InputControl control = _context.control;
+
+        if (InputRouter.IsEnter(control)
+            && (ObeliskAccess.Input.Contexts.LootInputContext.IsCurrentlyActive
+                || ObeliskAccess.Input.Contexts.RewardsInputContext.IsCurrentlyActive))
+            return false;
+
+        if (!InputRouter.AltHeld)
             return true;
         if (!ObeliskAccess.Input.Contexts.CombatInputContext.IsCurrentlyActive)
             return true;
 
-        InputControl control = _context.control;
         return !(control == kb[Key.R] || control == kb[Key.E] || control == kb[Key.S]
               || control == kb[Key.A] || control == kb[Key.W] || control == kb[Key.Q]);
     }
@@ -96,12 +118,13 @@ public class RouterDoFirePerformedPatch
 {
     static bool Prefix()
     {
-        // The map, combat and rewards screens repurpose Ctrl as a look-ahead / drill-in modifier,
-        // so suppress the bare-Ctrl click while one of them owns input and Ctrl is held.
+        // The map, combat, rewards and loot screens repurpose Ctrl as a look-ahead / drill-in
+        // modifier, so suppress the bare-Ctrl click while one of them owns input and Ctrl is held.
         bool ctrlModifierScreen =
             ObeliskAccess.Input.Contexts.MapInputContext.IsCurrentlyActive
             || ObeliskAccess.Input.Contexts.CombatInputContext.IsCurrentlyActive
-            || ObeliskAccess.Input.Contexts.RewardsInputContext.IsCurrentlyActive;
+            || ObeliskAccess.Input.Contexts.RewardsInputContext.IsCurrentlyActive
+            || ObeliskAccess.Input.Contexts.LootInputContext.IsCurrentlyActive;
         return !(ctrlModifierScreen && InputRouter.CtrlHeld);
     }
 }
