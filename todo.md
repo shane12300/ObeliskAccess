@@ -6,7 +6,9 @@ Inventory from a full sweep of `../decompiled/` (2026-07-20), checked against cu
 map (nodes / party strip / gold & position), corruption prompt, combat (navigation,
 announcements, review keys), narrative events (text walk, choices, roll narration, Alt+T
 hover info), town (hub, all five service screens, upgrades window, treasures), reward
-screen (post-combat / event / divination card picks).
+screen (post-combat / event / divination card picks), loot screen, in-combat card-selection
+windows, all confirmation alerts (global walkable dialogue), in-combat death popup, and the
+end-of-run screen.
 
 Most unadapted surfaces expose the same controller contract the mod already piggybacks on:
 `ControllerMovement(...)` + `controllerList`/`_controllerList` + an index field + `IsActive()`.
@@ -25,13 +27,6 @@ Priority = how often a player hits it in a normal run × how hard it blocks a bl
       `EventInputContext` + `EventHotkeyPoller`; see Completed section). Tentatively verified
       in-game with one event incl. roll + probability; remaining permutations (roll targets,
       blocked options, reward cards, chained events) to be spot-checked during normal play.
-- [ ] **Generic confirmation alerts** — `AlertManager`: Yes/No dialogs used everywhere (resign,
-      reload, overwrite…). Has `ControllerMovement` + `IsActive()`. Partially closed 2026-07-20:
-      `AlertConfirm`/`AlertConfirmDouble` are now spoken globally, and the town-family contexts
-      (hub / upgrades / card-craft) stay active during alerts and answer them via `AlertHelper`
-      (Enter=`SetConfirmAnswer(true)`, Escape=`CloseAlert()`). Remaining gap: alerts raised on
-      screens whose contexts still suspend on `AlertManager.IsActive()` (map, combat, events,
-      main menu) — fold those onto `AlertHelper` or add a dedicated top-priority alert context.
 - [ ] **Hero selection / run setup** — `HeroSelectionManager` (+ `BoxSelection`, `BoxPlayer`):
       pick party, ready, begin adventure, seed. Has `ControllerMovement`. Without it a run can't
       even be configured (currently only default-party flows work).
@@ -41,9 +36,6 @@ Priority = how often a player hits it in a normal run × how hard it blocks a bl
       displaying as neatly as it should. A complex change: the user is considering a complete
       redesign of the filter menu rather than incremental tweaks. Deferred for now (user
       feedback 2026-07-20).
-- [ ] **End of run** — `FinishRunManager` + `FinishProgression` (+ `ProgressionRow`,
-      `UnlockedBar`): victory/defeat summary, unlock reveal, back to menu. Has `ControllerMovement`.
-
 ## Combat improvements — fixes to the already-adapted combat screen
 
 - [ ] **X-cost mechanic doesn't read correctly** — cards with the X mechanic (spend all
@@ -83,10 +75,9 @@ Priority = how often a player hits it in a normal run × how hard it blocks a bl
         UpgradedFrom/UpgradesToRare` via `Globals.Instance.GetCardData(id, instantiate: false)`).
   - [ ] Outside combat (rewards/shop/sheet), consider letting the real screen open and adapting it.
 - [ ] **In-combat selector popups — remaining** — follow-up for the completed card-selection
-      windows (`UIDiscardSelector` / `UIDeckCards`; see Completed). Still needing contexts:
+      windows (`UIDiscardSelector` / `UIDeckCards`; see Completed). Still needing a context:
   - [ ] `UIEnergySelector` — X-cost / energy choice (relates to the X-cost readout item under
         Combat improvements).
-  - [ ] `UICombatDeath` / `MatchManager.ShowDeathScreen` — hero death / defeat screen.
 - [ ] **Pause menu** — `OptionsManager` (ESC in run): Resign / Settings / Score / Exit, plus
       "can't exit" guards. Has `InputMoveController`.
 - [ ] **Map adjuncts** — `ConflictManager` (1-of-3 branch choice, has `ControllerMovement`);
@@ -215,15 +206,42 @@ feature still requires stays in its original priority section (with a note point
       `ControllerExecute()` directly; card pickup is also announced now. Added a Debug mode
       toggle (Accessibility tab, default off) gating the troubleshooting logs added during this
       work. **Verified in-game 2026-07-24 — works correctly.** *Remaining work —
-      `UIEnergySelector` and the death screen — tracked under P1.*
+      `UIEnergySelector` — tracked under P1 (the death screen has since been completed; see
+      below).*
 - [x] **Post-combat card rewards** (was P0) — `RewardsManager` (+ `CharacterReward`): per-hero
       reward card picks, dust. Implemented 2026-07-21 (`RewardsAccessibilityPatch` +
       `RewardsInputContext` + `RewardsHotkeyPoller`): table navigation — Up/Down hero rows with
       Restart as a final pseudo-row, Left/Right across cards → dust → Deck button; Enter takes
-      the focused choice (Singularity overwrite and multiplayer restart confirms answered in
-      place via `AlertHelper`); Ctrl+↑/↓ card-detail drill; Alt+T full detail, Alt+I overview,
+      the focused choice (Singularity overwrite and multiplayer restart confirms via the global
+      alert dialogue); Ctrl+↑/↓ card-detail drill; Alt+T full detail, Alt+I overview,
       Alt+R repeat; arrival overview waits out the row animation; picks and the auto-close
       announced; the game's hover sounds mirrored on focus moves. Also covers map-event rewards
       and town Divination rounds (same scene). The Deck button opens the game's character
       window, which is not yet accessible — that's the P1 "Character sheet" item.
       **Verified in-game 2026-07-21 — works correctly.**
+- [x] **Generic confirmation alerts** (was P0) — `AlertManager`, all five dialog shapes (confirm
+      single/double incl. the buttonless MP "waiting" variant, text input, copy/paste).
+      Completed 2026-07-24 as a full redesign (`AlertAccessibilityPatch` + top-priority
+      `AlertInputContext` + `AlertHotkeyPoller`): every alert is now a walkable dialogue — body
+      lines then one row per visible option button, Enter activates only on an option row,
+      Escape follows `CloseAlert` semantics. Replaced the old split model entirely (`AlertHelper`
+      deleted, per-context alert answering/exclusions removed, Settings' inline alert branches
+      removed); this also closed the old "remaining gap" — alerts on map/combat/event/main-menu
+      screens (e.g. the party-wipe retry dialog) are now answerable. **Verified in-game
+      2026-07-24 — works correctly.**
+- [x] **In-combat death popup** (was the P1 selector-popups sub-item `UICombatDeath`) —
+      hero dies but the party survives. Implemented 2026-07-24
+      (`DeathScreenAccessibilityPatch` + `DeathScreenInputContext`, registered above
+      CombatSelector): opening announcement is queued so it never interrupts turn narration;
+      Up/Down walk title / body / Death's Door note / Continue row; Enter continues (owner/host
+      only in MP — others hear "Waiting for {owner}"); Alt+T reads the Death's Door curse,
+      Alt+R repeats; close announced on button, 30s timeout, or MP RPC. **Verified in-game
+      2026-07-24 — works correctly.**
+- [x] **End of run** (was P0) — `FinishRunManager` + `FinishProgression`. Implemented 2026-07-24
+      (`FinishRunAccessibilityPatch` + `FinishRunInputContext` + `FinishRunHotkeyPoller`):
+      arrival overview, Up/Down rows read live (header, score breakdown, final score with
+      madness/best/time, reward + retention + total, per-hero progression bars as they animate),
+      Main Menu button last ("Still tallying" until the bars finish, "Main menu available"
+      announced on enable, Enter exits). The unlocked-cards popup on arrival is a sub-mode:
+      Left/Right review, Alt+T full detail, Enter/Escape close. Alt+I overview, Alt+R repeat.
+      **Verified in-game 2026-07-24 — works correctly.**

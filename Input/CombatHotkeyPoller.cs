@@ -21,6 +21,7 @@ public class CombatHotkeyPoller : MonoBehaviour
 {
     public IInputContext CombatContext;
     public IInputContext SelectorContext;
+    public IInputContext DeathContext;
 
     private void Update()
     {
@@ -33,6 +34,16 @@ public class CombatHotkeyPoller : MonoBehaviour
 
         // Selector-window lifecycle tick (cheap no-op when no window is up).
         CombatSelectorManager.Tick();
+
+        // Death popup: Alt+T reads the Death's Door curse, Alt+R repeats.
+        if (InputRouter.IsActive(DeathContext))
+        {
+            if (!(kb.leftAltKey.isPressed || kb.rightAltKey.isPressed))
+                return;
+            if (kb.tKey.wasPressedThisFrame) DeathScreenPopupManager.SpeakDeathsDoorDetail();
+            else if (kb.rKey.wasPressedThisFrame) SpeechManager.RepeatLast();
+            return;
+        }
 
         if (InputRouter.IsActive(SelectorContext))
         {

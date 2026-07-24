@@ -13,7 +13,6 @@ namespace ObeliskAccess.Patches;
 /// </summary>
 internal static class CardSpeech
 {
-    private static readonly Regex _brTag = new Regex(@"<br\s*/?>", RegexOptions.Compiled);
     private static readonly Regex _spriteTag = new Regex(@"<sprite name=([^>/ ]+)[^>]*>", RegexOptions.Compiled);
 
     /// <summary>Recover <c>&lt;sprite name=X&gt;</c> keyword words before tags are stripped, else they vanish.</summary>
@@ -29,22 +28,9 @@ internal static class CardSpeech
         });
     }
 
-    /// <summary>Split markup into logical lines (mirrors the tutorial popup's line walker).</summary>
+    /// <summary>Split markup into logical lines (kept as a wrapper for existing callers).</summary>
     public static List<string> SplitLines(string raw)
-    {
-        var result = new List<string>();
-        if (string.IsNullOrEmpty(raw))
-            return result;
-
-        string withBreaks = _brTag.Replace(raw, "\n");
-        foreach (var segment in withBreaks.Split('\n'))
-        {
-            string clean = AccessibleMenuBase.StripRichText(segment);
-            if (clean.Length > 0)
-                result.Add(clean);
-        }
-        return result;
-    }
+        => AccessibleMenuBase.SplitLines(raw);
 
     /// <summary>Sprite-tag recovery followed by a full strip: one-line clean text.</summary>
     public static string CleanFlat(string raw)

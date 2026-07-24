@@ -75,23 +75,34 @@ screen owns the keyboard and translates raw keys into semantic events; per-scree
   the map's look-ahead modifier).
 - `Input/Contexts/*InputContext.cs` — one per screen (thin; delegates to a `Patches/` manager).
 - `Input/MapHotkeyPoller.cs`, `Input/CombatHotkeyPoller.cs`, `Input/EventHotkeyPoller.cs`,
-  `Input/TownHotkeyPoller.cs`, `Input/CardCraftHotkeyPoller.cs` — `MonoBehaviour`s that poll
-  letters the game leaves **unbound** (Alt+letter review keys), since the InputAction system never
-  fires for them; each is gated on `InputRouter.IsActive(context)`. The combat/event/town/craft
-  pollers also run their manager's per-frame tick *outside* that gate (lifecycle detection —
-  town arrival, craft-screen open — must survive a modal owning input).
+  `Input/TownHotkeyPoller.cs`, `Input/CardCraftHotkeyPoller.cs`, `Input/AlertHotkeyPoller.cs`,
+  `Input/FinishRunHotkeyPoller.cs` — `MonoBehaviour`s that poll letters the game leaves
+  **unbound** (Alt+letter review keys), since the InputAction system never fires for them; each is
+  gated on `InputRouter.IsActive(context)`. The combat/event/town/craft/finish-run pollers also
+  run their manager's per-frame tick *outside* that gate (lifecycle detection — town arrival,
+  craft-screen open, finish-run arrival — must survive a modal owning input).
 
 Registration order in `Plugin.Awake` **is** priority (highest first):
-`Tutorial > Settings > Corruption > CardCraft > CombatSelector > Combat > Event > TownUpgrade >
-Town > Map > Rewards > MainMenu`. A modal thus sits above the screen beneath it. (Matches the
-game's own modality order `… Event > Town > Map > Rewards …`; CardCraft sits above Event because
-event shops open over the map; CombatSelector is the in-combat card-selection modal over Combat.)
+`Alert > Tutorial > Settings > Corruption > CardCraft > DeathScreen > CombatSelector > Combat >
+Event > TownUpgrade > Town > Map > Rewards > Loot > FinishRun > MainMenu`. A modal thus sits above
+the screen beneath it. (Matches the game's own modality order `… Event > Town > Map > Rewards …`;
+CardCraft sits above Event because event shops open over the map; DeathScreen and CombatSelector
+are the in-combat modals over Combat; Alert outranks everything — the game's confirm dialogs are
+modal over every screen.)
 
-**Alerts**: `AlertConfirm`/`AlertConfirmDouble` are announced globally (patches in
-`SettingsMenuAccessibilityPatch.cs`). The town-family contexts (Town/TownUpgrade/CardCraft) do
-NOT suspend while an alert is up — they answer it through `Patches/AlertHelper.cs`
-(Enter=`SetConfirmAnswer(true)`, Escape=`CloseAlert()`), because those screens spawn their own
-confirm dialogs. Other contexts still exclude alerts in `IsActive` (known gap outside town).
+**Alerts**: one global top-priority `AlertInputContext` + `AlertDialogueManager`
+(`Patches/AlertAccessibilityPatch.cs`) covers every `AlertManager` dialog — confirm single/double,
+text input, copy/paste, and the buttonless MP "waiting" variant. The alert is a walkable dialogue:
+body lines first, then one row per **visible** option button (rebuilt live each read); ↑/↓ move,
+Enter activates only on an option row (a text-row Enter just hints — no accidental accepts on
+destructive confirms), Escape follows `CloseAlert` semantics (`SetConfirmAnswer(false)` /
+dismiss / "no options, waiting"). Open/answer/close are announced from postfixes on the five
+`Alert*` methods, `SetConfirmAnswer` (labels captured in a prefix — the postfix runs after
+`HideAlert` wipes them) and `HideAlert`; `popupT` is checked so the MP `ShowPlayers` panel is not
+treated as an alert. "Press" = `SetConfirmAnswer(bool)`; never call `OnButtonClick` (null-deref
+when no delegate). No per-screen alert handling remains (`AlertHelper.cs` is gone); the letter
+pollers fall silent automatically because they gate on their own contexts, and Alt+R under an
+alert comes from `AlertHotkeyPoller`.
 
 ### Screens supported
 
@@ -105,12 +116,15 @@ confirm dialogs. Other contexts still exclude alerts in `IsActive` (known gap ou
 | Map — global | `MapInputContext` + poller | Alt+G gold; Alt+I (and auto on open) position + trackers + tip |
 | Corruption prompt | `CorruptionInputContext` | ←/→ choose reward + accept; ↑/↓ toggle accept; Enter confirm |
 | Map event (story dialog) | `EventInputContext` + poller | ↑/↓ walk title/text/choices (choices at bottom); Enter select/Continue; Alt+T hover info (probability, blocked reason, card previews, roll explainer); Alt+R repeat; rolls narrated play-by-play |
-| Town hub | `TownInputContext` + poller | ↑/↓ hub items (5 buildings, upgrades, Ready, treasures); Enter opens/claims (confirm alerts answered in place); Tab party strip (↑/↓ heroes, 1–4 slots); Alt+T/G/I/R; arrival overview |
+| Alert dialogs (global) | `AlertInputContext` (top priority; `AlertDialogueManager`, `Patches/AlertAccessibilityPatch.cs`) | Covers all `AlertManager` shapes (confirm single/double, input, copy/paste, buttonless MP "waiting"). ↑/↓ walk body lines then visible option-button rows; Enter activates option rows only (text rows hint); Escape = cancel/dismiss ("No options, waiting" when buttonless); input alerts: type freely (TMP reads the keyboard directly), field row reads current value, accept row submits; answers by mouse/gamepad announced too; Alt+R via `AlertHotkeyPoller` |
+| Town hub | `TownInputContext` + poller | ↑/↓ hub items (5 buildings, upgrades, Ready, treasures); Enter opens/claims (confirm alerts via the global alert dialogue); Tab party strip (↑/↓ heroes, 1–4 slots); Alt+T/G/I/R; arrival overview |
 | Town services (Altar/Church/Forge/Divination/Armory) | `CardCraftInputContext` + poller | One context for `CardCraftManager` craftType 0–4 (also covers map-event shops). ↑/↓ items with page auto-advance; ←/→ pages (or A/B variant in Altar preview); Enter single-press buy; Tab regions (Forge deck ref; Armory equipped+controls); 1–4 hero; Alt+F filters (Forge); Alt+T full card/item detail; purchases announced via `Hero.*` postfixes |
 | Town upgrades window | `TownUpgradeInputContext` | ←/→ building column, ↑/↓ its 6-upgrade chain; states with locked reasons; Enter buys via game confirm alert; Tab grid/sell/exit; sell-supply ↑/↓ quantity sub-mode |
-| Rewards screen (post-combat / event / divination) | `RewardsInputContext` + poller | Table: ↑/↓ hero rows (Restart pseudo-row last), ←/→ cards→dust→Deck; Enter takes (Singularity overwrite + MP restart confirms answered in place); Ctrl+↑/↓ card detail drill, Escape exits; Alt+T full detail, Alt+I overview, Alt+R repeat; picks and auto-close announced via `NET_*`/`CheckAllAssigned` postfixes; poller waits out the ~2s row animation before announcing arrival |
-| Loot screen (boss/chest item picks, Obelisk-challenge chests) | `LootInputContext` + poller | Arrows walk the loot row (items → gold pile → Restart); Enter takes for the hero whose turn it is (MP restart confirm answered in place); Tab party review (equipped items per hero; Enter reorders picker in SP; 1–4 jump); Ctrl+↑/↓ item detail drill, Escape exits; Alt+T/I/G/R; item announces carry an equipped-slot comparison; picks announced via `Looted`/`LootGold` prefix+postfix pairs; poller's tick detects arrival (active-slot poll), turn changes, and finish |
+| Rewards screen (post-combat / event / divination) | `RewardsInputContext` + poller | Table: ↑/↓ hero rows (Restart pseudo-row last), ←/→ cards→dust→Deck; Enter takes (Singularity overwrite + MP restart confirms via the global alert dialogue); Ctrl+↑/↓ card detail drill, Escape exits; Alt+T full detail, Alt+I overview, Alt+R repeat; picks and auto-close announced via `NET_*`/`CheckAllAssigned` postfixes; poller waits out the ~2s row animation before announcing arrival |
+| Loot screen (boss/chest item picks, Obelisk-challenge chests) | `LootInputContext` + poller | Arrows walk the loot row (items → gold pile → Restart); Enter takes for the hero whose turn it is (MP restart confirm via the global alert dialogue); Tab party review (equipped items per hero; Enter reorders picker in SP; 1–4 jump); Ctrl+↑/↓ item detail drill, Escape exits; Alt+T/I/G/R; item announces carry an equipped-slot comparison; picks announced via `Looted`/`LootGold` prefix+postfix pairs; poller's tick detects arrival (active-slot poll), turn changes, and finish |
 | In-combat card-selection windows (discard-from-hand / look-at-deck / discover / pile viewers) | `CombatSelectorInputContext` (above Combat; state in `CombatSelectorManager`, `Patches/CombatSelectorAccessibilityPatch.cs`) | Covers `UIDiscardSelector` + `UIDeckCards` types 0–3 (`UIAddcardSelector` is dead code — discover runs through `UIDeckCards` type 3). ←/→ review cards ("selected" flagged); Enter toggles via `SelectCardToDiscard/Addcard` (mandatory single picks auto-confirm; toggles announced from prefix/postfix snapshot pairs, so digits/mouse/MP echoes speak too); Space confirms via `AssignDiscardAction`/`AssignLookDiscardAction` (or speaks "select N more"); game's Enter (window confirm) + Space (end turn) suppressed in the `DoKeyBinding` prefix while active; Ctrl+↑/↓ drill, Alt+T/R via `CombatHotkeyPoller`, whose tick also announces the async card spawn-in. Deck-effect cast fix: with a held card, Enter on a character casts via `ControllerExecute()` directly (the `DeckInHero` overlay colliders eclipse the hero and eat the synthetic click); pickup announced |
+| In-combat death popup (hero dies, party survives) | `DeathScreenInputContext` (above CombatSelector; state in `DeathScreenPopupManager`, `Patches/DeathScreenAccessibilityPatch.cs`) | `UICombatDeath` via `MatchManager.ShowDeathScreen` postfix. Open announce is **queued** (never interrupts turn narration); ↑/↓ walk title / body lines / Death's Door note / Continue row (Continue tracked live — hidden in MP for non-owners, "Waiting for {owner}"; host auto-closes after 30s); Enter = `TurnOffFromButton()` from any row; game's Enter suppressed in the `DoKeyBinding` prefix; Alt+T Death's Door card detail + Alt+R via `CombatHotkeyPoller`; close announced from a guarded `TurnOff` postfix |
+| End-of-run screen (scene "FinishRun") + unlocked-cards popup | `FinishRunInputContext` + poller (state in `FinishRunScreenManager`, `Patches/FinishRunAccessibilityPatch.cs`) | ↑/↓ rows read live from `FinishRunManager` TMP fields: header, six score rows, adventure-completed, final score (+madness/best/time), reward + retention + total (sprite icons → words via `CardSpeech.CleanFlat`), per-hero `FinishProgression` rows (animate upward), Main Menu button last (Enter = `ControllerMovement()` warp + `DoFirePerformed`; "Still tallying" while disabled — "Main menu available" announced on enable). Unlocked-cards popup sub-mode (`CharacterWindowUI.ShowUnlockedCards` postfix, `ShowInTome`-filtered): ←/→ cards, Alt+T detail, Enter/Escape → `characterWindow.Hide()`; arrival overview waits it out; Alt+I overview, Alt+R repeat |
 
 ### Extensibility pattern
 
@@ -144,8 +158,12 @@ Decompiled game source is at `../decompiled/`. Key files (line numbers as of the
 |------|-----------------|
 | `MainMenuManager.cs` | `ControllerMovement()` (l.1567), `controllerHorizontalIndex` (l.352), `controllerList` (l.350, private) |
 | `InputController.cs` | `DoKeyBinding()` (l.387, private), `DoFirePerformed()` (l.667, private) |
-| `BotonGeneric.cs` | `text` (l.17, public TMP_Text) |
+| `BotonGeneric.cs` | `text` (l.17, public TMP_Text), `IsEnabled()` (l.334) |
 | `MenuButton.cs` | `buttonText` (l.8, public TMP_Text) |
+| `AlertManager.cs` | `popupT` (l.14; false for the MP `ShowPlayers` panel), `alertText` (l.20), button labels `alertTextSingleButton`/`alertTextLeftButton`/`alertTextRightButton` (l.40-44; button GO = `label.transform.parent`), `SetConfirmAnswer` (l.189, the "press" call), `CloseAlert` (l.175, no-op for buttonless alerts), `AlertInputSuccess` (l.207) |
+| `UICombatDeath.cs` | `textCharDeath`/`textInstructions` (l.8-10), `button` (l.18; MP owner-only), `TurnOffFromButton()` (l.82), `TurnOff()` (l.88, also called defensively at combat start) |
+| `FinishRunManager.cs` | all score/reward TMP fields public (set synchronously in `CalculateFinishRunReward`), `mainMenuButton` (l.22), `characterWindow` (l.102), `fp0-3` progression blocks, `ControllerMovement()` (l.839, warps to the lone Main Menu button) |
+| `CharacterWindowUI.cs` | `ShowUnlockedCards(List<string>)` (l.151, FinishRun-only caller), `Hide()` (public; releases FinishRun's spin-wait) |
 
 **Keeping `../decompiled/` current** — it is generated from the live `Assembly-CSharp.dll` and can
 fall behind after a game patch. If a member is present in `../decompiled/` but won't compile against

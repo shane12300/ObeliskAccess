@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using System.Text;
 using System.Text.RegularExpressions;
 using TMPro;
@@ -9,12 +11,35 @@ namespace ObeliskAccess.Patches;
 public abstract class AccessibleMenuBase
 {
     private static readonly Regex _richTextTag = new Regex(@"<[^>]*>", RegexOptions.Compiled);
+    private static readonly Regex _brTag = new Regex(@"<br\s*/?>", RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     public static string StripRichText(string text)
     {
         text = _richTextTag.Replace(text, " ");
         text = text.Replace("\n", " ").Replace("\r", " ");
         return Regex.Replace(text, @"\s+", " ").Trim();
+    }
+
+    /// <summary>
+    /// Splits game rich text into spoken lines: &lt;br&gt; tags and real newlines are the line
+    /// boundaries, each segment is cleaned (default <see cref="StripRichText"/> — pass a custom
+    /// cleaner to pre-convert sprite tags etc.), and empty segments are dropped. Splitting must
+    /// happen before cleaning because StripRichText flattens newlines.
+    /// </summary>
+    public static List<string> SplitLines(string raw, Func<string, string> cleaner = null)
+    {
+        var lines = new List<string>();
+        if (string.IsNullOrEmpty(raw))
+            return lines;
+
+        cleaner ??= StripRichText;
+        foreach (var segment in _brTag.Replace(raw, "\n").Split('\n'))
+        {
+            var line = cleaner(segment);
+            if (!string.IsNullOrEmpty(line))
+                lines.Add(line);
+        }
+        return lines;
     }
 
     protected static string GetMenuItemText(Transform item)

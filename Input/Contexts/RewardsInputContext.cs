@@ -7,9 +7,9 @@ namespace ObeliskAccess.Input.Contexts;
 /// The post-combat Rewards scene (also event rewards and town Divination rounds). Up/Down move
 /// between hero rows, Left/Right across a row's choices (cards, dust, Deck button), Restart is a
 /// final pseudo-row, Enter takes the focused choice, Ctrl+Up/Down drill the focused card's detail
-/// lines, Escape exits the drill. Alerts stay with us — the Singularity overwrite confirm and the
-/// multiplayer restart confirm are answered in place through <see cref="AlertHelper"/>. All state
-/// and speech live in <see cref="RewardsScreenManager"/>; this class only maps keys.
+/// lines, Escape exits the drill. The Singularity overwrite confirm and the multiplayer restart
+/// confirm are owned by the global alert dialogue. All state and speech live in
+/// <see cref="RewardsScreenManager"/>; this class only maps keys.
 /// </summary>
 public class RewardsInputContext : InputContextBase
 {
@@ -32,9 +32,6 @@ public class RewardsInputContext : InputContextBase
 
     public override bool OnMove(Vector2 direction)
     {
-        if (AlertHelper.Active)
-            return true;
-
         if (InputRouter.CtrlHeld)
         {
             // Ctrl+Up/Down = card detail drill (combat convention); Ctrl+Left/Right reserved.
@@ -59,16 +56,12 @@ public class RewardsInputContext : InputContextBase
 
     public override bool OnConfirm()
     {
-        if (AlertHelper.Confirm())
-            return true;
         RewardsScreenManager.Activate();
         return true;
     }
 
     public override bool OnCancel()
     {
-        if (AlertHelper.Cancel())
-            return true;
         // Only consume Escape to leave a drill; otherwise the game keeps its own behaviour.
         return RewardsScreenManager.TryDrillExit();
     }

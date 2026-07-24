@@ -32,8 +32,6 @@ public class MapInputContext : InputContextBase
                 return false;
             if (m.IsCharacterUnlock())
                 return false;
-            if (AlertManager.Instance != null && AlertManager.Instance.IsActive())
-                return false;
             // World hidden while a mask/loading screen is up, or while an event replaces it.
             if (m.worldTransform == null || !m.worldTransform.gameObject.activeSelf)
                 return false;

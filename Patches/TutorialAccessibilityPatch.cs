@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using System.Text.RegularExpressions;
 using HarmonyLib;
 
 namespace ObeliskAccess.Patches;
@@ -18,8 +17,6 @@ internal static class TutorialPopupManager
         public BotonGeneric Button;
     }
 
-    private static readonly Regex _brTag = new Regex(@"<br\s*/?>", RegexOptions.Compiled);
-
     private static readonly List<Entry> _entries = new List<Entry>();
     private static int _index;
     private static bool _active;
@@ -32,7 +29,7 @@ internal static class TutorialPopupManager
         if (pop == null || pop.popText == null)
             return;
 
-        var lines = SplitLines(pop.popText.text);
+        var lines = AccessibleMenuBase.SplitLines(pop.popText.text);
 
         _entries.Clear();
         _continueButton = null;
@@ -121,27 +118,6 @@ internal static class TutorialPopupManager
             _continueButton?.Clicked();
     }
 
-    /// <summary>
-    /// Splits the raw <see cref="PopTutorialManager.FormatText"/> markup into logical lines.
-    /// The title/body separator and any intra-body breaks are TMP <c>&lt;br&gt;</c> tags
-    /// (there are no real newlines), so convert those to newlines, split, then strip tags.
-    /// </summary>
-    private static List<string> SplitLines(string raw)
-    {
-        var result = new List<string>();
-        if (string.IsNullOrEmpty(raw))
-            return result;
-
-        string withBreaks = _brTag.Replace(raw, "\n");
-        foreach (var segment in withBreaks.Split('\n'))
-        {
-            string clean = AccessibleMenuBase.StripRichText(segment);
-            if (clean.Length > 0)
-                result.Add(clean);
-        }
-
-        return result;
-    }
 }
 
 [HarmonyPatch(typeof(PopTutorialManager), nameof(PopTutorialManager.Show))]

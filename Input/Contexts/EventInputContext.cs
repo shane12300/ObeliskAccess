@@ -18,8 +18,6 @@ public class EventInputContext : InputContextBase
         {
             if (EventManager.Instance == null || !EventScreenManager.Active)
                 return false;
-            if (AlertManager.Instance != null && AlertManager.Instance.IsActive())
-                return false;
             var m = MapManager.Instance;
             if (m != null && m.characterWindow != null && m.characterWindow.gameObject.activeSelf && m.characterWindow.IsActive())
                 return false;

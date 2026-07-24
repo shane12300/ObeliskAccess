@@ -6,8 +6,8 @@ namespace ObeliskAccess.Patches;
 /// <summary>
 /// Town upgrades window (the 5x6 supply tree). Left/Right change building column, Up/Down walk the
 /// column's upgrade chain; Tab cycles grid, Sell Supply and Exit; Enter buys through the game's own
-/// confirm-alert flow (replicating <c>BotonSupply.OnMouseUp</c>), which <see cref="AlertHelper"/>
-/// answers. The sell-supply panel is a sub-mode: Up/Down adjust quantity, Enter sells, Escape
+/// confirm-alert flow (replicating <c>BotonSupply.OnMouseUp</c>), answered by the global alert
+/// dialogue. The sell-supply panel is a sub-mode: Up/Down adjust quantity, Enter sells, Escape
 /// closes. State and speech live here; <c>TownUpgradeInputContext</c> maps keys and
 /// <c>TownHotkeyPoller</c> drives <see cref="Tick"/> + Alt keys.
 /// </summary>
@@ -184,7 +184,7 @@ internal static class TownUpgradeScreenManager
         }
         AlertManager.buttonClickDelegate = boton.BuySupply;
         AlertManager.Instance.AlertConfirmDouble(Texts.Instance.GetText("townAssignWarning"));
-        // AlertConfirmDoublePatch speaks the warning; Enter/Escape answer it via AlertHelper.
+        // The global alert dialogue announces the warning and drives the answer.
     }
 
     // ---------------------------------------------------------------- speech

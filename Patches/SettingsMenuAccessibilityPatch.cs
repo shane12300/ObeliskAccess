@@ -21,7 +21,7 @@ namespace ObeliskAccess.Patches;
 ///                     options; game controls answer "No description available").
 ///   Escape          — game default (cancels an open dropdown; otherwise closes the panel).
 /// The reset controls (Reset Tutorial / Reset Saved Data) open an AlertManager confirm dialog,
-/// which is announced and driven with Enter = Accept / Escape = Cancel.
+/// handled by the global alert dialogue (AlertInputContext outranks Settings).
 /// </summary>
 internal static class SettingsMenuManager
 {
@@ -93,10 +93,6 @@ internal static class SettingsMenuManager
 
     public static void HandleArrow(Vector2 v)
     {
-        // While an alert is up, swallow arrows but do nothing (Enter/Escape drive the dialog).
-        if (AlertManager.Instance != null && AlertManager.Instance.IsActive())
-            return;
-
         if (_dropdownOpen)
         {
             if (v.y > 0f) PreviewOption(-1);
@@ -118,13 +114,6 @@ internal static class SettingsMenuManager
         if (Time.frameCount == _openedFrame)
             return;
 
-        if (AlertManager.Instance != null && AlertManager.Instance.IsActive())
-        {
-            // Enter = Accept. SetConfirmAnswer fires the game's confirm delegate and hides the dialog.
-            AlertManager.Instance.SetConfirmAnswer(true);
-            return;
-        }
-
         if (_dropdownOpen)
         {
             ApplyDropdown();
@@ -137,8 +126,6 @@ internal static class SettingsMenuManager
     public static void HandleTab(bool backwards)
     {
         if (_dropdownOpen)
-            return;
-        if (AlertManager.Instance != null && AlertManager.Instance.IsActive())
             return;
         if (_entries == null)
             return;
@@ -201,7 +188,7 @@ internal static class SettingsMenuManager
         if (e.Action != null)
         {
             // Button-style controls (Reset Tutorial / Reset Saved Data) open an AlertConfirmDouble
-            // dialog, which AlertConfirmDoublePatch announces — nothing to say here.
+            // dialog, which the global alert dialogue announces and drives — nothing to say here.
             e.Action();
         }
         else if (e.Toggle != null)
@@ -417,34 +404,3 @@ public class SettingsOpenPatch
     }
 }
 
-[HarmonyPatch(typeof(AlertManager), nameof(AlertManager.AlertConfirm))]
-public class AlertConfirmSinglePatch
-{
-    static void Postfix(AlertManager __instance)
-    {
-        string message = AccessibleMenuBase.StripRichText(__instance.alertText.text);
-        string accept = AccessibleMenuBase.StripRichText(__instance.alertTextSingleButton.text);
-        SpeechManager.Speak(message + ". Enter to " + accept + ".");
-    }
-}
-
-[HarmonyPatch(typeof(AlertManager), nameof(AlertManager.AlertConfirmDouble))]
-public class AlertConfirmDoublePatch
-{
-    static void Postfix(AlertManager __instance)
-    {
-        string message = AccessibleMenuBase.StripRichText(__instance.alertText.text);
-        string accept = AccessibleMenuBase.StripRichText(__instance.alertTextRightButton.text);
-        string cancel = AccessibleMenuBase.StripRichText(__instance.alertTextLeftButton.text);
-        SpeechManager.Speak(message + ". Enter to " + accept + ", Escape to " + cancel + ".");
-    }
-}
-
-[HarmonyPatch(typeof(AlertManager), nameof(AlertManager.SetConfirmAnswer))]
-public class AlertAnswerPatch
-{
-    static void Postfix(bool status)
-    {
-        SpeechManager.Speak(status ? "Confirmed" : "Cancelled");
-    }
-}

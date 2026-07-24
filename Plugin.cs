@@ -24,12 +24,19 @@ public class Plugin : BaseUnityPlugin
 
         // Register input contexts in priority order (highest first). Modals sit above the base
         // menu so that while one is active, input never reaches the screen beneath it.
+        // Alerts are modal over everything, so their context is registered first.
+        var alertContext = new AlertInputContext();
+        InputRouter.Register(alertContext);
         InputRouter.Register(new TutorialInputContext());
         var settingsContext = new SettingsInputContext();
         InputRouter.Register(settingsContext);
         InputRouter.Register(new CorruptionInputContext());
         var cardCraftContext = new CardCraftInputContext();
         InputRouter.Register(cardCraftContext);
+        // The in-combat death popup outranks the card-selection windows — it can appear
+        // mid-resolution and freezes the whole combat until dismissed.
+        var deathScreenContext = new DeathScreenInputContext();
+        InputRouter.Register(deathScreenContext);
         // The in-combat card-selection windows (discard / look-at-deck / discover / pile viewers)
         // are modals over combat, so their context sits directly above it.
         var combatSelectorContext = new CombatSelectorInputContext();
@@ -48,7 +55,14 @@ public class Plugin : BaseUnityPlugin
         InputRouter.Register(rewardsContext);
         var lootContext = new LootInputContext();
         InputRouter.Register(lootContext);
+        // The end-of-run screen is its own scene; it only needs to outrank the main menu.
+        var finishRunContext = new FinishRunInputContext();
+        InputRouter.Register(finishRunContext);
         InputRouter.Register(new MainMenuInputContext());
+
+        // The alert dialogue's Alt+R repeat key: every per-screen poller gates on its own context,
+        // so they all fall silent while the alert context owns input — this one covers it.
+        gameObject.AddComponent<AlertHotkeyPoller>().AlertContext = alertContext;
 
         // The map's Alt+G/T/I hotkeys use letters the game leaves unbound, so a frame poller sees
         // them; it fires only while the map context owns input.
@@ -63,6 +77,7 @@ public class Plugin : BaseUnityPlugin
         var combatPoller = gameObject.AddComponent<CombatHotkeyPoller>();
         combatPoller.CombatContext = combatContext;
         combatPoller.SelectorContext = combatSelectorContext;
+        combatPoller.DeathContext = deathScreenContext;
 
         // The event screen's Alt+T/R hotkeys are unbound too; its poller also drives the
         // event lifecycle tick (reply watcher, deferred reward-card reads).
@@ -85,6 +100,10 @@ public class Plugin : BaseUnityPlugin
         // The loot screen's Alt+T/I/G/R review keys are unbound letters too; its poller also
         // drives readiness detection, the turn watch, and the finish announcement.
         gameObject.AddComponent<LootHotkeyPoller>().LootContext = lootContext;
+
+        // The end-of-run screen's Alt+I/T/R keys; its poller also drives arrival detection and
+        // the "Main menu available" announcement.
+        gameObject.AddComponent<FinishRunHotkeyPoller>().FinishRunContext = finishRunContext;
 
         var harmony = new Harmony(MyPluginInfo.PLUGIN_GUID);
         harmony.PatchAll();

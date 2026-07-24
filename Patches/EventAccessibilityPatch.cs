@@ -44,7 +44,6 @@ internal static class EventScreenManager
         public float ReadAt;
     }
 
-    private static readonly Regex _brTag = new Regex(@"<br\s*/?>", RegexOptions.Compiled);
     private static readonly Regex _spriteTag =
         new Regex(@"<sprite\s+name=""?([^"">]+?)""?\s*/?>", RegexOptions.Compiled);
 
@@ -712,20 +711,7 @@ internal static class EventScreenManager
     /// break lines; each segment gets sprite-tag conversion then rich-text stripping.
     /// </summary>
     private static List<string> SplitBookText(string raw)
-    {
-        var result = new List<string>();
-        if (string.IsNullOrEmpty(raw))
-            return result;
-
-        string withBreaks = _brTag.Replace(raw, "\n");
-        foreach (var segment in withBreaks.Split('\n'))
-        {
-            string clean = Clean(segment);
-            if (clean.Length > 0)
-                result.Add(clean);
-        }
-        return result;
-    }
+        => AccessibleMenuBase.SplitLines(raw, Clean);
 
     /// <summary>Sprite-tag conversion + rich-text strip, the pipeline for all event speech.</summary>
     private static string Clean(string raw)

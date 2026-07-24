@@ -9,9 +9,9 @@ namespace ObeliskAccess.Patches;
 /// Town hub accessibility. Up/Down walk a fixed list of hub items (five buildings, town upgrades,
 /// Ready, unclaimed treasures); Enter activates, replicating the guards of
 /// <c>TownBuilding.OnMouseUp</c> and calling the same <c>AtOManager.Do*</c> entry points the mouse
-/// path uses. Tab toggles to the party strip, mirroring the map. The hub context stays active while
-/// a confirm alert is up and answers it via <see cref="AlertHelper"/> (treasure claims and
-/// tutorial-step warnings are alerts the hub itself spawns). All state and speech live here; the
+/// path uses. Tab toggles to the party strip, mirroring the map. Confirm alerts the hub spawns
+/// (treasure claims, tutorial-step warnings) are owned by the global alert dialogue, which
+/// outranks the hub context. All state and speech live here; the
 /// thin <c>TownInputContext</c> maps keys, and <c>TownHotkeyPoller</c> drives <see cref="Tick"/> +
 /// the Alt review keys.
 /// </summary>
@@ -183,8 +183,7 @@ internal static class TownScreenManager
                     tm.ClaimTreasureCommunity(id);
                 else
                     tm.ClaimTreasure(id);
-                // The claim raises the game's confirm alert; the alert patches announce it and
-                // Enter/Escape answer it via AlertHelper.
+                // The claim raises the game's confirm alert, answered by the global alert dialogue.
             },
         });
     }
@@ -252,8 +251,8 @@ internal static class TownScreenManager
 
     private static void TutorialBlockAlert()
     {
-        // Same alert the game shows for a mouse click on the wrong building; the
-        // AlertConfirmSinglePatch speaks it and Enter dismisses it.
+        // Same alert the game shows for a mouse click on the wrong building; the global
+        // alert dialogue speaks and drives it.
         AlertManager.Instance?.AlertConfirm(Texts.Instance.GetText("tutorialTownNeedComplete"));
     }
 

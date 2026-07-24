@@ -19,9 +19,7 @@ public class MainMenuInputContext : InputContextBase
 {
     public override bool IsActive =>
         MainMenuManager.Instance != null
-        && MatchManager.Instance == null
-        // An alert dialog owns Enter/Escape while it is up; let the game drive it.
-        && !(AlertManager.Instance != null && AlertManager.Instance.IsActive());
+        && MatchManager.Instance == null;
 
     public override bool OnConfirm()
     {

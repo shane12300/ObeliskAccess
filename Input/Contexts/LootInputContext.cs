@@ -8,7 +8,7 @@ namespace ObeliskAccess.Input.Contexts;
 /// the loot row (items, gold pile, Restart), Enter takes the focused thing for the hero whose
 /// turn it is, Tab toggles the party-review region (1–4 jump straight to a hero), Ctrl+Up/Down
 /// drill the focused item's detail lines and Escape exits the drill. The multiplayer restart
-/// confirm is answered in place through <see cref="AlertHelper"/>. All state and speech live in
+/// confirm is owned by the global alert dialogue. All state and speech live in
 /// <see cref="LootScreenManager"/>; this class only maps keys.
 /// </summary>
 public class LootInputContext : InputContextBase
@@ -32,9 +32,6 @@ public class LootInputContext : InputContextBase
 
     public override bool OnMove(Vector2 direction)
     {
-        if (AlertHelper.Active)
-            return true;
-
         if (InputRouter.CtrlHeld)
         {
             // Ctrl+Up/Down = card detail drill (combat convention); Ctrl+Left/Right reserved.
@@ -57,16 +54,12 @@ public class LootInputContext : InputContextBase
 
     public override bool OnConfirm()
     {
-        if (AlertHelper.Confirm())
-            return true;
         LootScreenManager.Activate();
         return true;
     }
 
     public override bool OnCancel()
     {
-        if (AlertHelper.Cancel())
-            return true;
         // Only consume Escape to leave a drill; otherwise the game keeps its own behaviour.
         return LootScreenManager.TryDrillExit();
     }

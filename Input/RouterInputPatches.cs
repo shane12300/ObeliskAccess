@@ -63,10 +63,16 @@ public class RouterDoKeyBindingPatch
         InputControl control = _context.control;
         bool selectorActive = ObeliskAccess.Input.Contexts.CombatSelectorInputContext.IsCurrentlyActive;
 
+        // The alert dialogue repurposes Enter as activate-focused-row; the game's Enter would
+        // synthetically click whatever the (possibly warped) cursor rests on — an alert button.
         if (InputRouter.IsEnter(control)
             && (selectorActive
                 || ObeliskAccess.Input.Contexts.LootInputContext.IsCurrentlyActive
-                || ObeliskAccess.Input.Contexts.RewardsInputContext.IsCurrentlyActive))
+                || ObeliskAccess.Input.Contexts.RewardsInputContext.IsCurrentlyActive
+                || ObeliskAccess.Input.Contexts.AlertInputContext.IsCurrentlyActive
+                // The game's own Enter (BattleKeyboard.KeyboardEnter) also dismisses the death
+                // screen — swallow it so the dismissal goes through our context alone.
+                || ObeliskAccess.Input.Contexts.DeathScreenInputContext.IsCurrentlyActive))
             return false;
 
         if (selectorActive && InputRouter.IsSpace(control))
@@ -74,7 +80,11 @@ public class RouterDoKeyBindingPatch
 
         if (!InputRouter.AltHeld)
             return true;
-        if (!ObeliskAccess.Input.Contexts.CombatInputContext.IsCurrentlyActive && !selectorActive)
+        // Alt review keys must also stay quiet over the in-combat modals that sit above the combat
+        // context (an alert such as the retry dialog), or Alt+R would fire an emote ping.
+        if (!ObeliskAccess.Input.Contexts.CombatInputContext.IsCurrentlyActive && !selectorActive
+            && !ObeliskAccess.Input.Contexts.AlertInputContext.IsCurrentlyActive
+            && !ObeliskAccess.Input.Contexts.DeathScreenInputContext.IsCurrentlyActive)
             return true;
 
         return !(control == kb[Key.R] || control == kb[Key.E] || control == kb[Key.S]
@@ -139,7 +149,8 @@ public class RouterDoFirePerformedPatch
             || ObeliskAccess.Input.Contexts.CombatInputContext.IsCurrentlyActive
             || ObeliskAccess.Input.Contexts.CombatSelectorInputContext.IsCurrentlyActive
             || ObeliskAccess.Input.Contexts.RewardsInputContext.IsCurrentlyActive
-            || ObeliskAccess.Input.Contexts.LootInputContext.IsCurrentlyActive;
+            || ObeliskAccess.Input.Contexts.LootInputContext.IsCurrentlyActive
+            || ObeliskAccess.Input.Contexts.AlertInputContext.IsCurrentlyActive;
         return !(ctrlModifierScreen && InputRouter.CtrlHeld);
     }
 }

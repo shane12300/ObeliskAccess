@@ -67,3 +67,29 @@
 - New "Debug mode" option at the bottom of the Accessibility settings tab (off by default).
   When on, the mod writes extra troubleshooting detail to its log file to help diagnose
   problems; normal play is unaffected either way.
+- All of the game's pop-up dialogs (confirmations, warnings, text-entry boxes, and the
+  import/export boxes) are now read as a walkable dialogue on every screen: the dialog text is
+  read when it opens along with a summary of the available options, then Up and Down move
+  through the text and the option buttons, and Enter presses the focused button. Enter on a
+  text line never accepts anything — you must move down to a button — so a destructive
+  confirmation (deleting a save, resigning a run) can't be triggered by accident. Escape still
+  cancels or dismisses. Text-entry dialogs (profile names, lobby codes, deck names, seeds) let
+  you type normally, read back the current value as you review, and submit from the accept
+  button. Answers given by mouse or by another player are spoken too. Alt+R repeats. This also
+  makes previously unanswerable dialogs work, including the "do you want to retry?" question
+  after a party wipe in combat.
+- The screen that appears when a hero dies in combat (while the party fights on) is now
+  accessible. Its announcement waits politely in the speech queue rather than talking over the
+  combat narration; Up and Down read it line by line — who died, how they return after the
+  fight, and the Death's Door curse added to their deck (full curse detail on Alt+T) — and
+  Enter continues. In multiplayer, if the fallen hero belongs to someone else, the mod says who
+  everyone is waiting for.
+- The end-of-run screen is now fully accessible. On arrival you hear where the run ended and
+  your final score, then Up and Down walk every row: the score breakdown (places visited,
+  combat expertise, hero deaths, experience, bosses, corruptions, adventure-completed bonus),
+  the final score with any madness bonus, best-score notice, and time played, the gold and dust
+  reward with the supply-retention bonus, and each hero's rank progress as the bars fill. The
+  Main Menu button is the last row — it reports "still tallying" until the progression bars
+  finish, announces "Main menu available" when ready, and Enter leaves for the menu. Newly
+  unlocked cards shown on arrival can be reviewed with Left and Right (full detail on Alt+T)
+  before continuing. Alt+I gives a screen overview at any time.
