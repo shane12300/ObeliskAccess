@@ -54,6 +54,12 @@ public static class CombatNavigator
     private static int _lastRound = -1;
     private static bool _overviewAnnounced;
 
+    // With CombineEnemyTurns on, an NPC's turn line is withheld and the "plays [card]" cast line
+    // marks the turn instead. This holds the NPC's name until a cast arrives; if its turn ends
+    // (next turn change) with no cast — stun, freeze — "takes no action" is spoken so the turn
+    // doesn't pass silently.
+    private static string _pendingNpcTurnName;
+
     // ---- combat-event coalescing ----
     private struct CtEntry { public string Owner; public string Text; }
     private static readonly List<CtEntry> _ctBuffer = new List<CtEntry>();
@@ -98,6 +104,13 @@ public static class CombatNavigator
         int idx = isHero ? heroIdx : npcIdx;
         Character actor = (team != null && idx >= 0 && idx < team.Count) ? team[idx] : null;
 
+        // A merged NPC turn that produced no cast line ended just now — say so before moving on.
+        if (_pendingNpcTurnName != null)
+        {
+            Buffer(_pendingNpcTurnName, "takes no action");
+            _pendingNpcTurnName = null;
+        }
+
         var sb = new StringBuilder();
         int round = mm.CurrentRound;
         if (round != _lastRound)
@@ -117,13 +130,26 @@ public static class CombatNavigator
             }
             return;
         }
-        sb.Append(name).Append(isHero ? ", your turn" : "'s turn");
+        if (!isHero && AccessibilityOptions.CombineEnemyTurns.Value)
+        {
+            // Withhold the enemy turn line; the coming "plays [card]" line marks the turn.
+            _pendingNpcTurnName = name;
+            if (sb.Length > 0)
+            {
+                FlushPendingEvents();
+                SpeechManager.SpeakQueued(sb.ToString()); // round change still spoken
+            }
+        }
+        else
+        {
+            sb.Append(name).Append(isHero ? ", your turn" : "'s turn");
 
-        // Queue (not interrupt): enemy turns come back-to-back, and an interrupting turn line would
-        // cut off the previous action's event announcement mid-utterance. Flush pending events first
-        // so they are heard before the turn line.
-        FlushPendingEvents();
-        SpeechManager.SpeakQueued(sb.ToString());
+            // Queue (not interrupt): enemy turns come back-to-back, and an interrupting turn line
+            // would cut off the previous action's event announcement mid-utterance. Flush pending
+            // events first so they are heard before the turn line.
+            FlushPendingEvents();
+            SpeechManager.SpeakQueued(sb.ToString());
+        }
 
         // Once per combat, follow the first turn with a full battlefield overview.
         if (!_overviewAnnounced)
@@ -137,6 +163,7 @@ public static class CombatNavigator
 
     public static void OnCombatEnd(bool won)
     {
+        _pendingNpcTurnName = null; // combat ended mid-turn; no "takes no action" chatter
         FlushPendingEvents();
         SpeechManager.SpeakQueued(won ? "Victory" : "Defeat");
         ResetFocus();
@@ -616,6 +643,8 @@ public static class CombatNavigator
             return;
         if (result != Character.AuraSetResult.Added && result != Character.AuraSetResult.Updated)
             return;
+        if (AccessibilityOptions.SkipEnemyStatusChanges.Value && !(target is Hero))
+            return;
 
         var mm = MatchManager.Instance;
         if (mm == null || mm.MatchIsOver)
@@ -630,9 +659,18 @@ public static class CombatNavigator
         if (string.IsNullOrEmpty(name))
             name = acData.Id;
 
-        string msg = "gains " + name + " " + gained;
-        if (total != gained)
-            msg += ", total " + total;
+        string msg;
+        if (AccessibilityOptions.ShortStatusPhrasing.Value)
+        {
+            // The new total is the actionable number; the source was just named by the cast line.
+            msg = name + " " + total;
+        }
+        else
+        {
+            msg = "gains " + name + " " + gained;
+            if (total != gained)
+                msg += ", total " + total;
+        }
         Buffer(Name(target), msg);
     }
 
@@ -652,6 +690,10 @@ public static class CombatNavigator
     {
         if (card == null)
             return;
+
+        // Any cast during a merged enemy turn means the turn was not skipped. (An item or pet proc
+        // clearing it instead of the enemy's own card is a harmless rare miss of "takes no action".)
+        _pendingNpcTurnName = null;
 
         string caster = "";
         if (from != null)
@@ -694,11 +736,13 @@ public static class CombatNavigator
             }
             return;
         }
-        WatchTeam(mm.GetTeamHero());
-        WatchTeam(mm.GetTeamNPC());
+        WatchTeam(mm.GetTeamHero(), announce: true);
+        // Snapshots keep updating even when enemy announcements are off, so toggling the option
+        // mid-combat doesn't replay a backlog of stale diffs.
+        WatchTeam(mm.GetTeamNPC(), announce: !AccessibilityOptions.SkipEnemyStatusChanges.Value);
     }
 
-    private static void WatchTeam(Team team)
+    private static void WatchTeam(Team team, bool announce)
     {
         if (team == null)
             return;
@@ -729,7 +773,7 @@ public static class CombatNavigator
                 }
             }
 
-            if (_auraWatch.TryGetValue(c, out var previous))
+            if (announce && _auraWatch.TryGetValue(c, out var previous))
             {
                 foreach (var kv in previous)
                 {
@@ -738,15 +782,27 @@ public static class CombatNavigator
                     if (lost <= 0)
                         continue; // gains announce from the SetAuraCurse patch
 
+                    // Routine minus-1 decay is predictable by rule; only expiries and bigger
+                    // losses (dispels, consumption) are worth words.
+                    bool expired = now == 0;
+                    if (AccessibilityOptions.SkipRoutineDecay.Value && lost == 1 && !expired)
+                        continue;
+
                     // A dispel/cleanse already announced this one as "negated".
                     string dedupeKey = Name(c).ToLower() + "|" + kv.Value.Name.ToLower();
                     if (_recentNegated.TryGetValue(dedupeKey, out float t)
                         && Time.time - t < NEGATED_DEDUPE_WINDOW)
                         continue;
 
-                    string msg = "loses " + kv.Value.Name + " " + lost;
-                    if (now > 0)
-                        msg += ", total " + now;
+                    string msg;
+                    if (AccessibilityOptions.ShortStatusPhrasing.Value)
+                        msg = expired ? kv.Value.Name + " gone" : kv.Value.Name + " " + now;
+                    else
+                    {
+                        msg = "loses " + kv.Value.Name + " " + lost;
+                        if (now > 0)
+                            msg += ", total " + now;
+                    }
                     Buffer(Name(c), msg);
                 }
             }

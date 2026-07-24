@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using BepInEx.Configuration;
 using HarmonyLib;
 using TMPro;
 using UnityEngine;
@@ -9,10 +10,15 @@ namespace ObeliskAccess.Patches;
 
 /// <summary>
 /// Screen-reader navigation for the (otherwise mouse-only) settings menu.
-///   Tab / Shift+Tab — switch between the Graphics / Audio / Gameplay tabs.
+///   Tab / Shift+Tab — switch between the Graphics / Audio / Gameplay / Accessibility tabs.
+///                     (Accessibility is a mod-owned virtual tab holding ObeliskAccess options —
+///                     it has no game UI panel behind it, so the visual panel keeps showing the
+///                     previously selected game tab while it is focused.)
 ///   Up / Down       — move between the options in the current tab.
 ///   Left / Right    — adjust the focused slider.
 ///   Enter           — flip a toggle, press a button, or open a dropdown.
+///   Alt+T           — tooltip for the focused option (currently the mod's own Accessibility
+///                     options; game controls answer "No description available").
 ///   Escape          — game default (cancels an open dropdown; otherwise closes the panel).
 /// The reset controls (Reset Tutorial / Reset Saved Data) open an AlertManager confirm dialog,
 /// which is announced and driven with Enter = Accept / Escape = Cancel.
@@ -28,9 +34,12 @@ internal static class SettingsMenuManager
         // Set for controls that behave as buttons (Reset Tutorial / Reset Saved Data): activating
         // them invokes this action instead of flipping a toggle or opening a dropdown.
         public Action Action;
+        // Set for the mod's own options (Accessibility tab): a virtual toggle with no UI control
+        // behind it, read and flipped through a BepInEx config entry.
+        public ConfigEntry<bool> Option;
     }
 
-    private static readonly string[] TabNames = { "Graphics", "Audio", "Gameplay" };
+    private static readonly string[] TabNames = { "Graphics", "Audio", "Gameplay", "Accessibility" };
 
     private static readonly List<Entry> _entries = new List<Entry>();
     private static int _tabIndex;
@@ -134,11 +143,27 @@ internal static class SettingsMenuManager
         if (_entries == null)
             return;
 
-        _tabIndex = (_tabIndex + (backwards ? 2 : 1)) % 3;
-        SettingsManager.Instance.SelectTab(_tabIndex);
+        _tabIndex = (_tabIndex + (backwards ? TabNames.Length - 1 : 1)) % TabNames.Length;
+        // The Accessibility tab is ours alone — the game only knows tabs 0-2, so don't SelectTab it.
+        if (_tabIndex < 3)
+            SettingsManager.Instance.SelectTab(_tabIndex);
         BuildControls();
         _index = 0;
         SpeechManager.Speak(TabNames[_tabIndex] + " tab. " + CurrentAnnouncement());
+    }
+
+    /// <summary>
+    /// Alt+T: speaks the focused entry's tooltip. The mod's own options carry theirs in the
+    /// BepInEx config description (single source with the .cfg comment); game controls have none.
+    /// </summary>
+    public static void SpeakTooltip()
+    {
+        if (!_active || _index < 0 || _index >= _entries.Count)
+            return;
+
+        var e = _entries[_index];
+        string desc = e.Option != null ? e.Option.Description.Description : null;
+        SpeechManager.Speak(string.IsNullOrEmpty(desc) ? "No description available" : desc);
     }
 
     /// <summary>Cancels an open dropdown (used by the Escape prefix). Returns true if it consumed.</summary>
@@ -183,6 +208,11 @@ internal static class SettingsMenuManager
         {
             e.Toggle.isOn = !e.Toggle.isOn;
             SpeechManager.Speak(e.Name + ", " + (e.Toggle.isOn ? "on" : "off"));
+        }
+        else if (e.Option != null)
+        {
+            e.Option.Value = !e.Option.Value; // BepInEx saves the config file on set
+            SpeechManager.Speak(e.Name + ", " + (e.Option.Value ? "on" : "off"));
         }
         else if (e.Dropdown != null)
         {
@@ -265,6 +295,8 @@ internal static class SettingsMenuManager
             return e.Name + ", button";
         if (e.Toggle != null)
             return e.Name + ", " + (e.Toggle.isOn ? "on" : "off");
+        if (e.Option != null)
+            return e.Name + ", " + (e.Option.Value ? "on" : "off");
         if (e.Slider != null)
             return e.Name + ", " + SliderText(e.Slider);
         if (e.Dropdown != null)
@@ -341,7 +373,19 @@ internal static class SettingsMenuManager
                     _entries.Add(new Entry { Name = "Reset saved data", Action = s.ResetSavedData });
                 }
                 break;
+            case 3: // Accessibility — the mod's own combat-narration options (virtual, no game UI)
+                AddOption(AccessibilityOptions.CombineEnemyTurns, "Combine enemy turn announcements");
+                AddOption(AccessibilityOptions.ShortStatusPhrasing, "Short status phrasing");
+                AddOption(AccessibilityOptions.SkipRoutineDecay, "Skip routine status decay");
+                AddOption(AccessibilityOptions.SkipEnemyStatusChanges, "Skip enemy status changes");
+                break;
         }
+    }
+
+    private static void AddOption(ConfigEntry<bool> option, string name)
+    {
+        if (option != null)
+            _entries.Add(new Entry { Name = name, Option = option });
     }
 
     private static void AddToggle(Toggle t, string name)

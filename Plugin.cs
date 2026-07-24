@@ -19,10 +19,14 @@ public class Plugin : BaseUnityPlugin
         // Bring up screen-reader speech before anything tries to talk.
         SpeechManager.Initialize(Logger);
 
+        // Bind the mod's player-facing options (settings menu, Accessibility tab).
+        AccessibilityOptions.Initialize(Config);
+
         // Register input contexts in priority order (highest first). Modals sit above the base
         // menu so that while one is active, input never reaches the screen beneath it.
         InputRouter.Register(new TutorialInputContext());
-        InputRouter.Register(new SettingsInputContext());
+        var settingsContext = new SettingsInputContext();
+        InputRouter.Register(settingsContext);
         InputRouter.Register(new CorruptionInputContext());
         var cardCraftContext = new CardCraftInputContext();
         InputRouter.Register(cardCraftContext);
@@ -45,6 +49,9 @@ public class Plugin : BaseUnityPlugin
         // The map's Alt+G/T/I hotkeys use letters the game leaves unbound, so a frame poller sees
         // them; it fires only while the map context owns input.
         gameObject.AddComponent<MapHotkeyPoller>().MapContext = mapContext;
+
+        // The settings menu's Alt+T tooltip key is likewise unbound.
+        gameObject.AddComponent<SettingsHotkeyPoller>().SettingsContext = settingsContext;
 
         // Combat's Alt review hotkeys are likewise unbound; a poller drives them (and the combat
         // event-announcement flush) while the combat context owns input.

@@ -17,6 +17,14 @@
   choice detail (Alt+T).
 - Combat made accessible: hand/hero/enemy navigation, spoken combat events, and
   battlefield review keys.
+- New Accessibility tab in the settings menu (Tab/Shift+Tab reaches it after Gameplay) holding
+  the mod's own options, remembered between sessions. Alt+T on any option speaks a tooltip
+  explaining exactly what it does. The first four options tune combat narration verbosity:
+  combine enemy turn announcements into their card plays (off by default), short status
+  phrasing — "Poison 7" instead of "gains Poison 3, total 7" (on by default), skip the routine
+  1-point end-of-turn status decay while still announcing statuses running out and larger
+  losses (on by default), and skip enemy status changes entirely, keeping damage, heals, card
+  plays and deaths (off by default).
 - Towns made accessible: arrival overview, town hub, all five services (Altar, Church,
   Forge, Divination, Armory), the town upgrades window, and spoken confirmation prompts
   answerable in place.

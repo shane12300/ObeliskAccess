@@ -98,7 +98,7 @@ confirm dialogs. Other contexts still exclude alerts in `IsActive` (known gap ou
 | Screen | Context | Keys |
 |--------|---------|------|
 | Main menu / game-mode / save-slot | `MainMenuInputContext` | arrows (game nav, announced), Enter |
-| Settings | `SettingsInputContext` | arrows, Enter, Tab, Escape (cancels open dropdown) |
+| Settings | `SettingsInputContext` + poller | arrows, Enter, Tab (4 tabs: Graphics/Audio/Gameplay/Accessibility — the last is a mod-owned virtual tab of `AccessibilityOptions` combat-narration toggles), Alt+T option tooltip, Escape (cancels open dropdown) |
 | Tutorial popup | `TutorialInputContext` | Up/Down walk lines, Enter activates (modal focus trap) |
 | Map — nodes | `MapInputContext` | ←/→ reachable nodes; Ctrl+↑/↓ descend/ascend look-ahead, Ctrl+←/→ siblings; Enter travels; Alt+T node detail |
 | Map — party strip | `MapInputContext` | Tab toggles region; ↑/↓ read heroes; 1–4 jump to slot; Enter (open panel) deferred |
