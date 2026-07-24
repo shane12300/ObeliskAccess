@@ -46,14 +46,23 @@ public abstract class AccessibleMenuBase
     {
         string raw = null;
 
-        var botonGameMode = item.GetComponentInChildren<BotonMenuGameMode>();
+        var botonGameMode = ResolveGameModeButton(item);
         if (botonGameMode != null)
         {
-            // The visible label (optionText) is a stylized WarpText and is usually empty/placeholder,
-            // so resolve the real mode name from the localized text keyed by gameMode.
             raw = GetGameModeName(botonGameMode.gameMode);
-            if (string.IsNullOrEmpty(raw) && botonGameMode.optionText != null)
-                raw = botonGameMode.optionText.text;
+            if (!string.IsNullOrEmpty(raw))
+            {
+                // The chains overlay is advisory only — the game never enforces the rank lock
+                // (a mouse click on a chained mode opens its save screen too), so speak the
+                // chains' own "obeliskNeedCharacter" requirement text rather than "locked",
+                // which would wrongly promise that Enter refuses.
+                if (IsGameModeLocked(item))
+                    raw += ", " + (GetTextOrNull("obeliskNeedCharacter") ?? "locked");
+
+                var description = GetGameModeDescription(botonGameMode.gameMode);
+                if (!string.IsNullOrEmpty(description))
+                    raw += ". " + description;
+            }
         }
 
         if (raw == null)
@@ -98,23 +107,100 @@ public abstract class AccessibleMenuBase
     }
 
     /// <summary>
+    /// Maps a mode-selection controller item to its <see cref="BotonMenuGameMode"/>. The
+    /// controller list holds UI cursor-warp proxies (<c>ButtonAM_UI</c> etc. — bare Image, no
+    /// text, no components of interest); the real buttons are world-space objects the game
+    /// reaches via <c>gameModeSelectionN.GetChild(0)</c>, so resolve through those fields the
+    /// same way <c>SelectGameMode</c> does. Null off the mode-selection screen.
+    /// </summary>
+    public static BotonMenuGameMode ResolveGameModeButton(Transform item)
+    {
+        var direct = item.GetComponentInChildren<BotonMenuGameMode>();
+        if (direct != null)
+            return direct;
+
+        var holder = GetGameModeHolder(item);
+        return holder != null && holder.childCount > 0
+            ? holder.GetChild(0).GetComponent<BotonMenuGameMode>()
+            : null;
+    }
+
+    private static Transform GetGameModeHolder(Transform item)
+    {
+        var mgr = MainMenuManager.Instance;
+        if (mgr == null || mgr.menuControllerModeSelection == null)
+            return null;
+
+        return mgr.menuControllerModeSelection.IndexOf(item) switch
+        {
+            0 => mgr.gameModeSelection0,
+            1 => mgr.gameModeSelection1,
+            2 => mgr.gameModeSelection2,
+            3 => mgr.gameModeSelection3,
+            _ => null,
+        };
+    }
+
+    /// <summary>
+    /// A locked mode keeps its controller item visible but shows a chains overlay; mirror that
+    /// so the user knows why Enter does nothing. Adventure (index 0) is never locked.
+    /// </summary>
+    private static bool IsGameModeLocked(Transform item)
+    {
+        var mgr = MainMenuManager.Instance;
+        if (mgr == null || mgr.menuControllerModeSelection == null)
+            return false;
+
+        Transform chains = mgr.menuControllerModeSelection.IndexOf(item) switch
+        {
+            1 => mgr.gameModeObeliskChains,
+            2 => mgr.gameModeWeeklyChains,
+            3 => mgr.gameModeSingularityChains,
+            _ => null,
+        };
+        return chains != null && chains.gameObject.activeSelf;
+    }
+
+    /// <summary>
     /// Resolves a game-mode button's display name from its <c>gameMode</c> id via localization.
-    /// The values (0/2/4/6) are confirmed by <c>MainMenuManager.ShowSaveGame</c> lock checks and
-    /// the <c>SaveManager</c> slot→mode mapping. Returns null for unknown ids.
+    /// The values (0/2/4/6) are confirmed by <c>MainMenuManager.SelectGameMode</c>'s index pairs
+    /// (0/1 Adventure … 6/7 Singularity, MP adds 1) and by the scene data on the four
+    /// <c>Button{AM,OM,WM,SG}</c> objects. Returns null for unknown ids.
     /// </summary>
     protected static string GetGameModeName(int gameMode)
     {
-        if (Texts.Instance == null)
-            return null;
-
         switch (gameMode)
         {
-            case 0: return Texts.Instance.GetText("modeAdventure");
-            case 2: return Texts.Instance.GetText("modeObelisk");
-            case 4: return Texts.Instance.GetText("modeWeekly");
-            case 6: return Texts.Instance.GetText("singularity");
+            case 0: return GetTextOrNull("modeAdventure");
+            case 2: return GetTextOrNull("modeObelisk");
+            case 4: return GetTextOrNull("modeWeekly");
+            case 6: return GetTextOrNull("singularity");
             default: return null;
         }
+    }
+
+    /// <summary>
+    /// The mode's descriptive blurb — the same localized text the game shows in the hover /
+    /// selection description panel (<c>SelectGameMode</c> uses these exact keys).
+    /// </summary>
+    private static string GetGameModeDescription(int gameMode)
+    {
+        switch (gameMode)
+        {
+            case 0: return GetTextOrNull("mainMenuAdventureDescription");
+            case 2: return GetTextOrNull("mainMenuObeliskDescription");
+            case 4: return GetTextOrNull("mainMenuWeeklyDescription");
+            case 6: return GetTextOrNull("mainMenuSingularityDescription");
+            default: return null;
+        }
+    }
+
+    private static string GetTextOrNull(string key)
+    {
+        if (Texts.Instance == null)
+            return null;
+        var text = Texts.Instance.GetText(key);
+        return string.IsNullOrEmpty(text) ? null : text;
     }
 
     /// <summary>
@@ -145,7 +231,7 @@ public abstract class AccessibleMenuBase
         sb.Append(text);
     }
 
-    protected static void AnnounceItem(Transform item)
+    public static void AnnounceItem(Transform item)
     {
         SpeechManager.Speak(GetMenuItemText(item));
     }

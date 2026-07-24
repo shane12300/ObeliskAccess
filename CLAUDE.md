@@ -70,9 +70,15 @@ screen owns the keyboard and translates raw keys into semantic events; per-scree
   screen owns input.
 - `RouterInputPatches.cs` — **the ONLY patches on `InputController`.** `DoMovement` (prefix,
   swallows arrows iff handled) → `Move`; `DoEscape` (prefix, swallowable) → `Cancel`; `DoKeyBinding`
-  (postfix, non-swallowing) routes Enter→`Confirm`, Tab→`Tab`, digits 1–4→`Number`; a
-  `DoFirePerformed` prefix suppresses the game's bare-Ctrl "click" while the map owns input (Ctrl is
-  the map's look-ahead modifier).
+  postfix routes Enter→`Confirm`, Tab→`Tab`, digits 1–4→`Number`, plus a prefix that swallows the
+  game's own handling of keys the mod repurposes. **The game DOES wire Enter**: with
+  `ConfigKeyboardShortcuts` on (which `ForceKeyboardShortcutsPatch` forces), `DoKeyBinding` maps
+  Enter (and bare Ctrl) → `DoFirePerformed`, a synthetic click at the cursor — so any context whose
+  `OnConfirm` performs its own activation must be in the prefix's Enter-swallow list or every Enter
+  fires twice (this once skipped the mode-selection screen: the second fire's physics fallback hit
+  the just-activated mode collider under the stale cursor). A `DoFirePerformed` prefix likewise
+  suppresses the bare-Ctrl "click" on screens where Ctrl is a modifier (map look-ahead, detail
+  drills).
 - `Input/Contexts/*InputContext.cs` — one per screen (thin; delegates to a `Patches/` manager).
 - `Input/MapHotkeyPoller.cs`, `Input/CombatHotkeyPoller.cs`, `Input/EventHotkeyPoller.cs`,
   `Input/TownHotkeyPoller.cs`, `Input/CardCraftHotkeyPoller.cs`, `Input/AlertHotkeyPoller.cs`,
@@ -108,7 +114,7 @@ alert comes from `AlertHotkeyPoller`.
 
 | Screen | Context | Keys |
 |--------|---------|------|
-| Main menu / game-mode / save-slot | `MainMenuInputContext` | arrows (game nav, announced), Enter |
+| Main menu / game-mode / save-slot | `MainMenuInputContext` | arrows (game nav, announced), Enter; on the game-mode screen the context takes over movement: ↑/↓ (←/→ synonyms) walk a linear list (Main Menu button, the four modes, PDX buttons) instead of the game's spatial row. Mode announce = name + (if chained) the `obeliskNeedCharacter` advisory + the mode's description blurb; the chains "lock" is advisory only — the game never enforces it, so Enter opens the save screen either way, matching vanilla mouse behaviour |
 | Settings | `SettingsInputContext` + poller | arrows, Enter, Tab (4 tabs: Graphics/Audio/Gameplay/Accessibility — the last is a mod-owned virtual tab of `AccessibilityOptions` combat-narration toggles + a debug-logging toggle), Alt+T option tooltip, Escape (cancels open dropdown) |
 | Tutorial popup | `TutorialInputContext` | Up/Down walk lines, Enter activates (modal focus trap) |
 | Map — nodes | `MapInputContext` | ←/→ reachable nodes; Ctrl+↑/↓ descend/ascend look-ahead, Ctrl+←/→ siblings; Enter travels; Alt+T node detail |

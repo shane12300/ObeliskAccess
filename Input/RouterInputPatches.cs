@@ -72,7 +72,12 @@ public class RouterDoKeyBindingPatch
                 || ObeliskAccess.Input.Contexts.AlertInputContext.IsCurrentlyActive
                 // The game's own Enter (BattleKeyboard.KeyboardEnter) also dismisses the death
                 // screen — swallow it so the dismissal goes through our context alone.
-                || ObeliskAccess.Input.Contexts.DeathScreenInputContext.IsCurrentlyActive))
+                || ObeliskAccess.Input.Contexts.DeathScreenInputContext.IsCurrentlyActive
+                // On the main-menu screens the game's Enter → DoFirePerformed would fire alongside
+                // OnConfirm's, pressing things twice — the second fire's physics fallback could hit
+                // a just-activated mode-selection collider and skip straight to the save window.
+                // OnConfirm reproduces the single click itself.
+                || ObeliskAccess.Input.Contexts.MainMenuInputContext.IsCurrentlyActive))
             return false;
 
         if (selectorActive && InputRouter.IsSpace(control))

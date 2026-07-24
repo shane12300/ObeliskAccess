@@ -6,7 +6,14 @@
   speech as a fallback.
 - Keyboard navigation with spoken feedback on all supported screens; the game's own
   "keyboard shortcuts" setting is enabled automatically.
-- Main menu, game-mode selection, and save-slot screens made accessible.
+- Main menu, game-mode selection, and save-slot screens made accessible. The game-mode
+  screen is walked with Up/Down (Left/Right work too) as one list — Main Menu button first,
+  then the four modes — instead of the game's sideways layout. Each mode announces its
+  proper name and description; modes still chained off (no rank-3 character yet) speak the
+  game's own requirement text, and — matching the game itself — can still be entered.
+  Pressing Enter now activates a menu item exactly once (previously the game's own hidden
+  Enter handling could double-press, which sometimes skipped the mode-selection screen
+  entirely and jumped straight to a save-slot window).
 - Settings menu made accessible, including dropdowns.
 - Tutorial pop-ups read aloud line by line.
 - Map made accessible: reachable-node navigation, Ctrl look-ahead along upcoming paths,
