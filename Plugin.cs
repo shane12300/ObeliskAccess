@@ -58,6 +58,15 @@ public class Plugin : BaseUnityPlugin
         // The end-of-run screen is its own scene; it only needs to outrank the main menu.
         var finishRunContext = new FinishRunInputContext();
         InputRouter.Register(finishRunContext);
+        // The hero-selection family (scene "HeroSelection"): the perk tree is the topmost modal,
+        // the character window sits under it, and the base screen under both — matching the
+        // game's own modality order (PerkTree > HeroSelection/CharPopup).
+        var perkTreeContext = new PerkTreeInputContext();
+        InputRouter.Register(perkTreeContext);
+        var charPopupContext = new CharPopupInputContext();
+        InputRouter.Register(charPopupContext);
+        var heroSelectionContext = new HeroSelectionInputContext();
+        InputRouter.Register(heroSelectionContext);
         InputRouter.Register(new MainMenuInputContext());
 
         // The alert dialogue's Alt+R repeat key: every per-screen poller gates on its own context,
@@ -104,6 +113,14 @@ public class Plugin : BaseUnityPlugin
         // The end-of-run screen's Alt+I/T/R keys; its poller also drives arrival detection and
         // the "Main menu available" announcement.
         gameObject.AddComponent<FinishRunHotkeyPoller>().FinishRunContext = finishRunContext;
+
+        // The hero-selection screen's Alt+T/C/I/R keys (and the character window's / perk
+        // tree's Alt reads); the poller also drives all three lifecycle ticks — arrival
+        // overview, Begin-button edge, ready changes, and mouse-close detection.
+        var heroSelPoller = gameObject.AddComponent<HeroSelectionHotkeyPoller>();
+        heroSelPoller.HeroSelectionContext = heroSelectionContext;
+        heroSelPoller.CharPopupContext = charPopupContext;
+        heroSelPoller.PerkTreeContext = perkTreeContext;
 
         var harmony = new Harmony(MyPluginInfo.PLUGIN_GUID);
         harmony.PatchAll();

@@ -77,9 +77,18 @@ public class RouterDoKeyBindingPatch
                 // OnConfirm's, pressing things twice — the second fire's physics fallback could hit
                 // a just-activated mode-selection collider and skip straight to the save window.
                 // OnConfirm reproduces the single click itself.
-                || ObeliskAccess.Input.Contexts.MainMenuInputContext.IsCurrentlyActive))
+                || ObeliskAccess.Input.Contexts.MainMenuInputContext.IsCurrentlyActive
+                // The hero-selection family self-activates in OnConfirm too; the stale-cursor
+                // click could pick up or drop a portrait, press a perk node, or re-press a
+                // just-closed window's button.
+                || ObeliskAccess.Input.Contexts.HeroSelectionInputContext.IsCurrentlyActive
+                || ObeliskAccess.Input.Contexts.CharPopupInputContext.IsCurrentlyActive
+                || ObeliskAccess.Input.Contexts.PerkTreeInputContext.IsCurrentlyActive))
             return false;
 
+        // Space is only the selector's repurposed key: outside combat the game's own Space
+        // handling is a null-conditional no-op (MatchManager?.Keyboard), so the perk tree's
+        // Space-to-confirm needs no suppression here.
         if (selectorActive && InputRouter.IsSpace(control))
             return false;
 
@@ -119,10 +128,10 @@ public class RouterDoKeyBindingPatch
 
 /// <summary>
 /// The game maps a bare Alt press to <c>DoButtonNorth</c>, which right-clicks whatever is under the
-/// cursor — and in combat the cursor sits on the focused card, so every Alt review hotkey would pop
-/// the card-inspection window (stealing input until Escape). Suppress it while combat owns input;
-/// Alt is the mod's review modifier there. The multiplayer chat keyboard's Alt-as-delete is left
-/// working.
+/// cursor — in combat that pops the card-inspection window, and on the hero-selection screen it
+/// right-clicks a roster portrait, opening the character window. Both screen families use Alt as
+/// the mod's review modifier, so suppress the synthetic right-click while any of them owns input.
+/// The multiplayer chat keyboard's Alt-as-delete is left working.
 /// </summary>
 [HarmonyPatch(typeof(InputController), "DoButtonNorth")]
 public class RouterDoButtonNorthPatch
@@ -132,7 +141,10 @@ public class RouterDoButtonNorthPatch
         if (KeyboardManager.Instance != null && KeyboardManager.Instance.IsActive())
             return true;
         return !(ObeliskAccess.Input.Contexts.CombatInputContext.IsCurrentlyActive
-              || ObeliskAccess.Input.Contexts.CombatSelectorInputContext.IsCurrentlyActive);
+              || ObeliskAccess.Input.Contexts.CombatSelectorInputContext.IsCurrentlyActive
+              || ObeliskAccess.Input.Contexts.HeroSelectionInputContext.IsCurrentlyActive
+              || ObeliskAccess.Input.Contexts.CharPopupInputContext.IsCurrentlyActive
+              || ObeliskAccess.Input.Contexts.PerkTreeInputContext.IsCurrentlyActive);
     }
 }
 

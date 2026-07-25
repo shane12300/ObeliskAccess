@@ -91,6 +91,55 @@
   fight, and the Death's Door curse added to their deck (full curse detail on Alt+T) — and
   Enter continues. In multiplayer, if the fallen hero belongs to someone else, the mod says who
   everyone is waiting for.
+- The hero-selection screen (start of every run) is now fully accessible. On arrival you hear
+  the game mode, the madness level, the seed (spelled out letter by letter), and how many
+  party slots are filled. Tab cycles three areas: the hero roster, the party slots, and the
+  run options. In the roster, Up and Down walk the heroes (pages turn automatically) and Left
+  and Right switch the class filter tabs, each announced with its hero count; every hero
+  announces their name, class, rank, unspent perk points, and — for locked heroes — exactly
+  what unlocks them. Enter adds the focused hero to the first free slot; the number keys 1 to
+  4 put them in a specific slot, replacing whoever was there (the swap is spoken). In the
+  party area, Enter clears a slot or rolls the random-hero dice on an empty one. The run
+  options read and operate the madness / New Game Plus level, sandbox mode, the game seed
+  (Enter opens the usual accessible text-entry box), weekly modifiers, and Begin Adventure —
+  which explains why it is unavailable ("party incomplete") and announces the moment it
+  becomes ready. Alt+T reads a full hero sheet (description, health, energy, speed,
+  resistances, traits, rank progress) and Alt+I repeats the overview. In multiplayer,
+  teammates joining, picking or removing heroes, readying up, and host changes to madness or
+  seed are all spoken as they happen.
+- Every hero's character window is accessible from that screen with Alt+C (the mouse
+  right-click equivalent). Tab moves through its tabs — Stats, Perks, Rank, Skins, Card
+  Backs, and Singularity Cards — skipping any that don't apply, and Up and Down read each tab
+  row by row: the full stat block and resistances, every trait with its unlock tier (Alt+T
+  for the trait's description), each starting card (Alt+T for the full card text), the
+  classic-variant toggle where the game offers one, rank progress with every rank reward and
+  its locked state, and the use-supplies level-up button with the exact reason when it can't
+  be used. Skins and card backs can be browsed and equipped with Enter, card backs across
+  their three categories with Left and Right.
+- The perk tree is fully accessible — perk points can now be spent from the keyboard. It
+  opens from the character window's Perks tab (or the perk badge on a portrait) and announces
+  the hero and available points. Tab cycles the four perk categories — each reporting how
+  many points are spent in it — plus a controls area. Up and Down move between the tree's
+  rows, announcing each row's unlock threshold; Left and Right move between the perks of a
+  row. Every perk announces its state (selected, available, locked and why, or how many more
+  points you'd need), choose-one groups ("Choice 2 of 3 — taking this replaces the chosen
+  option"), a warning when a teammate already has a non-stacking perk, its effect, and its
+  cost. Enter takes or removes the perk and reports the running total — or explains exactly
+  why it can't ("a selected perk requires it"). Space saves the build. The controls area
+  holds Confirm, Reset, Import, Export, the ten named save slots (load, save, and delete,
+  all through the usual accessible dialogs), and Exit. Closing with unsaved changes asks
+  first, through the standard walkable confirmation. Alt+T reads the game's full tooltip for
+  a perk, including which party members already have it; Alt+I summarises your points.
+- The hero-selection screen, character window, and perk tree now play the game's own hover
+  sounds as you move with the keyboard: the character flourish on roster portraits, the perk
+  pop on tree nodes, the card sound on card rows, and the standard button sound everywhere
+  else — the same audio a sighted player hears when the mouse passes over each element.
+- Text-entry dialogs now use a clear edit mode instead of relying on the box grabbing your
+  keystrokes by itself (which could silently stop working). Arrow to the text field row and
+  press Enter to start typing — the dialog says "Editing" and reads any current text. Type
+  your text, then press Enter or Escape to finish; what you typed is kept and read back, and
+  the arrows go back to walking the dialog so you can reach the accept button. This applies
+  everywhere text is entered: perk-build names, game seeds, profile names, and import codes.
 - The end-of-run screen is now fully accessible. On arrival you hear where the run ended and
   your final score, then Up and Down walk every row: the score breakdown (places visited,
   combat expertise, hero deaths, experience, bosses, corruptions, adventure-completed bonus),

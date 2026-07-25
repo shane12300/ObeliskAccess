@@ -7,8 +7,9 @@ map (nodes / party strip / gold & position), corruption prompt, combat (navigati
 announcements, review keys), narrative events (text walk, choices, roll narration, Alt+T
 hover info), town (hub, all five service screens, upgrades window, treasures), reward
 screen (post-combat / event / divination card picks), loot screen, in-combat card-selection
-windows, all confirmation alerts (global walkable dialogue), in-combat death popup, and the
-end-of-run screen.
+windows, all confirmation alerts (global walkable dialogue), in-combat death popup, the
+end-of-run screen, and the hero-selection screen (party building, run options, character
+window with all tabs, perk tree).
 
 Most unadapted surfaces expose the same controller contract the mod already piggybacks on:
 `ControllerMovement(...)` + `controllerList`/`_controllerList` + an index field + `IsActive()`.
@@ -27,9 +28,11 @@ Priority = how often a player hits it in a normal run × how hard it blocks a bl
       `EventInputContext` + `EventHotkeyPoller`; see Completed section). Tentatively verified
       in-game with one event incl. roll + probability; remaining permutations (roll targets,
       blocked options, reward cards, chained events) to be spot-checked during normal play.
-- [ ] **Hero selection / run setup** — `HeroSelectionManager` (+ `BoxSelection`, `BoxPlayer`):
-      pick party, ready, begin adventure, seed. Has `ControllerMovement`. Without it a run can't
-      even be configured (currently only default-party flows work).
+- [ ] **Hero selection — in-game verification** — follow-up for the implemented hero-selection
+      accessibility layer (see Completed): the full manual test pass (roster paging, tab
+      filters, assign/replace/clear/dice, seed alert, Begin edge, character-window tabs, perk
+      take/remove/confirm/save-slots, Obelisk/Weekly/load-game modes, MP echoes) has not yet
+      been run in-game.
 - [ ] **Filters dialogue (Alt+F) needs rework** — follow-up for the already-implemented card
       shop / craft accessibility layer (`CardCraftManager` service screens — Forge filter
       modal, `CardCraftAccessibilityPatch`; see Completed section). Functional, but not
@@ -64,8 +67,12 @@ Priority = how often a player hits it in a normal run × how hard it blocks a bl
       `PerksWindowUI` / `StatsWindowUI` / `LevelWindowUI`. Host has `ControllerMovement`;
       sub-panels don't (need our own focus walk). Also unblocks the map party strip's deferred
       "Enter opens panel".
-- [ ] **Perk tree** — `PerkTree` (+ `PerksManager`): spend perk points on level-up, confirm/reset.
-      Has `ControllerMovement` + `IsActive()`. Level-ups happen every run.
+- [ ] **Perk tree in town (tier 0)** — follow-up for the implemented perk-tree layer (see
+      Completed, "Hero selection / run setup"): the tree also opens from the town sidebar at
+      town tier 0, but `PerkTreeInputContext` is registered below Town and gated to the
+      HeroSelection scene, so it never drives the tree there. Needs a re-prioritisation
+      (above Town, below CardCraft per the game's modality order) plus gating the
+      Controls-region rows on button visibility (save slots/import/export are hidden in town).
 - [ ] **Card-inspect screen** — `CardScreenManager`: full card zoom + related cards. Has
       `ControllerMovement`. In combat we deliberately suppress it and speak instead — remaining
       speech gaps (rarity/upgrade state, keywords, related cards now covered by the card detail
@@ -82,16 +89,18 @@ Priority = how often a player hits it in a normal run × how hard it blocks a bl
       "can't exit" guards. Has `InputMoveController`.
 - [ ] **Map adjuncts** — `ConflictManager` (1-of-3 branch choice, has `ControllerMovement`);
       `PopupNode` (node info popup — we already speak node summaries via Alt+T, verify parity).
-- [ ] **Hero detail popup** — `CharPopup` (+ `CharPopupMini`): stats/rank/perks/skins tabs inside
-      hero selection. Has `ControllerMovement`. Needed for informed party picks.
 
 ## P2 — occasional single-player surfaces
 
-- [ ] **Madness (difficulty) select** — `MadnessManager`. Has `ControllerMovement`.
+- [ ] **Madness (difficulty) select** — `MadnessManager`. Has `ControllerMovement`. Now
+      reachable from the hero-selection run options (Enter opens it and announces it is not
+      yet accessible; all hero-selection contexts go inert while it is open). Also covers the
+      weekly-modifiers window — the WeeklyModifiers button opens the same madness window.
 - [ ] **Obelisk challenge setup** — `ChallengeSelectionManager`/`2` (nav routed through
       `CardCraftManager.ControllerMovement`): reroll, perks, packs, ready.
 - [ ] **Weekly modifiers** — `WeeklySelector` (draw/reveal).
-- [ ] **Sandbox modifiers** — `SandboxManager`. Has `ControllerMovement` + `IsActive()`.
+- [ ] **Sandbox modifiers** — `SandboxManager`. Has `ControllerMovement` + `IsActive()`. Now
+      reachable from the hero-selection run options (open + announce only, like madness).
 - [ ] **Divination minigames** — `CardPlayerManager` (pick-a-card), `CardPlayerPairsManager`
       (memory pairs). Both have `ControllerMovement`.
 - [ ] **Intro & cinematics** — `IntroNewGameManager`, `CinematicManager`: speak story text,
@@ -119,7 +128,6 @@ Priority = how often a player hits it in a normal run × how hard it blocks a bl
 - [ ] **Emotes / pings** — `EmoteManager`.
 - [ ] **Connection alerts** — `NetworkManager` (mostly surfaces through `AlertManager` — P0 item
       likely covers it; verify).
-- [ ] **Cardback picker** — `CardBackSelectionPanel` (cosmetic).
 - [ ] **Profiles / credits / DLC popup** — `MainMenuManager` sub-panels not yet announced
       (profile list, credits, DLC info).
 
@@ -237,6 +245,21 @@ feature still requires stays in its original priority section (with a note point
       only in MP — others hear "Waiting for {owner}"); Alt+T reads the Death's Door curse,
       Alt+R repeats; close announced on button, 30s timeout, or MP RPC. **Verified in-game
       2026-07-24 — works correctly.**
+- [x] **Hero selection / run setup** (was P0), **Hero detail popup** (was P1), **Perk tree**
+      (was P1, hero-selection scope) and **Cardback picker** (was P3) — `HeroSelectionManager`
+      (+ `BoxSelection`), `CharPopup` (+ `CardBackSelectionPanel`), `PerkTree`. Implemented
+      2026-07-24 (`HeroSelectionAccessibilityPatch` + `CharPopupAccessibilityPatch` +
+      `PerkTreeAccessibilityPatch` + `HeroSpeech` + three contexts + one poller): Tab regions
+      Roster/Party/Run options with paged roster, filter tabs, assign/replace/clear/random
+      dice, spelled seed with the accessible input alert, madness/sandbox open-and-announce,
+      MP ready/follow/echoes, Begin edge announce; Alt+C character window with all six tabs
+      (stats/traits/cards, perk-points row, rank + use-supplies, skins, card backs incl.
+      categories and pages, singularity cards); perk tree with category+Controls Tab stops,
+      row thresholds, choose-one groups, take/remove diagnosis, Space confirm, save slots via
+      the global alert dialogue. Router: Enter-swallow + bare-Alt suppression extended to all
+      three contexts. *Remaining work — in-game verification pass — tracked under P0; the
+      town-tier-0 perk tree re-prioritisation — tracked under P1; madness/sandbox/weekly
+      interiors stay P2.*
 - [x] **End of run** (was P0) — `FinishRunManager` + `FinishProgression`. Implemented 2026-07-24
       (`FinishRunAccessibilityPatch` + `FinishRunInputContext` + `FinishRunHotkeyPoller`):
       arrival overview, Up/Down rows read live (header, score breakdown, final score with
