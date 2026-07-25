@@ -25,6 +25,7 @@ internal static class AlertDialogueManager
     {
         public string Speech;
         public Action Activate; // null = plain text row
+        public bool IsEdit;     // the text-field row: Enter starts editing, not an answer
     }
 
     private static Kind _kind = Kind.None;
@@ -47,6 +48,16 @@ internal static class AlertDialogueManager
     // Labels captured in the SetConfirmAnswer prefix; the postfix runs after HideAlert wiped them.
     private static string _labelAccept = "";
     private static string _labelCancel = "";
+
+    // Text-field edit mode. The alert opens in review mode (the game's own auto-focus of the
+    // field is undone by Tick) so arrows walk rows; Enter on the field row starts editing,
+    // Enter or Escape while editing ends it, keeping the typed text. _editCache mirrors the
+    // field every frame while editing, because TMP itself ends editing on Enter/Escape — and on
+    // Escape it reverts the text, which the cache restores.
+    private static bool _editing;
+    private static string _editCache = "";
+    private static bool _deactivatePending;
+    private static int _deactivateFrames;
 
     /// <summary>True while an alert popup (not the player-list panel) is being presented.</summary>
     public static bool Active
@@ -100,7 +111,15 @@ internal static class AlertDialogueManager
             sb.Append(". Down to review.");
         }
         if (_kind == Kind.Input || _kind == Kind.PasteCopy)
-            sb.Append(" Type your text, then down to reach the buttons.");
+        {
+            sb.Append(" Down to the text field, then Enter to type.");
+            // The game auto-focuses the field a moment after opening; Tick undoes that so the
+            // dialog starts in review mode and Enter on the field row starts editing explicitly.
+            _editing = false;
+            _editCache = "";
+            _deactivatePending = true;
+            _deactivateFrames = 0;
+        }
 
         // A chained alert (opened from the previous alert's confirm delegate) must not clobber
         // the just-spoken answer; otherwise interrupt as usual — the dialog owns the screen.
@@ -151,16 +170,108 @@ internal static class AlertDialogueManager
         _active = false;
         _kind = Kind.None;
         _textLines.Clear();
+        _editing = false;
+        _editCache = "";
+        _deactivatePending = false;
         // Answers announce themselves; only a silent game-driven hide (multiplayer abort, forced
         // close) needs a note so the user knows the dialog vanished.
         if (Time.frameCount != _answeredFrame)
             SpeechManager.SpeakQueued("Alert closed.");
     }
 
+    // ------------------------------------------------------------------ text-field edit mode
+
+    /// <summary>The editable TMP field of the current alert shape, or null.</summary>
+    private static TMPro.TMP_InputField EditField()
+    {
+        var am = AlertManager.Instance;
+        if (am == null)
+            return null;
+        if (_kind == Kind.Input)
+            return am.alertInput;
+        if (_kind == Kind.PasteCopy)
+            return am.alertInputPC;
+        return null;
+    }
+
+    /// <summary>Per-frame tick from the poller: undoes the game's auto-focus once, mirrors the
+    /// field text while editing, and notices TMP ending the edit on its own (its native
+    /// Enter/Escape handling) so the spoken state can never go stale.</summary>
+    public static void Tick()
+    {
+        if (!Active)
+        {
+            _editing = false;
+            _deactivatePending = false;
+            return;
+        }
+        var field = EditField();
+        if (field == null)
+            return;
+
+        if (_deactivatePending)
+        {
+            // The game's ActivateInput coroutine focuses the field ~0.01s after opening.
+            if (field.isFocused)
+            {
+                field.DeactivateInputField();
+                _deactivatePending = false;
+            }
+            else if (++_deactivateFrames > 120)
+            {
+                _deactivatePending = false; // never focused (import variant) — nothing to undo
+            }
+            return;
+        }
+
+        if (_editing)
+        {
+            if (field.isFocused)
+                _editCache = field.text; // live mirror, survives TMP's Escape revert
+            else
+                EndEdit(field); // TMP ended the edit itself (its own Enter/Escape handling)
+        }
+    }
+
+    private static void BeginEdit()
+    {
+        var field = EditField();
+        if (field == null)
+            return;
+        _editing = true;
+        _deactivatePending = false;
+        _editCache = field.text;
+        field.Select();
+        field.ActivateInputField();
+        string value = AccessibleMenuBase.StripRichText(field.text);
+        SpeechManager.Speak("Editing" + (value.Length > 0 ? ", current text " + value : "")
+            + ". Type your text, then press Enter when done.");
+    }
+
+    private static void EndEdit(TMPro.TMP_InputField field)
+    {
+        if (!_editing)
+            return;
+        _editing = false;
+        // TMP's Escape handling reverts the text before we get here — restore what was typed.
+        if (field.text != _editCache)
+            field.text = _editCache;
+        if (field.isFocused)
+            field.DeactivateInputField();
+        string value = AccessibleMenuBase.StripRichText(field.text);
+        SpeechManager.Speak(value.Length > 0
+            ? "Text entered: " + value + ". Down to reach the accept button."
+            : "Text field left empty.");
+    }
+
     // ------------------------------------------------------------------ navigation (from context)
 
     public static void Move(int dir)
     {
+        // While editing, the arrows belong to the text caret — keep the row focus still.
+        if (_editing)
+            return;
+
         var rows = BuildRows();
         if (rows.Count == 0)
             return;
@@ -171,6 +282,15 @@ internal static class AlertDialogueManager
 
     public static void Confirm()
     {
+        // Enter while editing ends the edit, keeping the typed text.
+        if (_editing)
+        {
+            var field = EditField();
+            if (field != null)
+                EndEdit(field);
+            return;
+        }
+
         // TMP's own submit wiring may already have fired AlertInputSuccess for this same Enter.
         if (Time.frameCount == _inputSuccessFrame)
             return;
@@ -188,6 +308,14 @@ internal static class AlertDialogueManager
             return;
         }
 
+        // The text-field row starts editing — it is not an answer, so skip the answer
+        // bookkeeping (BeginEdit does its own announcement).
+        if (row.IsEdit)
+        {
+            row.Activate();
+            return;
+        }
+
         _suppressAnswerSpeech = true;
         _answeredFrame = Time.frameCount;
         SpeechManager.Speak(row.Speech);
@@ -196,6 +324,16 @@ internal static class AlertDialogueManager
 
     public static void Cancel()
     {
+        // Escape while editing only ends the edit (keeping the text) — it must not answer the
+        // alert underneath.
+        if (_editing)
+        {
+            var field = EditField();
+            if (field != null)
+                EndEdit(field);
+            return;
+        }
+
         var am = AlertManager.Instance;
         if (am == null)
             return;
@@ -243,12 +381,24 @@ internal static class AlertDialogueManager
         if (_kind == Kind.Input)
         {
             string value = AccessibleMenuBase.StripRichText(am.alertInput.text);
-            rows.Add(new Row { Speech = "Text field: " + (value.Length > 0 ? value : "empty") });
+            rows.Add(new Row
+            {
+                Speech = "Text field: " + (value.Length > 0 ? value : "empty")
+                    + ". Press Enter to type",
+                Activate = BeginEdit,
+                IsEdit = true,
+            });
         }
         else if (_kind == Kind.PasteCopy)
         {
             string value = AccessibleMenuBase.StripRichText(am.alertInputPC.text);
-            rows.Add(new Row { Speech = "Text field: " + (value.Length > 0 ? value : "empty") });
+            rows.Add(new Row
+            {
+                Speech = "Text field: " + (value.Length > 0 ? value : "empty")
+                    + ". Press Enter to type",
+                Activate = BeginEdit,
+                IsEdit = true,
+            });
         }
         else if (_kind == Kind.CopyPaste)
         {

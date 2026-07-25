@@ -9,7 +9,9 @@ namespace ObeliskAccess.Input.Contexts;
 /// spawn over). All behaviour lives in <see cref="AlertDialogueManager"/>: Up/Down walk the
 /// alert's text lines and option buttons, Enter activates only on an option row, Escape follows
 /// CloseAlert semantics. Tab and digits are consumed so they cannot leak to the screen beneath.
-/// Typing into input alerts is untouched (TMP fields read the keyboard directly).
+/// Input alerts use an explicit edit mode: Enter on the text-field row starts typing (the TMP
+/// field is focused), Enter or Escape ends it keeping the typed text, and only then do arrows
+/// resume walking rows.
 /// </summary>
 public class AlertInputContext : InputContextBase
 {
