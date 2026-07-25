@@ -53,6 +53,12 @@
       <HintPath>C:\Program Files (x86)\Steam\steamapps\common\Across the Obelisk\AcrossTheObelisk_Data\Managed\PhotonUnityNetworking.dll</HintPath>
       <Private>false</Private>
     </Reference>
+    <!-- Photon.Realtime.Player appears in the PUN callback signatures the mod patches
+         (OnPlayerEnteredRoom/OnPlayerLeftRoom/OnMasterClientSwitched). -->
+    <Reference Include="PhotonRealtime">
+      <HintPath>C:\Program Files (x86)\Steam\steamapps\common\Across the Obelisk\AcrossTheObelisk_Data\Managed\PhotonRealtime.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
     <Reference Include="UnityEngine.AudioModule">
       <HintPath>C:\Program Files (x86)\Steam\steamapps\common\Across the Obelisk\AcrossTheObelisk_Data\Managed\UnityEngine.AudioModule.dll</HintPath>
       <Private>false</Private>

@@ -148,7 +148,19 @@ public static class CombatNavigator
         }
         else
         {
-            sb.Append(name).Append(isHero ? ", your turn" : "'s turn");
+            if (isHero)
+            {
+                // In multiplayer a hero may belong to a partner — name the owner instead of "your".
+                var hero = actor as Hero;
+                sb.Append(name).Append(
+                    MpSpeech.IsMp && hero != null && !MpSpeech.LocalOwns(hero)
+                        ? ", " + MpSpeech.OwnerNick(hero) + "'s turn"
+                        : ", your turn");
+            }
+            else
+            {
+                sb.Append(name).Append("'s turn");
+            }
 
             // Queue (not interrupt): enemy turns come back-to-back, and an interrupting turn line
             // would cut off the previous action's event announcement mid-utterance. Flush pending

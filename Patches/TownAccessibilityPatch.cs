@@ -104,6 +104,21 @@ internal static class TownScreenManager
         if (tm == null)
             return;
 
+        // A pending co-op divination invite goes first: the game's panel is non-modal and has no
+        // decline, so it surfaces as an ordinary hub item that exists only while the invite is up.
+        if (MpSpeech.IsMp && tm.joinDivination != null && tm.joinDivination.gameObject.activeSelf)
+        {
+            _entries.Add(new Entry
+            {
+                Speech = "Join divination round, started by "
+                    + MpSpeech.DisplayNick(AtOManager.Instance != null ? AtOManager.Instance.townDivinationCreator : null),
+                Detail = () => tm.joinDivinationText != null
+                    ? CardSpeech.CleanFlat(tm.joinDivinationText.text)
+                    : "",
+                Activate = () => AtOManager.Instance?.JoinCardDivination(),
+            });
+        }
+
         AddBuilding(tm.buildingForge);
         AddBuilding(tm.buildingAltar);
         AddBuilding(tm.buildingChurch);
@@ -488,5 +503,29 @@ public class TreasureClaimCommunityPatch
         var lines = CardSpeech.SplitLines(CardSpeech.CleanDescription(__instance.qText.text));
         if (lines.Count > 0)
             SpeechManager.SpeakQueued("Treasure claimed: " + string.Join(", ", lines.ToArray()));
+    }
+}
+
+/// <summary>
+/// Co-op divination invite (the MP RPC shows a non-modal town panel with no decline button).
+/// The prefix snapshots the previous visibility so only the rising edge speaks; the panel text is
+/// the game's own localized "{creator} started a divination round…" line.
+/// </summary>
+[HarmonyPatch(typeof(TownManager), nameof(TownManager.ShowJoinDivination))]
+public class TownJoinDivinationAnnouncePatch
+{
+    static void Prefix(TownManager __instance, out bool __state)
+    {
+        __state = __instance.joinDivination != null && __instance.joinDivination.gameObject.activeSelf;
+    }
+
+    static void Postfix(TownManager __instance, bool state, bool __state)
+    {
+        if (!MpSpeech.IsMp || !state || __state)
+            return; // falling edge (the local join) is silent — the divination flow takes over
+        string body = __instance.joinDivinationText != null
+            ? CardSpeech.CleanFlat(__instance.joinDivinationText.text)
+            : "A divination round has started.";
+        SpeechManager.SpeakQueued(body + " A Join divination item is at the top of the town list.");
     }
 }

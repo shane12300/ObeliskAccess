@@ -124,7 +124,14 @@ Priority = how often a player hits it in a normal run × how hard it blocks a bl
 - [ ] **Chat** — `ChatManager` (+ `ChatController`): speak incoming messages, navigate player list.
 - [ ] **Emotes / pings** — `EmoteManager`.
 - [ ] **Connection alerts** — `NetworkManager` (mostly surfaces through `AlertManager` — P0 item
-      likely covers it; verify).
+      likely covers it; verify). *Partially covered by MP phase 1 (2026-07-25): join/leave/
+      host-left/desync/icon announcements now exist (`MpAmbientAccessibilityPatch`); what remains
+      is verifying the alert-side dialogs (kicked, version mismatch, reconnect) read correctly.*
+- [ ] **MpSpeech consolidation** — fold the older per-screen MP nick helpers (Loot `OwnerNick`/
+      `OwnershipClause`, Rewards `OwnerNick`/`Nick`/`IsMine`, CharWindow `LocalOwns`) onto the
+      shared `Patches/MpSpeech.cs`; while doing so fix the CharWindow level-up refusals speaking
+      the raw `hero.Owner` nick instead of `GetPlayerNickReal`. Pure refactor — deferred so MP
+      phase 1 didn't churn play-tested screens.
 - [ ] **Profiles / credits / DLC popup** — `MainMenuManager` sub-panels not yet announced
       (profile list, credits, DLC info).
 
@@ -141,6 +148,17 @@ Priority = how often a player hits it in a normal run × how hard it blocks a bl
 
 Finished features, moved here from the priority sections above. Any follow-up work a completed
 feature still requires stays in its original priority section (with a note pointing back here).
+
+- [x] **Multiplayer ambient state** (MP plan phase 1, 2026-07-25; no prior todo entry — first
+      slice of the five-phase multiplayer build) — `Patches/MpSpeech.cs` (shared MP text helpers)
+      + `Patches/MpAmbientAccessibilityPatch.cs`: ready counts on town/craft/event sync screens
+      (`DoReadyStatus` postfix, edge-gated, hero selection excluded — it has its own), combat
+      turn-ownership clause ("Magnus, Bob's turn"), desync reload + resign/leave/reload icon
+      announcements, room join/leave/host-left with consequences (prefix-snapshot pattern —
+      the game tears the session down before a postfix could read it), co-op divination invite
+      (spoken + a "Join divination" town-hub row; the game's panel has no decline), cinematic
+      skip-vote counts. *Follow-ups: connection-alert verification (P3) and MpSpeech
+      consolidation refactor (P3).*
 
 - [x] **Act-transition screen** (was P2, the `IntroNewGameManager` half of "Intro & cinematics")
       — scene "IntroNewGame": between acts, entering sub-dungeons, and the adventure-complete

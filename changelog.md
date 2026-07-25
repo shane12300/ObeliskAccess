@@ -192,3 +192,10 @@
   corruption offers, tutorials, settings, and the rest), so Enter always acts on exactly the
   item being read — it could previously travel to the wrong map node, buy the wrong shop item,
   or even silently accept a corruption offer.
+- Multiplayer ambient awareness: ready counts are spoken as partners ready up on the shared
+  screens ("Players ready: 1 of 2. Waiting for Bob"); combat turn announcements name the
+  owning player when a partner's hero acts; combat desync reloads, resign votes, and
+  leave-game prompts are announced; players joining or leaving the room — including the host
+  leaving and what happens next — are spoken as they occur; a co-op divination invitation is
+  read aloud and can be joined from a new "Join divination" item at the top of the town list;
+  and cinematic skip votes are counted out loud.
