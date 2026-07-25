@@ -63,16 +63,11 @@ Priority = how often a player hits it in a normal run × how hard it blocks a bl
 
 ## P1 — frequent; run is possible but seriously degraded without these
 
-- [ ] **Character sheet** — `CharacterWindowUI` + sub-panels `DeckWindowUI` / `ItemsWindowUI` /
-      `PerksWindowUI` / `StatsWindowUI` / `LevelWindowUI`. Host has `ControllerMovement`;
-      sub-panels don't (need our own focus walk). Also unblocks the map party strip's deferred
-      "Enter opens panel".
-- [ ] **Perk tree in town (tier 0)** — follow-up for the implemented perk-tree layer (see
-      Completed, "Hero selection / run setup"): the tree also opens from the town sidebar at
-      town tier 0, but `PerkTreeInputContext` is registered below Town and gated to the
-      HeroSelection scene, so it never drives the tree there. Needs a re-prioritisation
-      (above Town, below CardCraft per the game's modality order) plus gating the
-      Controls-region rows on button visibility (save slots/import/export are hidden in town).
+- [ ] **Perk tree in town — gate Controls rows on visibility** — follow-up for the completed
+      mid-run perk tree (see Completed, "In-run character sheet"): the tree now works in-run
+      (incl. town tier 0), but the Controls-region rows should be gated on button visibility —
+      the game hides some controls (save slots/import/export) outside the hero-selection
+      scene, and the mod's rows may still offer them there. Verify in-game and gate as needed.
 - [ ] **Card-inspect screen** — `CardScreenManager`: full card zoom + related cards. Has
       `ControllerMovement`. In combat we deliberately suppress it and speak instead — remaining
       speech gaps (rarity/upgrade state, keywords, related cards now covered by the card detail
@@ -225,7 +220,7 @@ feature still requires stays in its original priority section (with a note point
       Alt+R repeat; arrival overview waits out the row animation; picks and the auto-close
       announced; the game's hover sounds mirrored on focus moves. Also covers map-event rewards
       and town Divination rounds (same scene). The Deck button opens the game's character
-      window, which is not yet accessible — that's the P1 "Character sheet" item.
+      window (since completed — see the "In-run character sheet" entry below).
       **Verified in-game 2026-07-21 — works correctly.**
 - [x] **Generic confirmation alerts** (was P0) — `AlertManager`, all five dialog shapes (confirm
       single/double incl. the buttonless MP "waiting" variant, text input, copy/paste).
@@ -257,9 +252,26 @@ feature still requires stays in its original priority section (with a note point
       categories and pages, singularity cards); perk tree with category+Controls Tab stops,
       row thresholds, choose-one groups, take/remove diagnosis, Space confirm, save slots via
       the global alert dialogue. Router: Enter-swallow + bare-Alt suppression extended to all
-      three contexts. *Remaining work — in-game verification pass — tracked under P0; the
-      town-tier-0 perk tree re-prioritisation — tracked under P1; madness/sandbox/weekly
-      interiors stay P2.*
+      three contexts. *Remaining work — in-game verification pass — tracked under P0;
+      madness/sandbox/weekly interiors stay P2. The town-tier-0 perk tree re-prioritisation
+      has since been completed — see the "In-run character sheet" entry below.*
+- [x] **In-run character sheet** (was P1 "Character sheet") and **Perk tree in town / mid-run**
+      (was P1 "Perk tree in town (tier 0)", the re-prioritisation half) — `CharacterWindowUI`
+      on all five screens it opens over (map, town, combat, rewards, loot). Implemented
+      2026-07-25 (`CharWindowAccessibilityPatch` + `CharWindowInputContext` +
+      `CharWindowHotkeyPoller`, registered above Combat and below PerkTree — which moved up
+      and lost its HeroSelection scene gate): opens from party-strip Enter on map/town
+      (closing that deferred item), Alt+C in combat (focused character; enemies get their
+      stats/cards-cast view), or any mouse path. Tab cycles the tabs (Deck/Level/Items/Stats/
+      Perks; combat piles in combat), rows rebuilt from game data (never the spawned
+      CardItems), 1–4 hero switch, Ctrl+↑/↓ drill, Alt+T/I/R. Level tab: ←/→ compare the two
+      trait choices (with the granted card at its real tier), Enter levels up via
+      `hero.LevelUp`/`HeroLevelUpMP` with diagnosed refusals; outcomes announced queued from a
+      `Hero.LevelUp` postfix (mouse + MP echoes included). Stats tab reads the game's own
+      per-source breakdown popups on Alt+T. Mid-run upgraded-cards popup covered. The Perks
+      tab opens the (now scene-agnostic) accessible perk tree, covering the town-tier-0 tree.
+      **Verified in-game 2026-07-25 — works correctly.** *Remaining work — gating the perk
+      tree's Controls rows on button visibility in town — tracked under P1.*
 - [x] **End of run** (was P0) — `FinishRunManager` + `FinishProgression`. Implemented 2026-07-24
       (`FinishRunAccessibilityPatch` + `FinishRunInputContext` + `FinishRunHotkeyPoller`):
       arrival overview, Up/Down rows read live (header, score breakdown, final score with

@@ -60,6 +60,14 @@ public class CombatHotkeyPoller : MonoBehaviour
         if (!(kb.leftAltKey.isPressed || kb.rightAltKey.isPressed))
             return;
 
+        // Alt+C: open the character sheet for the focused character (else the active hero) —
+        // the keyboard equivalent of the game's right-click, since combat has no party strip.
+        if (kb.cKey.wasPressedThisFrame)
+        {
+            CharWindowScreenManager.OpenFromCombat();
+            return;
+        }
+
         // Per-character reads (focused character, else the active hero):
         if (kb.hKey.wasPressedThisFrame) CombatNavigator.SpeakHealth();
         else if (kb.bKey.wasPressedThisFrame) CombatNavigator.SpeakBlock();

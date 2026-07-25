@@ -149,3 +149,34 @@
   finish, announces "Main menu available" when ready, and Enter leaves for the menu. Newly
   unlocked cards shown on arrival can be reviewed with Left and Right (full detail on Alt+T)
   before continuing. Alt+I gives a screen overview at any time.
+- The in-run character sheet is now fully accessible — including leveling up. Open it with
+  Enter on a hero in the map or town party strip (Tab reaches the strip, 1–4 jump to a slot),
+  with Alt+C in combat for whichever character you're reviewing, or by mouse as before; it
+  announces the hero's name, level, experience, health, and whether a level-up is waiting.
+  Tab cycles its tabs — Deck, Level, Items, Stats, and Perks outside combat; Draw pile,
+  Discard, Vanished, Items, Stats, and Perks during a fight — and the number keys 1 to 4
+  switch to another party member without leaving the sheet.
+  - The Deck tab (and the combat pile tabs) reads a header with the card count and average
+    energy cost, then each card with Up and Down; injuries and boons sit in their own labelled
+    section. Full card text on Alt+T, line-by-line detail with Ctrl+Up/Down, and Alt+I adds a
+    breakdown of how many cards sit at each energy cost. The draw pile is read alphabetically,
+    exactly as the game shows it — the real draw order stays hidden from everyone.
+  - The Level tab walks one row per level: your experience progress, each earned level with
+    the trait you chose, and — when a level-up is ready — the two trait choices. Left and
+    Right compare them (including the exact card a trait would add, at the upgrade tier you'd
+    actually receive), and Enter takes the focused one: the pick, the new level, and the
+    health gain are all confirmed out loud. If you can't level yet, Enter explains exactly
+    why — not enough experience, mid-combat (the game only allows it on the map or in town),
+    or in multiplayer, whose hero it is. Teammates' level-ups are announced as they happen.
+  - The Items tab reads all five equipment slots (weapon, armor, jewelry, accessory, pet)
+    with full item detail on Alt+T; the Stats tab reads health, energy, speed, cards drawn
+    per turn, the damage and healing modifiers, all nine resistances with damage bonuses and
+    penalties (Alt+T itemises exactly which item or effect contributes what, like the game's
+    hover tooltips), plus current status effects, immunities, and charge bonuses.
+  - The Perks tab opens the same accessible perk tree from the hero-selection screen, which
+    now also works mid-run everywhere the sheet opens — including the starting town — and
+    returns you to the sheet when closed.
+  - Right-clicking (or Alt+C on) an enemy in combat reads their sheet too: their stats and
+    the cards they have cast so far, newest first.
+  - Cards upgraded by story events ("2 cards upgraded") can be reviewed with Left and Right
+    before closing, like the end-of-run unlocked-cards popup.

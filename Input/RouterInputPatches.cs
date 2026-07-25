@@ -83,7 +83,12 @@ public class RouterDoKeyBindingPatch
                 // just-closed window's button.
                 || ObeliskAccess.Input.Contexts.HeroSelectionInputContext.IsCurrentlyActive
                 || ObeliskAccess.Input.Contexts.CharPopupInputContext.IsCurrentlyActive
-                || ObeliskAccess.Input.Contexts.PerkTreeInputContext.IsCurrentlyActive))
+                || ObeliskAccess.Input.Contexts.PerkTreeInputContext.IsCurrentlyActive
+                // The in-run character sheet self-activates too (level-up trait picks); the
+                // stale-cursor click could press a gold trait box or a side portrait. In combat
+                // the game already blocks its own Enter while the sheet is open, but on the
+                // map/town/rewards/loot screens DoFirePerformed would still fire.
+                || ObeliskAccess.Input.Contexts.CharWindowInputContext.IsCurrentlyActive))
             return false;
 
         // Space is only the selector's repurposed key: outside combat the game's own Space
@@ -144,7 +149,11 @@ public class RouterDoButtonNorthPatch
               || ObeliskAccess.Input.Contexts.CombatSelectorInputContext.IsCurrentlyActive
               || ObeliskAccess.Input.Contexts.HeroSelectionInputContext.IsCurrentlyActive
               || ObeliskAccess.Input.Contexts.CharPopupInputContext.IsCurrentlyActive
-              || ObeliskAccess.Input.Contexts.PerkTreeInputContext.IsCurrentlyActive);
+              || ObeliskAccess.Input.Contexts.PerkTreeInputContext.IsCurrentlyActive
+              // The in-run character sheet uses Alt+T/I/R as review keys; a bare Alt would
+              // right-click whatever sits under the stale cursor (in combat that reopens the
+              // card-inspection window or another character's sheet).
+              || ObeliskAccess.Input.Contexts.CharWindowInputContext.IsCurrentlyActive);
     }
 }
 
@@ -167,7 +176,9 @@ public class RouterDoFirePerformedPatch
             || ObeliskAccess.Input.Contexts.CombatSelectorInputContext.IsCurrentlyActive
             || ObeliskAccess.Input.Contexts.RewardsInputContext.IsCurrentlyActive
             || ObeliskAccess.Input.Contexts.LootInputContext.IsCurrentlyActive
-            || ObeliskAccess.Input.Contexts.AlertInputContext.IsCurrentlyActive;
+            || ObeliskAccess.Input.Contexts.AlertInputContext.IsCurrentlyActive
+            // The in-run character sheet uses Ctrl+Up/Down as its card drill.
+            || ObeliskAccess.Input.Contexts.CharWindowInputContext.IsCurrentlyActive;
         return !(ctrlModifierScreen && InputRouter.CtrlHeld);
     }
 }

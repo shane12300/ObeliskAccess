@@ -8,7 +8,8 @@ namespace ObeliskAccess.Input.Contexts;
 /// <list type="bullet">
 /// <item>Nodes: Left/Right walk the reachable nodes; Ctrl+Up/Down descend/ascend the look-ahead of
 /// visible-but-not-yet-reachable nodes, Ctrl+Left/Right cycle siblings at that depth; Enter travels.</item>
-/// <item>Party: Up/Down read each hero; number keys 1–4 jump to a slot; Enter (open panel) is deferred.</item>
+/// <item>Party: Up/Down read each hero; number keys 1–4 jump to a slot; Enter opens the
+/// character sheet for the focused hero.</item>
 /// </list>
 /// Sits below the corruption modal so travel into a combat can't leave input stranded. All the state
 /// and speech lives in <see cref="MapNavigator"/>; this class only maps keys to it.

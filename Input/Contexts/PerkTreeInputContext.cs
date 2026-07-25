@@ -4,13 +4,13 @@ using UnityEngine;
 namespace ObeliskAccess.Input.Contexts;
 
 /// <summary>
-/// The perk tree overlay (<c>PerkTree</c>) — the topmost modal of the hero-selection family
-/// (it can open over the character window or directly from a portrait's perk-badge button).
-/// Space is the confirm-build key; verified inert in the game outside combat, so it needs no
-/// suppression in the router patches. Scoped to the hero-selection scene — in town (tier 0) the
-/// tree opens too, but this context is registered below the town context and would never win
-/// input there (tracked in todo.md). All state and speech live in
-/// <see cref="PerkTreeScreenManager"/>.
+/// The perk tree overlay (<c>PerkTree</c>) — the topmost modal both of the hero-selection family
+/// (over the character window or from a portrait's perk-badge button) and of the in-run
+/// character sheet, whose Perks tab opens the same tree mid-run (map, town incl. tier 0, combat,
+/// rewards, loot). Registered above the character-sheet context accordingly. Space is the
+/// confirm-build key; verified inert in the game outside combat, so it needs no suppression in
+/// the router patches — and in combat the game blocks its own Space while the character window
+/// is open beneath the tree. All state and speech live in <see cref="PerkTreeScreenManager"/>.
 /// </summary>
 public class PerkTreeInputContext : InputContextBase
 {
@@ -27,8 +27,6 @@ public class PerkTreeInputContext : InputContextBase
     {
         get
         {
-            if (HeroSelectionManager.Instance == null)
-                return false;
             if (!PerkTreeScreenManager.IsOpen)
                 return false;
             if (MadnessManager.Instance != null && MadnessManager.Instance.IsActive())

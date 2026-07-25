@@ -41,6 +41,15 @@ public class Plugin : BaseUnityPlugin
         // are modals over combat, so their context sits directly above it.
         var combatSelectorContext = new CombatSelectorInputContext();
         InputRouter.Register(combatSelectorContext);
+        // The perk tree overlay opens over the in-run character sheet (its Perks tab) and over
+        // the hero-selection family, so it sits above both — it gates itself on the tree being
+        // visible, so it never steals input from the screens below while closed.
+        var perkTreeContext = new PerkTreeInputContext();
+        InputRouter.Register(perkTreeContext);
+        // The in-run character sheet is a modal over combat, the map, town, rewards and loot;
+        // all of those already go inert while it is open (characterWindow.IsActive checks).
+        var charWindowContext = new CharWindowInputContext();
+        InputRouter.Register(charWindowContext);
         var combatContext = new CombatInputContext();
         InputRouter.Register(combatContext);
         var eventContext = new EventInputContext();
@@ -58,11 +67,9 @@ public class Plugin : BaseUnityPlugin
         // The end-of-run screen is its own scene; it only needs to outrank the main menu.
         var finishRunContext = new FinishRunInputContext();
         InputRouter.Register(finishRunContext);
-        // The hero-selection family (scene "HeroSelection"): the perk tree is the topmost modal,
-        // the character window sits under it, and the base screen under both — matching the
-        // game's own modality order (PerkTree > HeroSelection/CharPopup).
-        var perkTreeContext = new PerkTreeInputContext();
-        InputRouter.Register(perkTreeContext);
+        // The hero-selection family (scene "HeroSelection"): the character window sits over the
+        // base screen; the perk tree (registered far above) is the topmost modal of the family —
+        // matching the game's own modality order (PerkTree > HeroSelection/CharPopup).
         var charPopupContext = new CharPopupInputContext();
         InputRouter.Register(charPopupContext);
         var heroSelectionContext = new HeroSelectionInputContext();
@@ -113,6 +120,10 @@ public class Plugin : BaseUnityPlugin
         // The end-of-run screen's Alt+I/T/R keys; its poller also drives arrival detection and
         // the "Main menu available" announcement.
         gameObject.AddComponent<FinishRunHotkeyPoller>().FinishRunContext = finishRunContext;
+
+        // The in-run character sheet's Alt+T/I/R keys; its poller also drives the manager's
+        // scene-change safety tick.
+        gameObject.AddComponent<CharWindowHotkeyPoller>().CharWindowContext = charWindowContext;
 
         // The hero-selection screen's Alt+T/C/I/R keys (and the character window's / perk
         // tree's Alt reads); the poller also drives all three lifecycle ticks — arrival

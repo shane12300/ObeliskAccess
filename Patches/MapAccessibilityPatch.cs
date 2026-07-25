@@ -205,7 +205,10 @@ public static class MapNavigator
     {
         if (CurrentRegion == Region.Party)
         {
-            SpeechManager.Speak("Character panel not available yet");
+            // Open the character sheet through the game's own portrait-click path; the
+            // CharacterWindowUI.Show postfix announces the arrival.
+            if (!CharWindowScreenManager.OpenHeroSheet(_partyIndex))
+                SpeechManager.Speak("No character focused");
             return;
         }
         if (_look.Count > 0)

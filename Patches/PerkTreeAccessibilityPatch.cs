@@ -15,9 +15,9 @@ namespace ObeliskAccess.Patches;
 /// confirms the build. Escape closes — the game itself raises the unsaved-changes confirm, which
 /// the global alert dialogue owns.
 ///
-/// Scope: the hero-selection scene only. The tree also opens in town at tier 0, but this
-/// context is registered below the town context, so it could never win input there — a
-/// re-prioritisation is tracked in todo.md.
+/// Scope: everywhere the tree opens — the hero-selection scene, and mid-run over the character
+/// sheet's Perks tab (map, town incl. tier 0, combat, rewards, loot). The context is registered
+/// above the character-sheet context and all the screens beneath it.
 /// </summary>
 internal static class PerkTreeScreenManager
 {
@@ -114,7 +114,12 @@ internal static class PerkTreeScreenManager
             return;
         ResetState();
         string closing = "Perk tree closed.";
-        if (CharPopupScreenManager.IsOpen)
+        if (CharWindowScreenManager.IsOpen)
+        {
+            // Mid-run: the tree closed back onto the character sheet beneath it.
+            closing += " " + CharWindowScreenManager.ReturnAnnouncement();
+        }
+        else if (CharPopupScreenManager.IsOpen)
         {
             string id = HeroSelectionManager.Instance != null
                 && HeroSelectionManager.Instance.charPopup != null
@@ -756,16 +761,12 @@ internal static class PerkTreeScreenManager
 
 // ======================= announcement patches =======================
 
-/// <summary>The tree opened. Scoped to the hero-selection scene (it also opens in town at
-/// tier 0, where this mod does not yet drive it).</summary>
+/// <summary>The tree opened — on the hero-selection screen or mid-run from the character
+/// sheet's Perks tab (any scene the sheet exists in, town tier 0 included).</summary>
 [HarmonyPatch(typeof(PerkTree), nameof(PerkTree.Show))]
 internal static class PerkTreeShowAnnouncePatch
 {
-    static void Postfix()
-    {
-        if (HeroSelectionManager.Instance != null)
-            PerkTreeScreenManager.OnOpened();
-    }
+    static void Postfix() => PerkTreeScreenManager.OnOpened();
 }
 
 /// <summary>The tree actually closed (HideAction runs after any unsaved-changes confirm).</summary>
