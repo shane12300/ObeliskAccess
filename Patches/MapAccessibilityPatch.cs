@@ -51,6 +51,7 @@ public static class MapNavigator
         _partyIndex = 0;
         _look.Clear();
         _cachedCurrentNode = AtOManager.Instance?.currentMapNode;
+        ResetVoteState();
         RebuildCoordinates();
         RebuildReachable();
         SpeakMapInfo();
@@ -228,8 +229,114 @@ public static class MapNavigator
             SpeechManager.Speak("Not reachable");
             return;
         }
+        if (MpSpeech.IsMp)
+        {
+            // Multiplayer travel is a vote. Mirror PlayerSelectedNode's own refusal guards
+            // exactly, so "Voting…" is never spoken for a call the game silently drops.
+            if (m.selectedNode)
+            {
+                SpeechManager.Speak("Vote already cast. Waiting for the other players.");
+                return;
+            }
+            bool following = AtOManager.Instance != null && AtOManager.Instance.followingTheLeader;
+            bool isMaster = NetworkManager.Instance != null && NetworkManager.Instance.IsMaster();
+            if (following && !isMaster)
+            {
+                SpeechManager.Speak("Following the leader. " + HostNick() + " chooses the destination.");
+                return;
+            }
+            _localVoteAnnounced = true;
+            SpeechManager.Speak((following ? "Leading the party to " : "Voting to travel to ") + NodeType(node));
+            m.PlayerSelectedNode(node);
+            return;
+        }
         SpeechManager.Speak("Traveling to " + NodeType(node));
         m.PlayerSelectedNode(node);
+    }
+
+    // ---------------------------------------------------------------- multiplayer voting
+
+    private static bool _localVoteAnnounced;
+    private static readonly HashSet<string> _announcedVotes = new HashSet<string>();
+
+    /// <summary>Display nick of the room master, fallback "the host".</summary>
+    private static string HostNick()
+    {
+        var nm = NetworkManager.Instance;
+        if (nm == null)
+            return "the host";
+        // Position 0 is the master by the game's own convention (PlayerIsMaster).
+        string raw = nm.GetPlayerNickPosition(0);
+        return string.IsNullOrEmpty(raw) ? "the host" : MpSpeech.DisplayNick(raw);
+    }
+
+    /// <summary>Proper node name for a vote announcement (navigation speech deliberately uses
+    /// types + coordinates instead, but a partner's vote needs the name the tally shows).</summary>
+    private static string VoteNodeName(string nodeId)
+    {
+        var nd = Globals.Instance?.GetNodeData(nodeId);
+        string nm = nd != null ? AccessibleMenuBase.StripRichText(nd.NodeName) : "";
+        return nm.Length > 0 ? nm : nodeId;
+    }
+
+    /// <summary>
+    /// NET_SharePlayerSelectedNode postfix: the master re-broadcasts the whole vote dict after
+    /// every vote. Re-parse the JSON ourselves (the game's dict is left stale on a parse failure)
+    /// and announce only pairs not yet spoken; the set shrinking means a new voting round.
+    /// </summary>
+    public static void OnVoteShare(string keysJson, string valuesJson)
+    {
+        if (!MpSpeech.IsMp)
+            return;
+        string[] keys = JsonHelper.FromJson<string>(keysJson);
+        string[] vals = JsonHelper.FromJson<string>(valuesJson);
+        if (keys == null || vals == null || keys.Length == 0 || keys.Length != vals.Length)
+        {
+            Plugin.LogDebug("OnVoteShare: unparseable vote share, skipped");
+            return;
+        }
+        if (keys.Length < _announcedVotes.Count)
+            _announcedVotes.Clear(); // new voting round
+
+        string localNick = MpSpeech.LocalNick();
+        string lastName = "";
+        for (int i = 0; i < keys.Length; i++)
+        {
+            if (string.IsNullOrEmpty(keys[i]) || string.IsNullOrEmpty(vals[i]))
+                continue;
+            string key = keys[i] + "|" + vals[i];
+            lastName = VoteNodeName(vals[i]);
+            if (!_announcedVotes.Add(key))
+                continue;
+            if (keys[i] != localNick)
+                SpeechManager.SpeakQueued(MpSpeech.DisplayNick(keys[i]) + " votes for " + lastName + ".");
+            else if (!_localVoteAnnounced)
+                SpeechManager.SpeakQueued("Following " + HostNick() + " to " + lastName + "."); // auto-vote cast for us
+        }
+
+        int total = NetworkManager.Instance != null ? NetworkManager.Instance.GetNumPlayers() : 0;
+        if (total > 0 && keys.Length < total)
+        {
+            SpeechManager.SpeakQueued(keys.Length + " of " + total + " votes in.");
+            return;
+        }
+        bool unanimous = true;
+        for (int i = 1; i < vals.Length; i++)
+            if (vals[i] != vals[0])
+            {
+                unanimous = false;
+                break;
+            }
+        SpeechManager.SpeakQueued(unanimous
+            ? "All votes in. Traveling to " + VoteNodeName(vals[0]) + "."
+            : "Votes differ. Conflict round starting.");
+    }
+
+    /// <summary>Reset per-map vote bookkeeping (called from OnMapReady).</summary>
+    private static void ResetVoteState()
+    {
+        _localVoteAnnounced = false;
+        _announcedVotes.Clear();
     }
 
     // ---------------------------------------------------------------- coordinates
@@ -576,6 +683,14 @@ public static class MapNavigator
                 Append(sb, "Tip: " + tip);
         }
 
+        if (MpSpeech.IsMp && AtOManager.Instance != null && AtOManager.Instance.followingTheLeader)
+        {
+            bool isMaster = NetworkManager.Instance != null && NetworkManager.Instance.IsMaster();
+            Append(sb, isMaster
+                ? "Follow the leader is on: your pick travels the party"
+                : "Follow the leader is on: " + HostNick() + " chooses the destination");
+        }
+
         SpeechManager.Speak(sb.Length > 0 ? sb.ToString() : "Map");
     }
 
@@ -715,4 +830,15 @@ public static class MapNavigator
 public class MapReadyPatch
 {
     static void Postfix() => MapNavigator.OnMapReady();
+}
+
+/// <summary>
+/// MP travel-vote tally. The master re-broadcasts the full nick→nodeId vote dict (parallel JSON
+/// arrays) to every client after each vote — the game's only vote display is colored node markers,
+/// so this is where the spoken tally comes from.
+/// </summary>
+[HarmonyPatch(typeof(MapManager), "NET_SharePlayerSelectedNode")]
+public class MapVoteTallyAnnouncePatch
+{
+    static void Postfix(string _keys, string _values) => MapNavigator.OnVoteShare(_keys, _values);
 }

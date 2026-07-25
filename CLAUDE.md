@@ -106,10 +106,12 @@ screen owns the keyboard and translates raw keys into semantic events; per-scree
 
 Registration order in `Plugin.Awake` **is** priority (highest first):
 `Alert > Tutorial > Settings > Corruption > CardCraft > DeathScreen > CombatSelector > PerkTree >
-CharWindow > Combat > Event > TownUpgrade > Town > Map > Rewards > Loot > FinishRun > Intro >
+CharWindow > Combat > Conflict > Event > TownUpgrade > Town > Map > Rewards > Loot > FinishRun > Intro >
 CharPopup > HeroSelection > MainMenu`. A modal thus sits above the screen beneath it. (Matches the game's own
 modality order `… Event > Town > Map > Rewards …`; CardCraft sits above Event because event shops
-open over the map; DeathScreen and CombatSelector are the in-combat modals over Combat; CharWindow
+open over the map; Conflict is the MP vote tie-breaker, modal over both the event book and the
+map per the game's own `characterWindow > Conflict > Event > Map` dispatch chain (it never
+coexists with Combat — different scenes); DeathScreen and CombatSelector are the in-combat modals over Combat; CharWindow
 is the in-run character sheet, a modal over Combat/Event/Town/Map/Rewards/Loot — all of which
 also gate themselves inert on `characterWindow.IsActive()`; PerkTree sits directly above it
 because the sheet's Perks tab opens the tree mid-run (this also covers the town-tier-0 tree),
@@ -140,10 +142,11 @@ alert comes from `AlertHotkeyPoller`.
 | Main menu / game-mode / save-slot | `MainMenuInputContext` | arrows (game nav, announced), Enter; on the game-mode screen the context takes over movement: ↑/↓ (←/→ synonyms) walk a linear list (Main Menu button, the four modes, PDX buttons) instead of the game's spatial row. Mode announce = name + (if chained) the `obeliskNeedCharacter` advisory + the mode's description blurb; the chains "lock" is advisory only — the game never enforces it, so Enter opens the save screen either way, matching vanilla mouse behaviour |
 | Settings | `SettingsInputContext` + poller | arrows, Enter, Tab (4 tabs: Graphics/Audio/Gameplay/Accessibility — the last is a mod-owned virtual tab of `AccessibilityOptions` combat-narration toggles + a debug-logging toggle), Alt+T option tooltip, Escape (cancels open dropdown) |
 | Tutorial popup | `TutorialInputContext` | Up/Down walk lines, Enter activates (modal focus trap) |
-| Map — nodes | `MapInputContext` | ←/→ reachable nodes; Ctrl+↑/↓ descend/ascend look-ahead, Ctrl+←/→ siblings; Enter travels; Alt+T node detail |
+| Map — nodes | `MapInputContext` | ←/→ reachable nodes; Ctrl+↑/↓ descend/ascend look-ahead, Ctrl+←/→ siblings; Enter travels (in MP: casts the travel vote, with locked-vote / follow-the-leader refusals explained; partners' votes + tally + unanimous departure announced from a `NET_SharePlayerSelectedNode` postfix — re-parsed with `JsonHelper`, never the possibly-stale dict; follow state appended to Alt+I); Alt+T node detail |
 | Map — party strip | `MapInputContext` | Tab toggles region; ↑/↓ read heroes; 1–4 jump to slot; Enter opens the character sheet (via `OverCharacter.Clicked()`) |
 | Map — global | `MapInputContext` + poller | Alt+G gold; Alt+I (and auto on open) position + trackers + tip |
 | Corruption prompt | `CorruptionInputContext` | ←/→ choose reward + accept; ↑/↓ toggle accept; Enter confirm |
+| MP vote conflict (card-flip tie-breaker over map/event) | `ConflictInputContext` + poller (state in `ConflictScreenManager`, `Patches/ConflictAccessibilityPatch.cs`; instance at `MapManager.Instance.Conflict`, MP-only) | Narrated play-by-play from postfixes on the game's roll methods (deterministic on every client): open reason, chooser (`EnableButtonsForPlayerChoosing`), flips with card + cost (`DoCard`; cost via Traverse `charRollResult`), tie re-flips, standings (`RollResult` — fires at coroutine *creation*, values already final; eliminations/winner deliberately hang off `TurnOffCharacter`/`FinalResolution` instead), winner. ↑/↓ or 1–3 review rules, Enter chooses via public `MapManager.ConflictSelection` (guarded on `botonConflict[n].IsEnabled()` — buttons enabled only for the choosing hero's owner); Escape left to the game (no cancel exists); Alt+R via poller, whose Tick (outside the gate) detects teardown under a modal |
 | Map event (story dialog) | `EventInputContext` + poller | ↑/↓ walk title/text/choices (choices at bottom); Enter select/Continue; Alt+T hover info (probability, blocked reason, card previews, roll explainer); Alt+R repeat; rolls narrated play-by-play |
 | Alert dialogs (global) | `AlertInputContext` (top priority; `AlertDialogueManager`, `Patches/AlertAccessibilityPatch.cs`) | Covers all `AlertManager` shapes (confirm single/double, input, copy/paste, buttonless MP "waiting"). ↑/↓ walk body lines then visible option-button rows; Enter activates option rows only (text rows hint); Escape = cancel/dismiss ("No options, waiting" when buttonless); input alerts use an explicit edit mode — the game's auto-focus of the TMP field is undone on open (poller Tick), Enter on the field row starts editing (`ActivateInputField`), Enter/Escape end it keeping the typed text (an `_editCache` frame-mirror restores TMP's Escape revert; Tick also catches TMP self-deactivating), accept row submits; answers by mouse/gamepad announced too; Alt+R + the edit-mode Tick via `AlertHotkeyPoller` |
 | Town hub | `TownInputContext` + poller | ↑/↓ hub items (5 buildings, upgrades, Ready, treasures); Enter opens/claims (confirm alerts via the global alert dialogue); Tab party strip (↑/↓ heroes, 1–4 slots); Alt+T/G/I/R; arrival overview |

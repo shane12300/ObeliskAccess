@@ -82,8 +82,9 @@ Priority = how often a player hits it in a normal run × how hard it blocks a bl
         Combat improvements).
 - [ ] **Pause menu** — `OptionsManager` (ESC in run): Resign / Settings / Score / Exit, plus
       "can't exit" guards. Has `InputMoveController`.
-- [ ] **Map adjuncts** — `ConflictManager` (1-of-3 branch choice, has `ControllerMovement`);
-      `PopupNode` (node info popup — we already speak node summaries via Alt+T, verify parity).
+- [ ] **Map adjuncts — PopupNode parity** — `PopupNode` (node info popup — we already speak node
+      summaries via Alt+T, verify parity). *The `ConflictManager` half of this entry was
+      implemented as MP plan phase 2 — see Completed.*
 
 ## P2 — occasional single-player surfaces
 
@@ -149,6 +150,18 @@ Priority = how often a player hits it in a normal run × how hard it blocks a bl
 Finished features, moved here from the priority sections above. Any follow-up work a completed
 feature still requires stays in its original priority section (with a note pointing back here).
 
+- [x] **Multiplayer map voting + conflict screen** (MP plan phase 2, 2026-07-25; the
+      `ConflictManager` half was the P0 "Map adjuncts" entry) — MapNavigator now treats MP Enter
+      as a vote ("Voting to travel to…", locked-vote and follow-the-leader refusals explained),
+      speaks partners' votes and the running tally from the `NET_SharePlayerSelectedNode`
+      re-broadcast (the game's only vote display is colored node markers), announces unanimous
+      travel, and appends the follow-the-leader state to the map overview.
+      `ConflictAccessibilityPatch` + `ConflictInputContext` (registered Combat > Conflict >
+      Event, the game's own dispatch order) + `ConflictHotkeyPoller` narrate the card-flip
+      tie-breaker play-by-play: open reason, who chooses the rule, the three rule rows
+      (↑/↓ or 1–3, Enter chooses via `ConflictSelection`), every flip with card name and cost,
+      ties/re-flips, per-round standings, eliminations, and the winner. *Follow-up: PopupNode
+      parity stays in P0.*
 - [x] **Multiplayer ambient state** (MP plan phase 1, 2026-07-25; no prior todo entry — first
       slice of the five-phase multiplayer build) — `Patches/MpSpeech.cs` (shared MP text helpers)
       + `Patches/MpAmbientAccessibilityPatch.cs`: ready counts on town/craft/event sync screens

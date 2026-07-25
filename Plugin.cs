@@ -52,6 +52,11 @@ public class Plugin : BaseUnityPlugin
         InputRouter.Register(charWindowContext);
         var combatContext = new CombatInputContext();
         InputRouter.Register(combatContext);
+        // The MP travel/answer conflict is a modal over both the event book and the map — the
+        // game's own dispatch order is characterWindow > Conflict > Event > Map. It never
+        // coexists with combat (different scenes), so sitting just under Combat is free.
+        var conflictContext = new ConflictInputContext();
+        InputRouter.Register(conflictContext);
         var eventContext = new EventInputContext();
         InputRouter.Register(eventContext);
         var townUpgradeContext = new TownUpgradeInputContext();
@@ -102,6 +107,10 @@ public class Plugin : BaseUnityPlugin
         // The event screen's Alt+T/R hotkeys are unbound too; its poller also drives the
         // event lifecycle tick (reply watcher, deferred reward-card reads).
         gameObject.AddComponent<EventHotkeyPoller>().EventContext = eventContext;
+
+        // The MP conflict screen's Alt+R, plus its lifecycle tick (close detection must survive
+        // an alert owning input, e.g. a host-disconnect dialog over the conflict).
+        gameObject.AddComponent<ConflictHotkeyPoller>().ConflictContext = conflictContext;
 
         // The town hub's Alt review keys are unbound letters too; its poller also drives the
         // hub lifecycle tick (arrival announce, sub-screen close detection).

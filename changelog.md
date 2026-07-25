@@ -192,6 +192,15 @@
   corruption offers, tutorials, settings, and the rest), so Enter always acts on exactly the
   item being read — it could previously travel to the wrong map node, buy the wrong shop item,
   or even silently accept a corruption offer.
+- Multiplayer map travel made accessible: pressing Enter on a node now casts your travel vote
+  ("Voting to travel to…"), with clear refusals when your vote is already locked or when
+  follow-the-leader gives the host the choice. Partners' votes, the running tally, and the
+  final unanimous departure are all announced — the game itself only shows small colored
+  markers — and the map overview mentions follow-the-leader whenever it is on. When votes
+  disagree, the card-flip conflict screen is fully narrated: why it opened, who picks the
+  rule, the three rules (reviewed with Up/Down or 1–3, chosen with Enter when it's your
+  pick), every card flip with its cost, ties and re-flips, each round's results, eliminations,
+  and the winner. Alt+R repeats the last line.
 - Multiplayer ambient awareness: ready counts are spoken as partners ready up on the shared
   screens ("Players ready: 1 of 2. Waiting for Bob"); combat turn announcements name the
   owning player when a partner's hero acts; combat desync reloads, resign votes, and

@@ -118,7 +118,10 @@ public class RouterDoKeyBindingPatch
                 || ObeliskAccess.Input.Contexts.CorruptionInputContext.IsCurrentlyActive
                 || ObeliskAccess.Input.Contexts.CardCraftInputContext.IsCurrentlyActive
                 || ObeliskAccess.Input.Contexts.TownUpgradeInputContext.IsCurrentlyActive
-                || ObeliskAccess.Input.Contexts.FinishRunInputContext.IsCurrentlyActive))
+                || ObeliskAccess.Input.Contexts.FinishRunInputContext.IsCurrentlyActive
+                // The MP conflict chooser self-activates via ConflictSelection; a stale-cursor
+                // click could press a rule button or a side portrait.
+                || ObeliskAccess.Input.Contexts.ConflictInputContext.IsCurrentlyActive))
             return false;
 
         // Space is only the selector's repurposed key: outside combat the game's own Space
