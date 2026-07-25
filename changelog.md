@@ -121,10 +121,10 @@
   the hero and available points. Tab cycles the four perk categories — each reporting how
   many points are spent in it — plus a controls area. Up and Down move between the tree's
   rows, announcing each row's unlock threshold; Left and Right move between the perks of a
-  row. Every perk announces its state (selected, available, locked and why, or how many more
-  points you'd need), choose-one groups ("Choice 2 of 3 — taking this replaces the chosen
-  option"), a warning when a teammate already has a non-stacking perk, its effect, and its
-  cost. Enter takes or removes the perk and reports the running total — or explains exactly
+  row. Every perk announces its state when it has one — selected, locked and why, or how many
+  more points you'd need; a perk with no state prefix is available to take — plus choose-one
+  groups ("Choice 2 of 3 — taking this replaces the chosen option"), a warning when a
+  teammate already has a non-stacking perk, its effect, and its cost. Enter takes or removes the perk and reports the running total — or explains exactly
   why it can't ("a selected perk requires it"). Space saves the build. The controls area
   holds Confirm, Reset, Import, Export, the ten named save slots (load, save, and delete,
   all through the usual accessible dialogs), and Exit. Closing with unsaved changes asks
