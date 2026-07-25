@@ -76,6 +76,10 @@ public class Plugin : BaseUnityPlugin
         // barely matters — it just sits below Alert (MP disconnect dialogs pop over it).
         var introContext = new IntroInputContext();
         InputRouter.Register(introContext);
+        // The multiplayer lobby is its own scene too; below Alert (kick/password/version/exit
+        // dialogs pop over it), matching the game's … Lobby > HeroSelection/CharPopup … order.
+        var lobbyContext = new LobbyInputContext();
+        InputRouter.Register(lobbyContext);
         // The hero-selection family (scene "HeroSelection"): the character window sits over the
         // base screen; the perk tree (registered far above) is the topmost modal of the family —
         // matching the game's own modality order (PerkTree > HeroSelection/CharPopup).
@@ -111,6 +115,10 @@ public class Plugin : BaseUnityPlugin
         // The MP conflict screen's Alt+R, plus its lifecycle tick (close detection must survive
         // an alert owning input, e.g. a host-disconnect dialog over the conflict).
         gameObject.AddComponent<ConflictHotkeyPoller>().ConflictContext = conflictContext;
+
+        // The MP lobby's Alt+R/Alt+I, plus its lifecycle tick (panel arrival, room-list and
+        // slot edges, and the room-name/password edit-session mirrors).
+        gameObject.AddComponent<LobbyHotkeyPoller>().LobbyContext = lobbyContext;
 
         // The town hub's Alt review keys are unbound letters too; its poller also drives the
         // hub lifecycle tick (arrival announce, sub-screen close detection).

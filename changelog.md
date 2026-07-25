@@ -192,6 +192,18 @@
   corruption offers, tutorials, settings, and the rest), so Enter always acts on exactly the
   item being read — it could previously travel to the wrong map node, buy the wrong shop item,
   or even silently accept a corruption offer.
+- Multiplayer lobby made accessible: region selection (crossplay toggle with its locked reason,
+  quick Europe/US/Asia buttons, and the full 13-region list), connection status spoken as it
+  changes, the room browser (each room reads its name, creator, player count, password lock,
+  looking-for-more flag and version; Enter joins, and the list announces its refreshes), join
+  by room code, room setup (room name and password typed in place, player count,
+  looking-for-more), and the room screen itself — every player slot with version and host
+  tags, the room code spelled out letter by letter, Steam invites, kicking (Enter twice, so a
+  slip can't kick anyone), and Launch with its availability spoken ("need at least 2
+  players" / "waiting for the host"). Players joining or leaving the room and the launch
+  becoming available are announced live; Escape backs out of each panel; the join-by-code,
+  password, kick-received and exit prompts all use the existing spoken dialogs. Alt+I repeats
+  the current panel overview, Alt+R the last line.
 - Multiplayer map travel made accessible: pressing Enter on a node now casts your travel vote
   ("Voting to travel to…"), with clear refusals when your vote is already locked or when
   follow-the-leader gives the host the choice. Partners' votes, the running tally, and the

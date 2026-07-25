@@ -121,7 +121,10 @@ public class RouterDoKeyBindingPatch
                 || ObeliskAccess.Input.Contexts.FinishRunInputContext.IsCurrentlyActive
                 // The MP conflict chooser self-activates via ConflictSelection; a stale-cursor
                 // click could press a rule button or a side portrait.
-                || ObeliskAccess.Input.Contexts.ConflictInputContext.IsCurrentlyActive))
+                || ObeliskAccess.Input.Contexts.ConflictInputContext.IsCurrentlyActive
+                // The MP lobby self-activates everything (row Activate + edit sessions); a
+                // stale-cursor click could join a room or press Launch.
+                || ObeliskAccess.Input.Contexts.LobbyInputContext.IsCurrentlyActive))
             return false;
 
         // Space is only the selector's repurposed key: outside combat the game's own Space
