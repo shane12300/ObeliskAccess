@@ -98,8 +98,10 @@ Priority = how often a player hits it in a normal run × how hard it blocks a bl
       reachable from the hero-selection run options (open + announce only, like madness).
 - [ ] **Divination minigames** — `CardPlayerManager` (pick-a-card), `CardPlayerPairsManager`
       (memory pairs). Both have `ControllerMovement`.
-- [ ] **Intro & cinematics** — `IntroNewGameManager`, `CinematicManager`: speak story text,
-      Enter/Escape to skip. Both have `ControllerMovement`.
+- [ ] **Cinematics** — `CinematicManager` (run-start intro video and any other cinematic):
+      speak story text, Enter/Escape to skip. Has `ControllerMovement`. The other half of the
+      former "Intro & cinematics" entry — the act-transition screen (`IntroNewGameManager`) —
+      is done; see Completed.
 - [ ] **Damage meter** — `DamageMeterManager`. Has `ControllerMovement` + `IsActive()`.
 - [ ] **Combat tool / log** — `CombatToolManager` (+ `PopupNodeCombatTool`): detailed combat
       math; a speech "combat log review" may serve better than adapting the panel.
@@ -140,6 +142,15 @@ Priority = how often a player hits it in a normal run × how hard it blocks a bl
 Finished features, moved here from the priority sections above. Any follow-up work a completed
 feature still requires stays in its original priority section (with a note pointing back here).
 
+- [x] **Act-transition screen** (was P2, the `IntroNewGameManager` half of "Intro & cinematics")
+      — scene "IntroNewGame": between acts, entering sub-dungeons, and the adventure-complete
+      farewell. Implemented 2026-07-25 (`IntroAccessibilityPatch` + `IntroInputContext` +
+      `IntroHotkeyPoller`): title + full story announced on arrival, Up/Down row walk, Enter
+      continues from any row, Alt+R repeat; sub-dungeon variant announces its 4-second
+      auto-continue. Fixing its fallout also closed a latent router hole: the Enter-swallow
+      audit (see CLAUDE.md) put every self-activating context in the list — the stale-cursor
+      synthetic click had made event Enter "always pick option 1". *Remaining work — the
+      `CinematicManager` half — still tracked under P2 as "Cinematics".*
 - [x] **Narrative events** (was P0) — `EventManager` (+ `Reply`): event text, reply options with
       requirement/probability dice, continue button. Implemented 2026-07-20
       (`EventAccessibilityPatch` + `EventInputContext` + `EventHotkeyPoller`): tutorial-style

@@ -11,8 +11,11 @@ namespace ObeliskAccess.Input.Contexts;
 /// </summary>
 public class CorruptionInputContext : InputContextBase
 {
-    public override bool IsActive
+    /// <summary>Static so the <c>RouterInputPatches</c> suppressions can gate on it.</summary>
+    public static bool IsCurrentlyActive
         => MapManager.Instance != null && MapManager.Instance.IsCorruptionOver();
+
+    public override bool IsActive => IsCurrentlyActive;
 
     public override bool OnMove(Vector2 direction)
     {

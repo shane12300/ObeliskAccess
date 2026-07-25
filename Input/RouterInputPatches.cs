@@ -88,7 +88,37 @@ public class RouterDoKeyBindingPatch
                 // stale-cursor click could press a gold trait box or a side portrait. In combat
                 // the game already blocks its own Enter while the sheet is open, but on the
                 // map/town/rewards/loot screens DoFirePerformed would still fire.
-                || ObeliskAccess.Input.Contexts.CharWindowInputContext.IsCurrentlyActive))
+                || ObeliskAccess.Input.Contexts.CharWindowInputContext.IsCurrentlyActive
+                // The act-transition screen self-activates Continue in OnConfirm; the game's
+                // synthetic click would press it a second time (or whatever the cursor drifted
+                // onto if the mouse moved).
+                || ObeliskAccess.Input.Contexts.IntroInputContext.IsCurrentlyActive
+                // The event book, map and town hub all self-activate too (SelectThisOption /
+                // PlayerSelectedNode / building Clicked). They escaped this list only because the
+                // cursor used to rest wherever the physical mouse sat; now that several screens
+                // warp it (game controller nav on the intro/combat screens, our main-menu walk),
+                // the stale-position click lands on real colliders — on the event book it hit the
+                // first reply before our Activate ran, so Enter "always chose option 1" (the
+                // optionSelected guard then discarded the focused pick).
+                || ObeliskAccess.Input.Contexts.EventInputContext.IsCurrentlyActive
+                || ObeliskAccess.Input.Contexts.MapInputContext.IsCurrentlyActive
+                || ObeliskAccess.Input.Contexts.TownInputContext.IsCurrentlyActive
+                // The rest of the self-activating contexts, audited 2026-07-25: tutorial popups
+                // (Clicked), settings (HandleEnter), the corruption prompt (CorruptionContinue —
+                // a stale click on a reward collider would silently ACCEPT corruption), the craft
+                // services (single-press buy — a stale click could buy the wrong item), the town
+                // upgrades window, and the end-of-run screen (its Activate does its own
+                // warp-then-click, independent of DoKeyBinding). Combat is deliberately NOT here:
+                // in combat Enter maps to BattleKeyboard.KeyboardEnter, which is inert in plain
+                // combat but is the only working Enter for the (not yet mod-covered) energy
+                // transfer selector, and the combat context's own Confirm rides the game's
+                // warped-cursor click path by design.
+                || ObeliskAccess.Input.Contexts.TutorialInputContext.IsCurrentlyActive
+                || ObeliskAccess.Input.Contexts.SettingsInputContext.IsCurrentlyActive
+                || ObeliskAccess.Input.Contexts.CorruptionInputContext.IsCurrentlyActive
+                || ObeliskAccess.Input.Contexts.CardCraftInputContext.IsCurrentlyActive
+                || ObeliskAccess.Input.Contexts.TownUpgradeInputContext.IsCurrentlyActive
+                || ObeliskAccess.Input.Contexts.FinishRunInputContext.IsCurrentlyActive))
             return false;
 
         // Space is only the selector's repurposed key: outside combat the game's own Space

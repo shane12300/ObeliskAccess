@@ -67,6 +67,10 @@ public class Plugin : BaseUnityPlugin
         // The end-of-run screen is its own scene; it only needs to outrank the main menu.
         var finishRunContext = new FinishRunInputContext();
         InputRouter.Register(finishRunContext);
+        // The act-transition screen ("IntroNewGame") is also its own scene, so exact priority
+        // barely matters — it just sits below Alert (MP disconnect dialogs pop over it).
+        var introContext = new IntroInputContext();
+        InputRouter.Register(introContext);
         // The hero-selection family (scene "HeroSelection"): the character window sits over the
         // base screen; the perk tree (registered far above) is the topmost modal of the family —
         // matching the game's own modality order (PerkTree > HeroSelection/CharPopup).
@@ -120,6 +124,9 @@ public class Plugin : BaseUnityPlugin
         // The end-of-run screen's Alt+I/T/R keys; its poller also drives arrival detection and
         // the "Main menu available" announcement.
         gameObject.AddComponent<FinishRunHotkeyPoller>().FinishRunContext = finishRunContext;
+
+        // The act-transition screen's Alt+R repeat key.
+        gameObject.AddComponent<IntroHotkeyPoller>().IntroContext = introContext;
 
         // The in-run character sheet's Alt+T/I/R keys; its poller also drives the manager's
         // scene-change safety tick.

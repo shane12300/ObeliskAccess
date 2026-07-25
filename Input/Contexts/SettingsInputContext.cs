@@ -11,7 +11,10 @@ namespace ObeliskAccess.Input.Contexts;
 /// </summary>
 public class SettingsInputContext : InputContextBase
 {
-    public override bool IsActive => SettingsMenuManager.Active;
+    /// <summary>Static so the <c>RouterInputPatches</c> suppressions can gate on it.</summary>
+    public static bool IsCurrentlyActive => SettingsMenuManager.Active;
+
+    public override bool IsActive => IsCurrentlyActive;
 
     public override bool OnMove(Vector2 direction)
     {

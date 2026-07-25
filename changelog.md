@@ -180,3 +180,15 @@
     the cards they have cast so far, newest first.
   - Cards upgraded by story events ("2 cards upgraded") can be reviewed with Left and Right
     before closing, like the end-of-run unlocked-cards popup.
+- The story screen between acts (and when entering side dungeons like the Hatch or the Spider
+  Lair, or on completing the adventure) is now read aloud: the act title and the full story
+  text speak on arrival, Up and Down walk it line by line, Alt+R repeats it, and Enter (or
+  Escape) continues from any row. Side-dungeon entrances with no story text announce that the
+  game moves on by itself after a few seconds.
+- Fixed: choosing a story-event option with Enter always took the first option, no matter
+  which one was focused. The game's own hidden Enter handling — an invisible mouse click at
+  the last cursor position — was firing alongside the mod's and won the race. The same
+  invisible click is now suppressed on every mod-driven screen (map, town, services, upgrades,
+  corruption offers, tutorials, settings, and the rest), so Enter always acts on exactly the
+  item being read — it could previously travel to the wrong map node, buy the wrong shop item,
+  or even silently accept a corruption offer.
