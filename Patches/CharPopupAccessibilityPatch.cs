@@ -736,6 +736,10 @@ internal static class CharPopupScreenManager
         if (Time.frameCount == _openedFrame)
             return;
         BuildRowsIfEmpty();
+        // A single-row tab (Perks) announces its row on arrival — Enter should just work
+        // without an arrow press first.
+        if (_rowIndex < 0 && _rows.Count == 1)
+            _rowIndex = 0;
         if (_rowIndex < 0 || _rowIndex >= _rows.Count)
         {
             SpeechManager.Speak("Up and down to read this tab first.");

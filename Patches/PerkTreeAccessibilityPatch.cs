@@ -281,7 +281,11 @@ internal static class PerkTreeScreenManager
     private static string NodeLine(NodeEntry entry)
     {
         var sb = new StringBuilder();
-        sb.Append(NodeState(entry)).Append(". ");
+        // An available perk carries no state prefix — absence of "selected"/"locked"/"not
+        // enough points" means it can be taken, and the shorter line reads faster.
+        string state = NodeState(entry);
+        if (state != "")
+            sb.Append(state).Append(". ");
         if (entry.IsChoice)
         {
             sb.Append("Choice ").Append(entry.ChoiceIndex).Append(" of ")
@@ -323,9 +327,7 @@ internal static class PerkTreeScreenManager
         int cost = Cost(entry);
         if (available < cost)
             return "Not enough points — need " + (cost - available) + " more";
-        if (!Tree.CanModify() || !Tree.IsOwner)
-            return "Available";
-        return "Available — press Enter to take";
+        return ""; // available — no prefix, the effect leads
     }
 
     private static bool PerkSelected(PerkNodeData pnd)
