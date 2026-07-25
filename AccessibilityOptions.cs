@@ -39,6 +39,12 @@ public static class AccessibilityOptions
     public static ConfigEntry<bool> SpeakChat;
 
     /// <summary>
+    /// Announce the character a partner's card-drag arrow points at in MP combat (chatty —
+    /// off by default; only target changes are spoken either way).
+    /// </summary>
+    public static ConfigEntry<bool> AnnouncePartnerAim;
+
+    /// <summary>
     /// Verbose troubleshooting logs in the BepInEx log (patch attachment at startup, card casts
     /// with their deck-effect fields, selection-window open/close). Off by default; normal
     /// announcement logging is unaffected either way.
@@ -79,6 +85,11 @@ public static class AccessibilityOptions
             "When on, incoming multiplayer chat messages are read aloud as they arrive. Sending "
             + "and reviewing chat is always available regardless: Alt+Y types and sends a message "
             + "in place, Alt+M steps back through recent messages.");
+
+        AnnouncePartnerAim = config.Bind("Multiplayer", "AnnouncePartnerAim", false,
+            "When on, while a partner drags a card in multiplayer combat, the character their "
+            + "targeting arrow points at is spoken each time it changes. Off by default because "
+            + "it can be chatty during a partner's turn.");
 
         DebugMode = config.Bind("Debug", "DebugMode", false,
             "When on, the mod writes extra troubleshooting detail to the BepInEx log: which "

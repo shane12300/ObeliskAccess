@@ -129,7 +129,11 @@ Priority = how often a player hits it in a normal run × how hard it blocks a bl
       verify the give-receipt transfer signature never speaks on non-give flows (loot splits,
       divination costs, shop refunds). *Give and Chat themselves implemented as MP plan phase 4 —
       see Completed.*
-- [ ] **Emotes / pings** — `EmoteManager`.
+- [ ] **Emotes — playtest follow-ups** — confirm the S/A ping wording ("a ping" / "an attack
+      ping") against the actual sprites in a live MP session (log `emotesSprite` names under
+      DebugMode if unsure); cosmetic hero-selection echoes (skins/card backs/classic variants)
+      deliberately skipped — revisit only if playtesters ask. *Emotes/pings themselves
+      implemented as MP plan phase 5 — see Completed.*
 - [ ] **Connection alerts** — `NetworkManager` (mostly surfaces through `AlertManager` — P0 item
       likely covers it; verify). *Partially covered by MP phase 1 (2026-07-25): join/leave/
       host-left/desync/icon announcements now exist (`MpAmbientAccessibilityPatch`); what remains
@@ -156,6 +160,22 @@ Priority = how often a player hits it in a normal run × how hard it blocks a bl
 Finished features, moved here from the priority sections above. Any follow-up work a completed
 feature still requires stays in its original priority section (with a note pointing back here).
 
+- [x] **Emotes / pings + remaining MP echoes** (was P3 "Emotes / pings"; MP plan phase 5,
+      2026-07-25) — `Patches/EmoteAccessibilityPatch.cs` (`EmotePingManager`) +
+      `Patches/MpEchoPatches.cs`; NO new context (the planned Alt+E wheel was dropped — the game
+      already binds bare R/E/S/A/W/Q via BattleKeyboard in MP combat). Cooldown refusal +
+      targeted-pick prompt from a `SetCharactersPing` prefix/postfix pair; the S/A pick completes
+      in `CombatInputContext.OnConfirm` via public `EmoteTarget(character.Id, action)` on the
+      focused character (never the click raycast — the ping marker collider is offset), Escape
+      cancels via Traverse `ResetCharactersPing`; `Pending` re-validated live against the ping
+      markers so a mouse pick can't strand the mode. `EmoteTarget` postfix announces local +
+      remote (mute-filtered upstream; Harmony postfix params share the original's locals, so the
+      resolved sender index is visible); card pings from the shared private `DoEmoteCard` sink
+      with a prefix `HaveEmoteIcon` snapshot (ping vs clear). Partner drag-arrow targets behind
+      the new off-by-default `AnnouncePartnerAim` toggle (change-dedupe, reset on turn change +
+      NET_StopArrowNet). Echoes: `GiveControlToPlayer` (shared local+NET sink), `NET_BuyItemResult`
+      denials, `NET_HeroCardCrafted/Upgraded/Removed` (receive-only, own crafts skipped).
+      Combat overview gains the MP emote-keys sentence. *Follow-ups: S/A wording verify (P3).*
 - [x] **Chat + players panel + give gold/dust** (were P3 "Chat" and "Give gold/dust"; MP plan
       phase 4, 2026-07-25) — `Patches/ChatAccessibilityPatch.cs` (`ChatSpeech`) +
       `ChatHotkeyPoller` (context-free global poller — chat floats over every MP scene):

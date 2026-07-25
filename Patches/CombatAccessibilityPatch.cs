@@ -169,6 +169,9 @@ public static class CombatNavigator
             SpeechManager.SpeakQueued(sb.ToString());
         }
 
+        // A new turn ends any partner card-drag — re-arm the aim-change dedupe.
+        EmotePingManager.ResetAim();
+
         // Once per combat, follow the first turn with a full battlefield overview.
         if (!_overviewAnnounced)
         {
@@ -176,6 +179,10 @@ public static class CombatNavigator
             string overview = BuildBattlefield();
             if (overview.Length > 0)
                 SpeechManager.SpeakQueued(overview);
+            if (MpSpeech.IsMp && mm.emoteManager != null && mm.emoteManager.gameObject.activeSelf)
+                SpeechManager.SpeakQueued("Emote keys: R heart, E surprise, W indifference,"
+                    + " Q anger; S and A ping a target — press the key, arrow to a character,"
+                    + " then press Enter.");
         }
     }
 

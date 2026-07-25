@@ -53,14 +53,22 @@ public class CombatInputContext : InputContextBase
         return true;
     }
 
-    // Escape exits an active drill (consume); otherwise defer to the game's pause menu.
-    public override bool OnCancel() => CombatNavigator.TryDrillExit();
+    // Escape cancels a pending MP ping pick first, then exits an active drill (consume);
+    // otherwise defer to the game's pause menu.
+    public override bool OnCancel()
+        => EmotePingManager.TryCancelPick() || CombatNavigator.TryDrillExit();
 
     public override bool OnConfirm()
     {
         var controller = InputRouter.Controller;
         if (controller == null)
             return false;
+
+        // A targeted MP ping (S/A) is waiting for a character pick: Enter on the focused
+        // character completes it through the game's own EmoteTarget — never the click raycast,
+        // which could hit either the character or its offset ping marker.
+        if (EmotePingManager.TryCompletePick())
+            return true;
 
         var m = MatchManager.Instance;
 

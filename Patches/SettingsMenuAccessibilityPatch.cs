@@ -366,6 +366,7 @@ internal static class SettingsMenuManager
                 AddOption(AccessibilityOptions.SkipRoutineDecay, "Skip routine status decay");
                 AddOption(AccessibilityOptions.SkipEnemyStatusChanges, "Skip enemy status changes");
                 AddOption(AccessibilityOptions.SpeakChat, "Speak chat messages");
+                AddOption(AccessibilityOptions.AnnouncePartnerAim, "Announce partner card aim");
                 AddOption(AccessibilityOptions.DebugMode, "Debug mode");
                 break;
         }

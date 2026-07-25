@@ -192,6 +192,17 @@
   corruption offers, tutorials, settings, and the rest), so Enter always acts on exactly the
   item being read — it could previously travel to the wrong map node, buy the wrong shop item,
   or even silently accept a corruption offer.
+- Multiplayer emotes and pings in combat are now fully usable and spoken. The game's own keys
+  keep working — R heart, E surprise, W indifference, Q anger — and what you or a partner
+  sends is announced by name. The two targeted pings (S, and A for attack) now work from the
+  keyboard: press the key, arrow to a character, and press Enter to place the ping (Escape
+  cancels); the three-second cooldown is spoken instead of failing silently. Card pings on the
+  table are announced ("Bob pings the card Fireball"), and the combat overview now lists the
+  emote keys in multiplayer. A new off-by-default option ("Announce partner card aim") speaks
+  which character a partner's dragged card is pointing at, on target changes only.
+- More partner actions are echoed in multiplayer: a hero changing hands ("Magnus is now
+  controlled by Bob"), a declined shop purchase ("Purchase failed — already sold or not enough
+  gold"), and partners crafting, upgrading, or removing cards at the Forge and Altar.
 - Multiplayer chat is now spoken: incoming messages (and the joined/kicked notices that arrive
   through chat) are read aloud as they appear — toggleable on the Accessibility tab. Alt+Y
   types a message in place: everything you type goes only to the chat box, Enter sends it, and
