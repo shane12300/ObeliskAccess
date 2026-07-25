@@ -13,6 +13,7 @@ namespace ObeliskAccess.Input;
 public class AlertHotkeyPoller : MonoBehaviour
 {
     public IInputContext AlertContext;
+    public IInputContext PlayersContext;
 
     private void Update()
     {
@@ -22,7 +23,8 @@ public class AlertHotkeyPoller : MonoBehaviour
 
         ObeliskAccess.Patches.AlertDialogueManager.Tick();
 
-        if (!InputRouter.IsActive(AlertContext))
+        if (!InputRouter.IsActive(AlertContext)
+            && !(PlayersContext != null && InputRouter.IsActive(PlayersContext)))
             return;
 
         if (!(kb.leftAltKey.isPressed || kb.rightAltKey.isPressed))

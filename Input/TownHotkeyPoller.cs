@@ -24,6 +24,13 @@ public class TownHotkeyPoller : MonoBehaviour
         TownScreenManager.Tick();
         TownUpgradeScreenManager.Tick();
 
+        // Ctrl+G opens the MP give-gold/dust window (before the Alt gate — Ctrl, not Alt).
+        if (InputRouter.CtrlHeld && kb.gKey.wasPressedThisFrame && InputRouter.IsActive(TownContext))
+        {
+            GiveScreenManager.TryOpen();
+            return;
+        }
+
         if (!(kb.leftAltKey.isPressed || kb.rightAltKey.isPressed))
             return;
 

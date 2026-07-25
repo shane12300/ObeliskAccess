@@ -105,8 +105,8 @@ screen owns the keyboard and translates raw keys into semantic events; per-scree
   craft-screen open, finish-run arrival — must survive a modal owning input).
 
 Registration order in `Plugin.Awake` **is** priority (highest first):
-`Alert > Tutorial > Settings > Corruption > CardCraft > DeathScreen > CombatSelector > PerkTree >
-CharWindow > Combat > Conflict > Event > TownUpgrade > Town > Map > Rewards > Loot > FinishRun > Intro >
+`Alert > PlayersPanel > Tutorial > Settings > Corruption > CardCraft > DeathScreen > CombatSelector > PerkTree >
+CharWindow > Combat > Conflict > Give > Event > TownUpgrade > Town > Map > Rewards > Loot > FinishRun > Intro >
 Lobby > CharPopup > HeroSelection > MainMenu`. A modal thus sits above the screen beneath it. (Matches the game's own
 modality order `… Event > Town > Map > Rewards …`; CardCraft sits above Event because event shops
 open over the map; Conflict is the MP vote tie-breaker, modal over both the event book and the
@@ -119,7 +119,18 @@ while still outranking CharPopup/HeroSelection per the game's
 `PerkTree > … > HeroSelection/CharPopup` order; Alert outranks everything — the game's confirm
 dialogs are modal over every screen.) All three hero-selection contexts go inert while the
 madness or sandbox panel is open (deferred interiors — the game's own controller nav drives
-those).
+those). PlayersPanel is the second face of the AlertManager canvas (`playersT`; the alert
+dialogue requires `popupT` — mutually exclusive by game code); Give sits above Event/Town/Map
+(the game force-closes the upgrade/character windows when it opens).
+
+**MP chat is NOT a context** — it floats over every MP screen. `ChatSpeech.Typing` (live
+`chatInput.isFocused` + an ended-this-frame stamp) gates the router instead: `DoMovement`
+swallows arrows, `DoKeyBinding`'s postfix routes nothing (the submit Enter must never also
+Confirm the screen below), `DoEscape` cancels the message. Letter pollers need no gating (all
+require Alt). Keys via the context-free `ChatHotkeyPoller`: Alt+Y send (TmpEditSession; never
+call `ShowChat()` while the chat is open — its AddListener stacks and every message would send
+twice; the `status` field is bugged, always "closed" — use `chatGO.activeSelf`), Alt+M history
+(private `chatContent` via Traverse, last 20), Alt+P players panel.
 
 **Alerts**: one global top-priority `AlertInputContext` + `AlertDialogueManager`
 (`Patches/AlertAccessibilityPatch.cs`) covers every `AlertManager` dialog — confirm single/double,
@@ -146,6 +157,9 @@ alert comes from `AlertHotkeyPoller`.
 | Map — party strip | `MapInputContext` | Tab toggles region; ↑/↓ read heroes; 1–4 jump to slot; Enter opens the character sheet (via `OverCharacter.Clicked()`) |
 | Map — global | `MapInputContext` + poller | Alt+G gold; Alt+I (and auto on open) position + trackers + tip |
 | Corruption prompt | `CorruptionInputContext` | ←/→ choose reward + accept; ↑/↓ toggle accept; Enter confirm |
+| MP players panel (`playersT` face of AlertManager) | `PlayersPanelInputContext` (directly under Alert; `PlayersPanelManager`, `Patches/PlayersPanelAccessibilityPatch.cs`) | Opened by the game's players button or Alt+P (`ChatHotkeyPoller`). ↑/↓ rows from public `playerList`: game-rendered nick line (nick + master tag) + platform + ready (`PlayerManualReady`) + muted (`IsPlayerMutedBySlot`) + owned heroes (team null-safe — panel opens in the lobby too) + ping; Enter = `AlertPlayer.DoMute()/DoUnmute()` (own row refused); Escape = `HideAlert()` (both hide patches `_active`-guarded — never double-speak) |
+| MP give window (GiveManager, over map/town) | `GiveInputContext` (above Event/Town/Map; `GiveScreenManager`, `Patches/GiveAccessibilityPatch.cs`) | Ctrl+G opener in map/town pollers (bare-Ctrl suppression covers Town). ←/→ target (`Prev/NextTarget`, game skips self), ↑/↓ amount ±1 with Ctrl=20/Shift=100/both=1000 (`Give(±n)`, game clamps), Tab currency (`ShowGive(true, other)` — game RESETS amount+target, announced), Enter `GiveAction()` (client→master RPC), Escape closes. Receipts: prefix/postfix balance diff on public `CurrencyManager.ApplyShareGoldDustDict` (runs on ALL clients; `NET_MASTERGivePlayer` is master-only) — speaks only the strict "local +N, exactly one other −N" transfer signature; giver side silent |
+| MP chat (global overlay, all MP scenes) | none — router typing gates + `ChatHotkeyPoller` (`ChatSpeech`, `Patches/ChatAccessibilityPatch.cs`) | Incoming lines from `ChatText` postfix (single sink: remote, local echo, joined/kicked system lines) behind the `SpeakChat` Accessibility toggle; `WelcomeMsg` patched separately (bypasses ChatText); Alt+Y send (TmpEditSession; `ChatSend` postfix exits typing after each send — prefix checks non-empty), Alt+M history walk, Alt+P players panel; Escape cancels typing without opening the pause menu |
 | Multiplayer lobby (scene "Lobby") | `LobbyInputContext` + poller (state in `LobbyScreenManager`, `Patches/LobbyAccessibilityPatch.cs`; text entry via the shared `Patches/TmpEditSession.cs`) | Panels derived live (RoomT > CreateRoomT > JoinRoomT > regions activeSelf, else "connecting"); rows rebuilt per read; ↑/↓ + Enter; all actions call PUBLIC LobbyManager methods (buttons are inspector-wired Transforms — never simulate clicks; quick-region rows call `SetRegion` directly). Region panel: crossplay (locked reason), EU/US/Asia quick rows, 13-region dropdown as a spoken option walk (visual dropdown never opened). Join panel: Tab toggles rooms/controls; room rows composed from `RoomList` public fields, Enter joins (password → game AlertInput); count changes announced by polling (no OnRoomListUpdate patch). Create panel: name/password via TmpEditSession (password row hidden while toggle off; empty-name refusal mirrors the game's silent no-op), players dropdown, LFM, Create, Back (`GoBack`); "Set up a new game" = `CreateMultiplayerGame()` (main-menu round-trip — announced before leaving). Room panel: header with `SpellSeed` room code + password, game-built slot texts + "that's you", **two-step Enter kick** (game has NO kick confirm), Steam invite, Launch (enable edge + occupancy edges from Tick; "need at least 2 players"/"waiting for host"), Exit (game confirm). Escape: end edit > cancel dropdown/kick > Create→GoBack > Room→ExitRoom > else game default. `SetStatus` postfix speaks status lines deduped. Alt+I overview, Alt+R repeat. MaxPlayers read from `PhotonNetwork.CurrentRoom` (NetworkManager's getter is private) |
 | MP vote conflict (card-flip tie-breaker over map/event) | `ConflictInputContext` + poller (state in `ConflictScreenManager`, `Patches/ConflictAccessibilityPatch.cs`; instance at `MapManager.Instance.Conflict`, MP-only) | Narrated play-by-play from postfixes on the game's roll methods (deterministic on every client): open reason, chooser (`EnableButtonsForPlayerChoosing`), flips with card + cost (`DoCard`; cost via Traverse `charRollResult`), tie re-flips, standings (`RollResult` — fires at coroutine *creation*, values already final; eliminations/winner deliberately hang off `TurnOffCharacter`/`FinalResolution` instead), winner. ↑/↓ or 1–3 review rules, Enter chooses via public `MapManager.ConflictSelection` (guarded on `botonConflict[n].IsEnabled()` — buttons enabled only for the choosing hero's owner); Escape left to the game (no cancel exists); Alt+R via poller, whose Tick (outside the gate) detects teardown under a modal |
 | Map event (story dialog) | `EventInputContext` + poller | ↑/↓ walk title/text/choices (choices at bottom); Enter select/Continue; Alt+T hover info (probability, blocked reason, card previews, roll explainer); Alt+R repeat; rolls narrated play-by-play |

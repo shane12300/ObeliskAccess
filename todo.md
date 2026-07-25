@@ -124,8 +124,11 @@ Priority = how often a player hits it in a normal run × how hard it blocks a bl
 - [ ] **Virtual keyboard** — `KeyboardManager`: controller text entry (chat, seeds, names). Has
       `ControllerMovement`; highest modality priority. (Physical-keyboard users may bypass it —
       verify text fields accept real typing first.)
-- [ ] **Give gold/dust** — `GiveManager`. Has `ControllerMovement` + `IsActive()`.
-- [ ] **Chat** — `ChatManager` (+ `ChatController`): speak incoming messages, navigate player list.
+- [ ] **Chat/give playtest follow-ups** — verify the Enter-race dedupe on chat submit under real
+      network latency (the same Enter must never both send a message and fire the screen below);
+      verify the give-receipt transfer signature never speaks on non-give flows (loot splits,
+      divination costs, shop refunds). *Give and Chat themselves implemented as MP plan phase 4 —
+      see Completed.*
 - [ ] **Emotes / pings** — `EmoteManager`.
 - [ ] **Connection alerts** — `NetworkManager` (mostly surfaces through `AlertManager` — P0 item
       likely covers it; verify). *Partially covered by MP phase 1 (2026-07-25): join/leave/
@@ -153,6 +156,25 @@ Priority = how often a player hits it in a normal run × how hard it blocks a bl
 Finished features, moved here from the priority sections above. Any follow-up work a completed
 feature still requires stays in its original priority section (with a note pointing back here).
 
+- [x] **Chat + players panel + give gold/dust** (were P3 "Chat" and "Give gold/dust"; MP plan
+      phase 4, 2026-07-25) — `Patches/ChatAccessibilityPatch.cs` (`ChatSpeech`) +
+      `ChatHotkeyPoller` (context-free global poller — chat floats over every MP scene):
+      incoming lines spoken from the `ChatText` postfix behind the new `SpeakChat` toggle
+      (Accessibility tab), Alt+Y send via a `TmpEditSession` over the game's own field (never
+      call `ShowChat()` while open — its AddListener stacks and double-sends; the `status` field
+      is bugged, use `chatGO.activeSelf`), Alt+M history over the private `chatContent`, Alt+P
+      players panel. **Typing gates in RouterInputPatches**: while `ChatSpeech.Typing` (live
+      isFocused + the EndedThisFrame stamp) DoMovement swallows, DoKeyBinding's postfix routes
+      nothing (the submit Enter must not also Confirm the screen below), DoEscape cancels the
+      message. `Patches/PlayersPanelAccessibilityPatch.cs` + context directly under Alert
+      (playersT face; popupT face belongs to the alert dialogue — mutually exclusive): rows
+      enriched with ready state + owned heroes, Enter = DoMute/DoUnmute, Escape = HideAlert.
+      `Patches/GiveAccessibilityPatch.cs` + context above Event/Town/Map: Ctrl+G opener in the
+      map/town pollers, ←/→ target, ↑/↓ amount (Ctrl 20 / Shift 100 / both 1000), Tab currency
+      (game resets amount+target), Enter GiveAction; receipts from a balance-diff prefix/postfix
+      on `CurrencyManager.ApplyShareGoldDustDict` (runs on ALL clients, unlike the master-only
+      NET_MASTERGivePlayer) announcing only the strict "local +N, one other −N" signature.
+      *Follow-ups in P3 (Enter-race latency, transfer-signature false positives).*
 - [x] **MP lobby** (was P3; MP plan phase 3, 2026-07-25) — `Patches/LobbyAccessibilityPatch.cs`
       (`LobbyScreenManager`) + `LobbyInputContext` + `LobbyHotkeyPoller` + the shared
       `Patches/TmpEditSession.cs` (generalized port of the alert edit machinery; the alert keeps

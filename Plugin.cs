@@ -27,6 +27,10 @@ public class Plugin : BaseUnityPlugin
         // Alerts are modal over everything, so their context is registered first.
         var alertContext = new AlertInputContext();
         InputRouter.Register(alertContext);
+        // The MP players panel is the second face of the same AlertManager canvas (popupT vs
+        // playersT — mutually exclusive by game code), so it sits directly under the alert.
+        var playersPanelContext = new PlayersPanelInputContext();
+        InputRouter.Register(playersPanelContext);
         InputRouter.Register(new TutorialInputContext());
         var settingsContext = new SettingsInputContext();
         InputRouter.Register(settingsContext);
@@ -57,6 +61,10 @@ public class Plugin : BaseUnityPlugin
         // coexists with combat (different scenes), so sitting just under Combat is free.
         var conflictContext = new ConflictInputContext();
         InputRouter.Register(conflictContext);
+        // The MP give-gold/dust window opens over the map or town (the game's own order puts
+        // Give above Event/Town/Map, and it force-closes the upgrade/character windows).
+        var giveContext = new GiveInputContext();
+        InputRouter.Register(giveContext);
         var eventContext = new EventInputContext();
         InputRouter.Register(eventContext);
         var townUpgradeContext = new TownUpgradeInputContext();
@@ -90,8 +98,15 @@ public class Plugin : BaseUnityPlugin
         InputRouter.Register(new MainMenuInputContext());
 
         // The alert dialogue's Alt+R repeat key: every per-screen poller gates on its own context,
-        // so they all fall silent while the alert context owns input — this one covers it.
-        gameObject.AddComponent<AlertHotkeyPoller>().AlertContext = alertContext;
+        // so they all fall silent while the alert context owns input — this one covers it (and
+        // the players panel, the other face of the same canvas).
+        var alertPoller = gameObject.AddComponent<AlertHotkeyPoller>();
+        alertPoller.AlertContext = alertContext;
+        alertPoller.PlayersContext = playersPanelContext;
+
+        // MP chat is a global overlay, not a screen — its poller is context-free and gates on
+        // game state (Alt+Y send, Alt+M history, Alt+P players panel, plus the edit-session tick).
+        gameObject.AddComponent<ChatHotkeyPoller>();
 
         // The map's Alt+G/T/I hotkeys use letters the game leaves unbound, so a frame poller sees
         // them; it fires only while the map context owns input.

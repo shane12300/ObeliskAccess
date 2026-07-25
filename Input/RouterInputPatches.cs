@@ -23,6 +23,11 @@ public class RouterDoMovementPatch
         if (!InputRouter.IsKeyboard(_context))
             return true;
 
+        // While the MP chat input is focused the arrows belong to the text caret: swallow the
+        // game's movement (no cursor warp) and route nothing.
+        if (ObeliskAccess.Patches.ChatSpeech.Typing)
+            return false;
+
         InputRouter.Controller = __instance;
         Vector2 direction = _context.ReadValue<Vector2>();
         return !InputRouter.Move(direction); // swallow (return false) iff a context handled it
@@ -124,7 +129,11 @@ public class RouterDoKeyBindingPatch
                 || ObeliskAccess.Input.Contexts.ConflictInputContext.IsCurrentlyActive
                 // The MP lobby self-activates everything (row Activate + edit sessions); a
                 // stale-cursor click could join a room or press Launch.
-                || ObeliskAccess.Input.Contexts.LobbyInputContext.IsCurrentlyActive))
+                || ObeliskAccess.Input.Contexts.LobbyInputContext.IsCurrentlyActive
+                // The MP players panel (Enter mutes) and give window (Enter sends) self-activate;
+                // a stale-cursor click could mute the wrong player or press a give button.
+                || ObeliskAccess.Input.Contexts.PlayersPanelInputContext.IsCurrentlyActive
+                || ObeliskAccess.Input.Contexts.GiveInputContext.IsCurrentlyActive))
             return false;
 
         // Space is only the selector's repurposed key: outside combat the game's own Space
@@ -149,6 +158,12 @@ public class RouterDoKeyBindingPatch
     static void Postfix(InputController __instance, InputAction.CallbackContext _context)
     {
         if (Keyboard.current == null)
+            return;
+
+        // While the MP chat input is focused (or the very frame its edit ended — TMP processes
+        // the submit Enter first), route nothing: without this the same Enter that sent a chat
+        // message would also fire Confirm on the screen below, e.g. travel on the map.
+        if (ObeliskAccess.Patches.ChatSpeech.Typing)
             return;
 
         InputRouter.Controller = __instance;
@@ -214,7 +229,11 @@ public class RouterDoFirePerformedPatch
             || ObeliskAccess.Input.Contexts.LootInputContext.IsCurrentlyActive
             || ObeliskAccess.Input.Contexts.AlertInputContext.IsCurrentlyActive
             // The in-run character sheet uses Ctrl+Up/Down as its card drill.
-            || ObeliskAccess.Input.Contexts.CharWindowInputContext.IsCurrentlyActive;
+            || ObeliskAccess.Input.Contexts.CharWindowInputContext.IsCurrentlyActive
+            // Town: the Ctrl of the mod's Ctrl+G give-window opener must not synthetically
+            // click a hub building under the stale cursor. Give: Ctrl scales the amount step.
+            || ObeliskAccess.Input.Contexts.TownInputContext.IsCurrentlyActive
+            || ObeliskAccess.Input.Contexts.GiveInputContext.IsCurrentlyActive;
         return !(ctrlModifierScreen && InputRouter.CtrlHeld);
     }
 }
@@ -224,6 +243,14 @@ public class RouterDoEscapePatch
 {
     static bool Prefix(InputController __instance)
     {
+        // Escape while typing in the MP chat cancels the message — and must not also open the
+        // pause menu over the chat.
+        if (ObeliskAccess.Patches.ChatSpeech.Typing)
+        {
+            ObeliskAccess.Patches.ChatSpeech.CancelTyping();
+            return false;
+        }
+
         InputRouter.Controller = __instance;
         return !InputRouter.Cancel(); // swallow (return false) iff a context handled it
     }

@@ -192,6 +192,18 @@
   corruption offers, tutorials, settings, and the rest), so Enter always acts on exactly the
   item being read — it could previously travel to the wrong map node, buy the wrong shop item,
   or even silently accept a corruption offer.
+- Multiplayer chat is now spoken: incoming messages (and the joined/kicked notices that arrive
+  through chat) are read aloud as they appear — toggleable on the Accessibility tab. Alt+Y
+  types a message in place: everything you type goes only to the chat box, Enter sends it, and
+  Escape cancels without opening the pause menu. Alt+M steps back through the last twenty
+  messages, newest first.
+- Players panel (Alt+P, or the game's own button): each player's name, host tag, platform,
+  ping, ready state, current heroes, and mute state are read; Enter mutes or unmutes them
+  (muting hides their chat messages and pings), Escape closes.
+- Give window (Ctrl+G on the map or in town): pick the receiving player with Left and Right
+  (their heroes are read too), set the amount with Up and Down — hold Control for steps of 20,
+  Shift for 100, both for 1000 — Tab switches between gold and dust, Enter sends. Receiving a
+  gift is announced with the giver's name and your new balance.
 - Multiplayer lobby made accessible: region selection (crossplay toggle with its locked reason,
   quick Europe/US/Asia buttons, and the full 13-region list), connection status spoken as it
   changes, the room browser (each room reads its name, creator, player count, password lock,

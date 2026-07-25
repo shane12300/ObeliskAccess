@@ -35,6 +35,9 @@ public static class AccessibilityOptions
     /// </summary>
     public static ConfigEntry<bool> SkipEnemyStatusChanges;
 
+    /// <summary>Speak incoming multiplayer chat messages as they arrive.</summary>
+    public static ConfigEntry<bool> SpeakChat;
+
     /// <summary>
     /// Verbose troubleshooting logs in the BepInEx log (patch attachment at startup, card casts
     /// with their deck-effect fields, selection-window open/close). Off by default; normal
@@ -71,6 +74,11 @@ public static class AccessibilityOptions
             "When on, status gains and losses on enemies are never announced. Damage, healing, "
             + "card plays and deaths are still announced. Check an enemy's status by focusing it "
             + "with the arrow keys, or with Alt+S.");
+
+        SpeakChat = config.Bind("Multiplayer", "SpeakChatMessages", true,
+            "When on, incoming multiplayer chat messages are read aloud as they arrive. Sending "
+            + "and reviewing chat is always available regardless: Alt+Y types and sends a message "
+            + "in place, Alt+M steps back through recent messages.");
 
         DebugMode = config.Bind("Debug", "DebugMode", false,
             "When on, the mod writes extra troubleshooting detail to the BepInEx log: which "

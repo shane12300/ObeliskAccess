@@ -42,6 +42,13 @@ public class MapHotkeyPoller : MonoBehaviour
         if (!InputRouter.IsActive(MapContext))
             return;
 
+        // Ctrl+G opens the MP give-gold/dust window (before the Alt gate — Ctrl, not Alt).
+        if (InputRouter.CtrlHeld && kb.gKey.wasPressedThisFrame)
+        {
+            GiveScreenManager.TryOpen();
+            return;
+        }
+
         if (!(kb.leftAltKey.isPressed || kb.rightAltKey.isPressed))
             return;
 
