@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using HarmonyLib;
 using UnityEngine;
+using UnityEngine.UI;
 
 namespace ObeliskAccess.Patches;
 
@@ -153,6 +154,22 @@ internal static class ChatSpeech
         string line = CardSpeech.CleanFlat(renderedLine);
         if (line.Length > 0)
             SpeechManager.SpeakQueued(line);
+    }
+}
+
+/// <summary>EnableChat runs when an MP session brings the chat overlay up. Take the input field
+/// out of the UI navigation graph: the game's Tab handler (NextField → FindSelectableOnDown →
+/// SetSelectedGameObject) and Unity's own arrow-key UI navigation can otherwise land selection on
+/// it, and a TMP input field activates itself on select — silently focusing the chat, which mutes
+/// the whole input router via the Typing gate until Escape. Mouse clicks and Alt+Y don't go
+/// through selection-based navigation, so both still focus the field normally.</summary>
+[HarmonyPatch(typeof(ChatManager), nameof(ChatManager.EnableChat))]
+public class ChatInputNavigationPatch
+{
+    static void Postfix(ChatManager __instance)
+    {
+        if (__instance != null && __instance.chatInput != null)
+            __instance.chatInput.navigation = new Navigation { mode = Navigation.Mode.None };
     }
 }
 

@@ -301,6 +301,24 @@ internal static class CardCraftScreenManager
             return true;
         }
 
+        // MP event shops (map scene) close by READY-VOTE, not unilaterally: the game turns the
+        // exit button into a Ready toggle (Ready() → SetManualReady), and only when every player
+        // is ready does the master close all shops in lock-step (CheckForAllManualReady →
+        // NET_CloseCardCraft → the "closevent" barrier passes at once). Calling ExitCardCraft
+        // directly here destroyed the local shop early and stranded the player behind the sync
+        // mask — no screen active, no speech, and the party could deadlock outright because the
+        // manual-ready flag can no longer be set once the shop is gone. The game's own Escape
+        // never exits a map shop at all (EscapeFunction excludes the Map scene).
+        if (MpSpeech.IsMp && TownManager.Instance == null)
+        {
+            m.Ready(); // toggles the vote; collapses to ExitCardCraft in SP/town by game code
+            bool ready = Traverse.Create(m).Field<bool>("statusReady").Value;
+            SpeechManager.Speak(ready
+                ? "Ready to leave. Waiting for the other players to finish shopping. Press Escape again to keep shopping."
+                : "Staying in the shop.");
+            return true;
+        }
+
         m.ExitCardCraft(); // no-ops while blocked, mirroring the mouse path
         return true;
     }
@@ -1526,6 +1544,11 @@ internal static class CardCraftScreenManager
         var m = Mgr;
         if (!Owned(m))
             return;
+        // A partner's craft arriving via NET_HeroCard* runs the same Hero.OnCard* methods on this
+        // client; with a craft screen open here that would speak a bogus local "Crafted. N dust
+        // remaining" on top of the MP echo. The echo patch (MpEchoPatches) speaks those.
+        if (MpCraftEcho.ReceivingRemote)
+            return;
         var cm = AtOManager.Instance?.CurrencyManager;
         var sb = new StringBuilder(what);
         if (_pendingActionCard.Length > 0)
@@ -1574,9 +1597,11 @@ public class HeroAddItemPatch
 
 // ---------------------------------------------------------------------- purchase postfixes
 // The game finishes purchases inside coroutines gated by CardCraftManager.blocked; these Hero
-// methods are called exactly once per completed transaction (local and networked), making them
-// the reliable announce point. All are gated on an owned CardCraftManager so reward screens and
-// events stay silent.
+// methods are called exactly once per completed transaction, making them the reliable announce
+// point. All are gated on an owned CardCraftManager so reward screens and events stay silent.
+// In MP the same methods also run on every OTHER client via the NET_HeroCard* receive RPCs —
+// OnPurchaseCompleted skips those (MpCraftEcho.ReceivingRemote) so a partner's craft speaks only
+// its MP echo, not a phantom local purchase.
 
 [HarmonyPatch(typeof(Hero), nameof(Hero.OnCardUpgraded))]
 public class HeroCardUpgradedPatch

@@ -53,6 +53,11 @@ public static class InputRouter
     /// (e.g. the map hotkey poller) act only while its screen actually has focus, respecting priority.</summary>
     public static bool IsActive(IInputContext context) => context != null && ActiveContext() == context;
 
+    /// <summary>True when any registered context currently owns input — i.e. the mod is driving
+    /// this screen. Used by the patches to suppress game key handling the mod repurposes globally
+    /// (e.g. the game's Tab → NextField form navigation).</summary>
+    public static bool HasActiveContext => ActiveContext() != null;
+
     // ---- raw-input helpers (shared by the patches so key detection lives in one place) ----
 
     /// <summary>True when the event came from the physical keyboard (leave gamepad to the game).</summary>

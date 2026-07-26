@@ -50,11 +50,17 @@ public class MpBuyDeniedAnnouncePatch
 }
 
 /// <summary>Partner craft activity. These RPCs are receive-only (the acting client never runs
-/// them, and the Hero methods they call are pure statistics counters), so there is no overlap
-/// with the local craft announcements.</summary>
+/// them), but the Hero.OnCard* statistics counters they call are the SAME methods the local
+/// purchase announcements hang off (CardCraftAccessibilityPatch) — so if the local player also
+/// has a craft screen open when the RPC lands, the local "Crafted. N dust remaining" postfix
+/// would speak alongside this echo. <see cref="MpCraftEcho.ReceivingRemote"/> is raised for the
+/// duration of each receive so the local announcer can tell the two apart.</summary>
 [HarmonyPatch(typeof(AtOManager), nameof(AtOManager.NET_HeroCardCrafted))]
 public class MpPartnerCraftedAnnouncePatch
 {
+    static void Prefix() => MpCraftEcho.ReceivingRemote = true;
+    static void Finalizer() => MpCraftEcho.ReceivingRemote = false;
+
     static void Postfix(AtOManager __instance, int heroIndex)
         => MpCraftEcho.Announce(__instance, heroIndex, "crafted a card at the Forge");
 }
@@ -62,6 +68,9 @@ public class MpPartnerCraftedAnnouncePatch
 [HarmonyPatch(typeof(AtOManager), nameof(AtOManager.NET_HeroCardUpgraded))]
 public class MpPartnerUpgradedAnnouncePatch
 {
+    static void Prefix() => MpCraftEcho.ReceivingRemote = true;
+    static void Finalizer() => MpCraftEcho.ReceivingRemote = false;
+
     static void Postfix(AtOManager __instance, int heroIndex)
         => MpCraftEcho.Announce(__instance, heroIndex, "upgraded a card at the Altar");
 }
@@ -69,12 +78,20 @@ public class MpPartnerUpgradedAnnouncePatch
 [HarmonyPatch(typeof(AtOManager), nameof(AtOManager.NET_HeroCardRemoved))]
 public class MpPartnerRemovedAnnouncePatch
 {
+    static void Prefix() => MpCraftEcho.ReceivingRemote = true;
+    static void Finalizer() => MpCraftEcho.ReceivingRemote = false;
+
     static void Postfix(AtOManager __instance, int heroIndex)
         => MpCraftEcho.Announce(__instance, heroIndex, "removed a card");
 }
 
 internal static class MpCraftEcho
 {
+    /// <summary>True while a NET_HeroCard* receive is executing (set by the prefixes above,
+    /// cleared by finalizers so an exception can't leave it stuck). The synchronous call chain
+    /// means the Hero.OnCard* postfixes see it exactly when the trigger was a partner's craft.</summary>
+    internal static bool ReceivingRemote;
+
     internal static void Announce(AtOManager ato, int heroIndex, string action)
     {
         if (!MpSpeech.IsMp)

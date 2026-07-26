@@ -11,9 +11,9 @@ namespace ObeliskAccess.Input;
 ///
 /// Movement and Escape are prefixes that swallow the key when a context consumes it (so the game's
 /// own navigation/escape does not also run). Enter/Tab are handled in a postfix: the game ignores
-/// Tab and digits itself, but Enter falls through to a synthetic cursor click outside combat, so
-/// the prefix swallows the game's Enter on screens where that click would land on a stale cursor
-/// position (see Prefix docs).
+/// digits itself, but Enter falls through to a synthetic cursor click outside combat, and Tab maps
+/// to NextField() (an EventSystem walk that can focus input fields — see the Prefix docs), so the
+/// prefix swallows both on screens the mod drives.
 /// </summary>
 [HarmonyPatch(typeof(InputController), "DoMovement")]
 public class RouterDoMovementPatch
@@ -67,6 +67,17 @@ public class RouterDoKeyBindingPatch
 
         InputControl control = _context.control;
         bool selectorActive = ObeliskAccess.Input.Contexts.CombatSelectorInputContext.IsCurrentlyActive;
+
+        // Tab: the game maps Tab (unconditionally, before its keyboard-shortcuts gate) to
+        // NextField(), which takes the EventSystem's current selection, finds the Selectable
+        // BELOW it (FindSelectableOnDown) and selects it. Selecting a TMP input field activates
+        // it — and in multiplayer the chat input sits at the bottom of every screen, so a Tab
+        // pressed on a mod screen could silently focus the chat; the Typing gate then mutes the
+        // whole router until Escape (the "random MP lockup"). The mod repurposes Tab on every
+        // screen it owns, so swallow the game's handling whenever a context is active — the
+        // postfix still routes Tab to the context.
+        if (InputRouter.IsTab(control) && InputRouter.HasActiveContext)
+            return false;
 
         // The alert dialogue repurposes Enter as activate-focused-row; the game's Enter would
         // synthetically click whatever the (possibly warped) cursor rests on — an alert button.

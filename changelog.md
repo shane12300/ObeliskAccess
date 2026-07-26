@@ -236,6 +236,18 @@
   rule, the three rules (reviewed with Up/Down or 1–3, chosen with Enter when it's your
   pick), every card flip with its cost, ties and re-flips, each round's results, eliminations,
   and the winner. Alt+R repeats the last line.
+- Fixed: in multiplayer the keyboard could randomly go completely dead until Escape was
+  pressed. The game's hidden Tab handling could silently move focus into the chat box, after
+  which every key was treated as chat typing. Tab can no longer land in the chat box, and the
+  chat box no longer takes focus from any keyboard navigation — clicking it or Alt+Y still work.
+- Fixed: when a teammate crafted, upgraded, or removed a card while you had a shop open, you
+  heard a bogus local purchase line ("Crafted. N dust remaining") on top of the teammate
+  announcement. Only the teammate line is spoken now.
+- Changed: closing an event shop on the map with Escape in multiplayer now works like the
+  game's own exit button: it marks you ready to leave ("Ready to leave. Waiting for the other
+  players…") and everyone leaves together when all players are ready; pressing Escape again
+  lets you keep shopping. Previously Escape closed the shop for you alone, leaving you stuck
+  on a silent black screen until the others finished — and could hang the whole party.
 - Multiplayer ambient awareness: ready counts are spoken as partners ready up on the shared
   screens ("Players ready: 1 of 2. Waiting for Bob"); combat turn announcements name the
   owning player when a partner's hero acts; combat desync reloads, resign votes, and
