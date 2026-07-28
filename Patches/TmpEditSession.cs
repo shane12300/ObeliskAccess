@@ -41,6 +41,11 @@ internal sealed class TmpEditSession
 
     public bool EndedThisFrame => Time.frameCount == _endedFrame;
 
+    /// <summary>Stamp this frame as an edit-end even when no session was running (e.g. the chat
+    /// send postfix ending a TMP-native or mouse-focused edit). The stamp is what stops the very
+    /// key that ended the edit from also being routed to the screen below.</summary>
+    public void MarkEnded() => _endedFrame = Time.frameCount;
+
     /// <summary>Arm the one-shot undo of a game auto-focus (alert-style fields only).</summary>
     public void ArmDeactivate()
     {
@@ -116,6 +121,7 @@ internal sealed class TmpEditSession
                 field.DeactivateInputField();
             text = field.text;
         }
+        ClearSelection(field);
         OnEnded?.Invoke(text ?? "");
     }
 
@@ -124,5 +130,17 @@ internal sealed class TmpEditSession
     {
         _editing = false;
         _deactivatePending = false;
+        ClearSelection(_fieldProvider());
+    }
+
+    /// <summary>Drop the EventSystem selection if it still points at our field. BeginEdit's
+    /// Select() leaves the field selected after the edit ends, and a selected TMP field is a
+    /// focus-steal hazard: any selection-based navigation that lands back on it re-activates it
+    /// (OnSelect → ActivateInputField) outside any session — the chat-lockup mechanism.</summary>
+    private static void ClearSelection(TMPro.TMP_InputField field)
+    {
+        var es = UnityEngine.EventSystems.EventSystem.current;
+        if (es != null && field != null && es.currentSelectedGameObject == field.gameObject)
+            es.SetSelectedGameObject(null);
     }
 }

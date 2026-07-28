@@ -26,18 +26,22 @@ public class MapHotkeyPoller : MonoBehaviour
         if (kb == null)
             return;
 
-        // Announce the corruption prompt once, the frame it appears (its own context owns input,
-        // so this can't live in the map hotkey gate below).
+        // Announce the corruption prompt once, as soon as it appears AND is drawn (its own
+        // context owns input, so this can't live in the map hotkey gate below). AnnounceSummary
+        // returns false while the MP draw barrier is still filling the labels in — retry.
         bool corruptionActive = MapManager.Instance != null && MapManager.Instance.IsCorruptionOver();
         if (corruptionActive && !_corruptionAnnounced)
         {
-            _corruptionAnnounced = true;
-            CorruptionAccessibility.AnnounceSummary();
+            if (CorruptionAccessibility.AnnounceSummary())
+                _corruptionAnnounced = true;
         }
         else if (!corruptionActive)
         {
             _corruptionAnnounced = false;
         }
+
+        // Deferred arrival summary — runs outside the gate so it can wait out masks and modals.
+        MapNavigator.TickArrival();
 
         if (!InputRouter.IsActive(MapContext))
             return;

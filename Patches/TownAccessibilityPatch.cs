@@ -24,12 +24,18 @@ internal static class TownScreenManager
         public string Speech;
         public Func<string> Detail;
         public Action Activate;
+        /// <summary>Stable identity across rebuilds — Activate anchors on this, never on the
+        /// position: the MP divination invite inserts/removes itself at the TOP of the list at
+        /// any moment, and a positional Enter one frame later would fire the wrong row (worst
+        /// case joining a divination round the player never chose).</summary>
+        public string Key;
     }
 
     private static readonly List<Entry> _entries = new List<Entry>();
     private static Region _region = Region.Main;
     private static int _index;
     private static int _partyIndex;
+    private static string _focusedKey; // identity of the last row announced to the user
 
     // ---- open/close lifecycle (no patch on scene init: ShowCardCraft-style timing issues) ----
     private static bool _townPresent;
@@ -110,6 +116,7 @@ internal static class TownScreenManager
         {
             _entries.Add(new Entry
             {
+                Key = "divination-invite",
                 Speech = "Join divination round, started by "
                     + MpSpeech.DisplayNick(AtOManager.Instance != null ? AtOManager.Instance.townDivinationCreator : null),
                 Detail = () => tm.joinDivinationText != null
@@ -129,6 +136,7 @@ internal static class TownScreenManager
         {
             _entries.Add(new Entry
             {
+                Key = "upgrades",
                 Speech = "Town upgrades",
                 Detail = () => "Spend supply points on permanent town upgrades",
                 Activate = () => tm.ShowTownUpgrades(true),
@@ -140,6 +148,7 @@ internal static class TownScreenManager
             readyLabel = "Ready";
         _entries.Add(new Entry
         {
+            Key = "ready",
             Speech = readyLabel + ", leave town",
             Detail = () => "Leave town and return to the map",
             Activate = () => tm.Ready(),
@@ -163,6 +172,7 @@ internal static class TownScreenManager
 
         _entries.Add(new Entry
         {
+            Key = "building:" + b.idTitle,
             Speech = title + (disabled ? ", unavailable" : ""),
             Detail = () =>
             {
@@ -182,6 +192,7 @@ internal static class TownScreenManager
         string id = t.treasureId;
         _entries.Add(new Entry
         {
+            Key = (isCommunity ? "treasure-community:" : "treasure:") + id,
             Speech = (isCommunity ? "Community treasure, " : "Treasure, ") + amounts,
             Detail = () => "Reward from a previous run: " + amounts + ". Enter to claim",
             Activate = () =>
@@ -291,6 +302,7 @@ internal static class TownScreenManager
             _index = delta > 0 ? 0 : _entries.Count - 1;
         else
             _index = Wrap(_index + delta, _entries.Count);
+        _focusedKey = _entries[_index].Key;
         SpeechManager.Speak(_entries[_index].Speech);
     }
 
@@ -312,6 +324,26 @@ internal static class TownScreenManager
             _index = 0;
         if (_index >= _entries.Count)
             _index = _entries.Count - 1;
+
+        // Anchor on the row the user last HEARD, not on the position: the divination invite
+        // (or a claimed treasure) shifting the list must never redirect a pending Enter.
+        if (_focusedKey != null && _entries[_index].Key != _focusedKey)
+        {
+            int relocated = _entries.FindIndex(e => e.Key == _focusedKey);
+            if (relocated >= 0)
+            {
+                _index = relocated;
+            }
+            else
+            {
+                if (_index >= _entries.Count)
+                    _index = _entries.Count - 1;
+                _focusedKey = _entries[_index].Key;
+                SpeechManager.Speak("That item is gone. Now on: " + _entries[_index].Speech);
+                return;
+            }
+        }
+        _focusedKey = _entries[_index].Key;
         _entries[_index].Activate?.Invoke();
     }
 
@@ -330,6 +362,7 @@ internal static class TownScreenManager
             {
                 if (_index < 0 || _index >= _entries.Count)
                     _index = 0;
+                _focusedKey = _entries[_index].Key;
                 SpeechManager.Speak(_entries[_index].Speech);
             }
         }
@@ -527,5 +560,32 @@ public class TownJoinDivinationAnnouncePatch
             ? CardSpeech.CleanFlat(__instance.joinDivinationText.text)
             : "A divination round has started.";
         SpeechManager.SpeakQueued(body + " A Join divination item is at the top of the town list.");
+    }
+}
+
+/// <summary>MP town Ready is a vote toggle (statusReady + SetManualReady) with no local echo of
+/// its own — and the game silently UN-readies the player whenever they open a town service
+/// (DisableReady, which routes through Ready). Without this a player who readied, browsed a
+/// shop, and came back believes they are still ready while the whole party waits on them; the
+/// ambient ready-count line stays silent on the un-ready-to-zero edge by design. SP calls take
+/// the exit/tutorial path where other announcements own the outcome.</summary>
+[HarmonyPatch(typeof(TownManager), nameof(TownManager.Ready))]
+public class TownReadyToggleAnnouncePatch
+{
+    static void Prefix(TownManager __instance, out bool __state)
+    {
+        __state = Traverse.Create(__instance).Field<bool>("statusReady").Value;
+    }
+
+    static void Postfix(TownManager __instance, bool __state)
+    {
+        if (!MpSpeech.IsMp)
+            return;
+        bool now = Traverse.Create(__instance).Field<bool>("statusReady").Value;
+        if (now == __state)
+            return;
+        SpeechManager.SpeakQueued(now
+            ? "Ready to leave town — waiting for the other players."
+            : "No longer ready to leave town.");
     }
 }

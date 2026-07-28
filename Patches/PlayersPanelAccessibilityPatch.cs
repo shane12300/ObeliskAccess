@@ -47,6 +47,16 @@ internal static class PlayersPanelManager
             SpeechManager.SpeakQueued("Players panel closed.");
     }
 
+    /// <summary>A real alert claiming the shared canvas force-closes the panel WITHOUT HideAlert
+    /// (ShowAlert just swaps playersT off). Drop our open flag silently — the alert's own open
+    /// announce covers the transition; without this, the alert's eventual close would speak a
+    /// phantom "Players panel closed" minutes after the panel actually went away.</summary>
+    internal static void OnSupersededByAlert()
+    {
+        if (_active && PanelOpen)
+            _active = false;
+    }
+
     // ---------------------------------------------------------------- input (from the context)
 
     public static void Move(int dir)
@@ -185,4 +195,11 @@ public class PlayersPanelShownPatch
 public class PlayersPanelHiddenPatch
 {
     static void Postfix() => PlayersPanelManager.OnHidden();
+}
+
+/// <summary>A real alert replacing the panel on the shared canvas (no HideAlert on that path).</summary>
+[HarmonyPatch(typeof(AlertManager), "ShowAlert")]
+public class PlayersPanelSupersededPatch
+{
+    static void Prefix() => PlayersPanelManager.OnSupersededByAlert();
 }

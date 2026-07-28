@@ -51,6 +51,7 @@ internal static class LobbyScreenManager
     // Two-step kick.
     private static int _kickArmedSlot = -1;
     private static float _kickArmedTime;
+    private static string _kickArmedNick; // occupant at arm time — slots compact when players leave
 
     // Edge trackers.
     private static string _lastStatusSpoken = "";
@@ -98,6 +99,15 @@ internal static class LobbyScreenManager
         {
             _sceneAnnounced = true;
             SpeechManager.Speak("Multiplayer lobby.");
+            // Take the create-panel TMP fields out of the UI navigation graph (same hardening
+            // as the chat input): selection-based navigation — the game's Tab NextField walk or
+            // Unity arrow-key nav — activates a selected TMP field outside any edit session,
+            // silently eating keystrokes while Enter dual-fires field submit + row activation.
+            // Mouse clicks and the mod's own edit sessions are unaffected.
+            if (lm.UICreateName != null)
+                lm.UICreateName.navigation = new UnityEngine.UI.Navigation { mode = UnityEngine.UI.Navigation.Mode.None };
+            if (lm.UICreatePwd != null)
+                lm.UICreatePwd.navigation = new UnityEngine.UI.Navigation { mode = UnityEngine.UI.Navigation.Mode.None };
         }
 
         // Panel edge: reset focus, then announce the arrival overview (the Room panel waits for
@@ -604,16 +614,29 @@ internal static class LobbyScreenManager
         var lm = LobbyManager.Instance;
         if (lm == null || NetworkManager.Instance == null)
             return;
-        string nick = MpSpeech.DisplayNick(NetworkManager.Instance.GetPlayerNickPosition(slot));
+        string rawNick = NetworkManager.Instance.GetPlayerNickPosition(slot);
+        string nick = MpSpeech.DisplayNick(rawNick);
         if (_kickArmedSlot != slot)
         {
             // Kick has no game confirm dialog — require a deliberate second Enter.
             _kickArmedSlot = slot;
+            _kickArmedNick = rawNick;
             _kickArmedTime = Time.unscaledTime;
             SpeechManager.Speak("Press Enter again to kick " + nick + ".");
             return;
         }
+        // Slots COMPACT when someone leaves on their own: if the armed player left, the next
+        // player shifted into this slot index — a stale second Enter must not kick them.
+        if (rawNick != _kickArmedNick)
+        {
+            _kickArmedNick = rawNick;
+            _kickArmedTime = Time.unscaledTime;
+            SpeechManager.Speak("The players changed — this slot is now " + nick
+                + ". Press Enter again to kick them.");
+            return;
+        }
         _kickArmedSlot = -1;
+        _kickArmedNick = null;
         SpeechManager.Speak("Kicked " + nick + ".");
         lm.KickPlayer(slot);
     }
@@ -796,4 +819,19 @@ internal static class LobbyScreenManager
 public class LobbyStatusAnnouncePatch
 {
     static void Postfix() => LobbyScreenManager.OnStatusChanged();
+}
+
+/// <summary>A wrong room password fails with NO feedback at all in the game (GetRoomPassword
+/// simply does nothing on mismatch — no alert, no retry): the player hears the input alert
+/// close and lands back on the Join panel unexplained. On a match the method clears the private
+/// roomPassword field before joining, so a non-empty field after the call means mismatch.</summary>
+[HarmonyPatch(typeof(LobbyManager), "GetRoomPassword")]
+public class LobbyWrongPasswordAnnouncePatch
+{
+    static void Postfix(LobbyManager __instance)
+    {
+        string pwd = Traverse.Create(__instance).Field<string>("roomPassword").Value;
+        if (!string.IsNullOrEmpty(pwd))
+            SpeechManager.Speak("Wrong password. Press Enter on the room to try again.");
+    }
 }

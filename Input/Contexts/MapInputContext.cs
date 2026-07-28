@@ -36,6 +36,13 @@ public class MapInputContext : InputContextBase
             // World hidden while a mask/loading screen is up, or while an event replaces it.
             if (m.worldTransform == null || !m.worldTransform.gameObject.activeSelf)
                 return false;
+            // The map mask (ShowMask) does NOT hide the world — MP sync barriers (travel votes,
+            // corruption-reward resolution, event closes) sit masked with the world drawn. The
+            // mask is only visual for the game (its clicks are physics raycasts), so without
+            // this gate a type-ahead Enter could cast an irreversible travel vote or open the
+            // give window mid-barrier.
+            if (m.maskObject != null && m.maskObject.gameObject.activeSelf)
+                return false;
             return true;
         }
     }

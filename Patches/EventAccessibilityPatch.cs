@@ -91,25 +91,23 @@ internal static class EventScreenManager
     public static void OnOptionSelected(int optionIndex)
     {
         var em = EventManager.Instance;
-        if (em == null || _phase != Phase.Choosing)
+        if (em == null)
+            return;
+        if (_phase == Phase.Resolving)
+        {
+            // MP: NET_SelectAnswer lands here once every vote is in — after a conflict
+            // tie-breaker the winning option can differ from the local vote, and the result
+            // row would otherwise report the LOSING option as "Chosen".
+            UpdateChosenText(optionIndex, announceIfChanged: true);
+            return;
+        }
+        if (_phase != Phase.Choosing)
             return;
         // The game rejects selections after the first; only act on the accepted one.
         if (em.optionSelected != optionIndex)
             return;
 
-        var replies = GetVisibleReplies();
-        Reply selected = null;
-        foreach (var r in replies)
-        {
-            if (r.GetOptionIndex() == optionIndex)
-            {
-                selected = r;
-                break;
-            }
-        }
-        _selectedChoiceText = selected != null && selected.replyText != null
-            ? Clean(selected.replyText.text)
-            : "";
+        UpdateChosenText(optionIndex, announceIfChanged: false);
 
         _phase = Phase.Resolving;
         _rollCardsCalls = 0;
@@ -119,6 +117,68 @@ internal static class EventScreenManager
         // auto-select of a lone option used to arrive here too — it is now suppressed by
         // EventAutoSelectSuppressPatch; single-choice events wait for Enter.)
         SpeechManager.Speak("Selected: " + _selectedChoiceText);
+        // In MP this was only the local VOTE: the event resolves when every player has chosen,
+        // which can be minutes away. Without this the wait is dead silence.
+        if (WaitingForVotes)
+            SpeechManager.SpeakQueued("Waiting for the other players to choose.");
+    }
+
+    /// <summary>Resolve an option index to its reply text and remember it as the chosen option;
+    /// optionally speak the correction when it replaces a different remembered choice.</summary>
+    private static void UpdateChosenText(int optionIndex, bool announceIfChanged)
+    {
+        foreach (var r in GetVisibleReplies())
+        {
+            if (r == null || r.GetOptionIndex() != optionIndex || r.replyText == null)
+                continue;
+            string text = Clean(r.replyText.text);
+            if (text.Length > 0 && text != _selectedChoiceText)
+            {
+                _selectedChoiceText = text;
+                if (announceIfChanged)
+                    SpeechManager.SpeakQueued("The party chose: " + text);
+            }
+            return;
+        }
+    }
+
+    /// <summary>True while the MP vote is still open — some player has not chosen yet. This is
+    /// the unbounded wait (a reading partner can take minutes); the roll animation after every
+    /// vote is in stays deliberately silent like single player (bounded, a few seconds).</summary>
+    private static bool WaitingForVotes
+    {
+        get
+        {
+            var em = EventManager.Instance;
+            return em != null && MpSpeech.IsMp && NetworkManager.Instance != null
+                && em.MultiplayerPlayerSelection != null
+                && em.MultiplayerPlayerSelection.Count < NetworkManager.Instance.GetNumPlayers();
+        }
+    }
+
+    /// <summary>A partner's vote arriving (NET_OptionSelected runs on every client). Speaks who
+    /// chose what plus the running tally — the game's only display is a small nick marker.</summary>
+    public static void OnMpVote(string playerNick, int option)
+    {
+        var em = EventManager.Instance;
+        if (em == null || option < 0 || !MpSpeech.IsMp || NetworkManager.Instance == null)
+            return;
+        if (playerNick == NetworkManager.Instance.GetPlayerNick())
+            return; // the local vote already spoke ("Selected: …")
+        string text = "";
+        foreach (var r in GetVisibleReplies())
+        {
+            if (r != null && r.GetOptionIndex() == option && r.replyText != null)
+            {
+                text = Clean(r.replyText.text);
+                break;
+            }
+        }
+        int votes = em.MultiplayerPlayerSelection != null ? em.MultiplayerPlayerSelection.Count : 0;
+        int total = NetworkManager.Instance.GetNumPlayers();
+        SpeechManager.SpeakQueued(MpSpeech.DisplayNick(playerNick) + " chose"
+            + (text.Length > 0 ? ": " + text : " an option") + ". "
+            + votes + " of " + total + " chosen.");
     }
 
     public static void OnCardDrawn(int heroIndex)
@@ -312,9 +372,14 @@ internal static class EventScreenManager
     {
         if (!Active || _entries.Count == 0)
             return;
-        // Input is locked while the roll/animation plays, like a sighted player watching it.
+        // Input is locked while the roll/animation plays, like a sighted player watching it —
+        // but the MP vote wait is unbounded, so it answers instead of staying silent.
         if (_phase == Phase.Resolving)
+        {
+            if (WaitingForVotes)
+                SpeechManager.Speak("Waiting for the other players to choose.");
             return;
+        }
 
         _index += dir;
         if (_index < 0)
@@ -327,8 +392,14 @@ internal static class EventScreenManager
 
     public static void Activate()
     {
-        if (!Active || _entries.Count == 0 || _phase == Phase.Resolving)
+        if (!Active || _entries.Count == 0)
             return;
+        if (_phase == Phase.Resolving)
+        {
+            if (WaitingForVotes)
+                SpeechManager.Speak("Waiting for the other players to choose.");
+            return;
+        }
         var em = EventManager.Instance;
         if (_index < 0 || _index >= _entries.Count)
             return;
@@ -359,6 +430,17 @@ internal static class EventScreenManager
             {
                 if (em.optionSelected != -1)
                     return;
+                // Follow-the-leader: the game's own mouse path (Reply.OnMouseUp) refuses
+                // follower picks — the host's choice is auto-applied to everyone. Calling
+                // SelectThisOption directly would bypass that gate, register a divergent vote,
+                // and trigger the conflict screen follow mode exists to prevent.
+                if (MpSpeech.IsMp && NetworkManager.Instance != null
+                    && !NetworkManager.Instance.IsMaster()
+                    && AtOManager.Instance != null && AtOManager.Instance.followingTheLeader)
+                {
+                    SpeechManager.Speak("Following the leader — the host chooses for the party.");
+                    return;
+                }
                 if (entry.Reply.replyButtonBlocked != null
                     && entry.Reply.replyButtonBlocked.gameObject.activeSelf)
                 {
@@ -796,6 +878,51 @@ public class EventNetSelectAnswerPatch
     static void Postfix(int _answerId)
     {
         EventScreenManager.OnOptionSelected(_answerId);
+    }
+}
+
+/// <summary>Every vote (local and partner) lands here on every client; the manager filters the
+/// local echo and speaks partner picks with the running tally.</summary>
+[HarmonyPatch(typeof(EventManager), nameof(EventManager.NET_OptionSelected))]
+public class EventMpVoteAnnouncePatch
+{
+    static void Postfix(string _playerNick, int _option)
+    {
+        EventScreenManager.OnMpVote(_playerNick, _option);
+    }
+}
+
+/// <summary>The MP Continue button is a READY TOGGLE (statusReady + SetManualReady), not a
+/// close: a second press silently un-readies, and for follow-the-leader non-masters the whole
+/// call is a silent no-op. Speak all three outcomes — the ambient ready-count line covers
+/// partners but deliberately says nothing on the un-ready-to-zero edge, and its non-master
+/// round-trip lag leaves the local press feeling dead.</summary>
+[HarmonyPatch(typeof(EventManager), nameof(EventManager.Ready))]
+public class EventReadyToggleAnnouncePatch
+{
+    static void Prefix(EventManager __instance, out bool __state)
+    {
+        __state = Traverse.Create(__instance).Field<bool>("statusReady").Value;
+    }
+
+    static void Postfix(EventManager __instance, bool forceIt, bool __state)
+    {
+        // SP and town route straight to the close path — other announcements own those.
+        if (!MpSpeech.IsMp || TownManager.Instance != null)
+            return;
+        bool now = Traverse.Create(__instance).Field<bool>("statusReady").Value;
+        if (now == __state)
+        {
+            // Unchanged = the follower early-out (a real press only; the game's own forced
+            // sync calls pass forceIt and may legitimately no-op).
+            if (!forceIt && NetworkManager.Instance != null && !NetworkManager.Instance.IsMaster()
+                && AtOManager.Instance != null && AtOManager.Instance.followingTheLeader)
+                SpeechManager.Speak("Following the leader — the host continues for the party.");
+            return;
+        }
+        SpeechManager.Speak(now
+            ? "Ready to continue — waiting for the other players."
+            : "No longer ready to continue.");
     }
 }
 

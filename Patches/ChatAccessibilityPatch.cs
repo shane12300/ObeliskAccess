@@ -61,10 +61,14 @@ internal static class ChatSpeech
         }
         else
         {
-            // Mouse-focused field (no session): just defocus it.
+            // Mouse-focused field (no session): just defocus it. Stamp the frame so this
+            // Escape ends only the typing and is not also routed as a Cancel below.
             var cm = ChatManager.Instance;
             if (cm != null && cm.chatInput != null && cm.chatInput.isFocused)
+            {
                 cm.chatInput.DeactivateInputField();
+                _session.MarkEnded();
+            }
         }
     }
 
@@ -133,16 +137,26 @@ internal static class ChatSpeech
 
     /// <summary>ChatSend postfix (only reached for a non-empty send): exit typing mode — the game
     /// re-activates the field to keep a sighted player typing, which would trap a screen-reader
-    /// user; one message per Alt+Y instead.</summary>
+    /// user; one message per Alt+Y instead. Two traps this must defuse:
+    /// 1. The game's ActivateInputField is DEFERRED (a pending flag TMP consumes next LateUpdate),
+    ///    so an immediate DeactivateInputField here is a no-op against it — the field re-focuses
+    ///    one frame after "Sent." and the Typing gate silently mutes the router again. Arm the
+    ///    session's deferred deactivate, which polls until the refocus lands and undoes it.
+    /// 2. This runs for ANY non-empty MP send, session or not — a mouse-focused send must exit
+    ///    typing too, or the game's refocus traps that player in a muted router with no feedback.
+    /// MarkEnded stamps the frame so the submit Enter is never also routed to the screen below
+    /// (Abort, unlike EndEdit, sets no stamp).</summary>
     internal static void OnSendCompleted()
     {
         var cm = ChatManager.Instance;
-        if (!_sendArmed || cm == null)
+        if (cm == null)
             return;
         _sendArmed = false;
         if (cm.chatInput != null && cm.chatInput.isFocused)
             cm.chatInput.DeactivateInputField();
         _session.Abort(); // silent — the ChatText echo of our own message is the confirmation
+        _session.MarkEnded();
+        _session.ArmDeactivate(); // catch the game's deferred re-focus next frame(s)
         SpeechManager.Speak("Sent.");
     }
 

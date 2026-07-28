@@ -42,6 +42,12 @@ public static class CombatSelectorManager
     private static bool _suppressCloseAnnounce;
     private static readonly List<string> _drillLines = new List<string>();
     private static int _drillIndex = -1;
+    // One-shot confirm latch. The game's own confirm buttons deactivate before calling
+    // Assign*Action, but the mod calls those methods directly — and in MP they resolve in a
+    // multi-frame coroutine during which the window stays visibly open, so a re-pressed Space
+    // would fire a SECOND resolution RPC against already-mutated pile state (double-discard or
+    // desync). Cleared by Reset() on every window open/close edge.
+    private static bool _confirmFired;
 
     // ======================= open / close =======================
 
@@ -272,6 +278,11 @@ public static class CombatSelectorManager
             SpeechManager.Speak("Waiting for another player.");
             return true;
         }
+        if (_confirmFired)
+        {
+            SpeechManager.Speak("Already confirmed — resolving.");
+            return true;
+        }
         int chosen = SelectedCount();
         switch (_mode)
         {
@@ -287,6 +298,7 @@ public static class CombatSelectorManager
                     ? "Confirmed, " + chosen + " " + CardWord(chosen) + " to " + PlaceWord(_place) + "."
                     : "Continuing without choosing.");
                 _suppressCloseAnnounce = true;
+                _confirmFired = true;
                 m.AssignDiscardAction();
                 return true;
             }
@@ -297,6 +309,7 @@ public static class CombatSelectorManager
                       + (_toVanish ? "vanish" : "discard") + "."
                     : "Continuing.");
                 _suppressCloseAnnounce = true;
+                _confirmFired = true;
                 m.AssignLookDiscardAction();
                 return true;
             }
@@ -310,6 +323,7 @@ public static class CombatSelectorManager
                 }
                 SpeechManager.Speak("Confirmed.");
                 _suppressCloseAnnounce = true;
+                _confirmFired = true;
                 m.AssignLookDiscardAction();
                 return true;
             }
@@ -441,7 +455,13 @@ public static class CombatSelectorManager
 
     private static void ConfirmNow(MatchManager m)
     {
+        if (_confirmFired)
+        {
+            SpeechManager.Speak("Already confirmed — resolving.");
+            return;
+        }
         _suppressCloseAnnounce = true;
+        _confirmFired = true;
         SpeechManager.SpeakQueued("Confirmed.");
         if (_mode == Mode.DiscardHand)
             m.AssignDiscardAction();
@@ -541,9 +561,20 @@ public static class CombatSelectorManager
         MatchManager.Instance == null ? 0
         : Traverse.Create(MatchManager.Instance).Field<int>("GlobalAddcardCardsNum").Value;
 
-    // Mirrors BattleKeyboard's gate: act when it's your combat turn or your add/discard turn.
+    // Mirrors the game's PER-WINDOW authority, not BattleKeyboard's loose OR. A look/discard
+    // window can target a PARTNER's hero (heroIndexWaitingForAddDiscard is the card's target,
+    // while heroActive stays the caster's) — the game hides the confirm button for everyone but
+    // the target's owner (UIDeckCards.TurnOn / IsYourTurnForAddDiscard), yet AssignLookDiscard-
+    // Action itself has no gate and RPCs to all: an OR-gated Space from the caster's client
+    // would resolve the partner's mandatory pick with this client's divergent local selection.
     private static bool CanAct(MatchManager m)
-        => m != null && (m.IsYourTurn() || m.IsYourTurnForAddDiscard());
+    {
+        if (m == null)
+            return false;
+        if (m.heroIndexWaitingForAddDiscard > -1)
+            return m.IsYourTurnForAddDiscard();
+        return m.IsYourTurn();
+    }
 
     private static string PlaceWord(Enums.CardPlace p)
     {
@@ -576,6 +607,7 @@ public static class CombatSelectorManager
         _lastCount = -1;
         _lastCountAt = 0f;
         _suppressCloseAnnounce = false;
+        _confirmFired = false;
         ExitDrill();
     }
 

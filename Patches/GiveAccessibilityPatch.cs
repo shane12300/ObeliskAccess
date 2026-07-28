@@ -46,6 +46,14 @@ internal static class GiveScreenManager
         return GoldMode ? cur.GetPlayerGold() : cur.GetPlayerDust();
     }
 
+    /// <summary>True while there is anyone to give to. After a partner disconnects mid-run this
+    /// goes false — and the game's target cycling then recurses forever (NextTarget skips the
+    /// local position and wraps over a 1-player list: an uncatchable StackOverflow the mouse UI
+    /// avoids only by hiding its buttons). Every entry point checks this before touching the
+    /// game's target logic.</summary>
+    private static bool HasOtherPlayers
+        => NetworkManager.Instance != null && NetworkManager.Instance.GetNumPlayers() >= 2;
+
     // ---------------------------------------------------------------- input (from the context)
 
     public static void AdjustQuantity(int dir)
@@ -77,6 +85,12 @@ internal static class GiveScreenManager
         var gm = GiveManager.Instance;
         if (gm == null)
             return;
+        if (!HasOtherPlayers)
+        {
+            SpeechManager.Speak("No other players left. Closing the give window.");
+            Close();
+            return;
+        }
         if (dir > 0)
             gm.NextTarget();
         else
@@ -99,6 +113,12 @@ internal static class GiveScreenManager
         var gm = GiveManager.Instance;
         if (gm == null)
             return;
+        if (!HasOtherPlayers)
+        {
+            SpeechManager.Speak("No other players left. Closing the give window.");
+            Close();
+            return;
+        }
         if (gm.quantity <= 0)
         {
             SpeechManager.Speak("Set a quantity first — Up and Down adjust it.");
@@ -119,6 +139,11 @@ internal static class GiveScreenManager
         var gm = GiveManager.Instance;
         if (!MpSpeech.IsMp || gm == null || gm.IsActive())
             return;
+        if (!HasOtherPlayers)
+        {
+            SpeechManager.Speak("No other players to give to.");
+            return; // ShowGive(true) with one player would recurse in NextTarget — see above
+        }
         gm.ShowGive(true); // the divination-creator refusal opens a game alert instead
     }
 
@@ -160,6 +185,21 @@ public class GiveShownPatch
             GiveScreenManager.OnShown(true);
         else if (!state && __state)
             GiveScreenManager.OnShown(false);
+    }
+}
+
+/// <summary>Force-close the give panel when the run tears down. GiveManager is DontDestroyOnLoad
+/// and nothing game-side closes its panel on the disconnect path (master reloads the save, a
+/// client is sent to the Lobby) — the stale panel would keep GiveInputContext on top of the next
+/// scene, swallowing every key over a team that no longer exists.</summary>
+[HarmonyPatch(typeof(AtOManager), nameof(AtOManager.ClearGame))]
+public class GiveClosedOnRunTeardownPatch
+{
+    static void Postfix()
+    {
+        var gm = GiveManager.Instance;
+        if (gm != null && gm.IsActive())
+            gm.ShowGive(false);
     }
 }
 

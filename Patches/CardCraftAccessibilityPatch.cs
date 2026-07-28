@@ -42,6 +42,16 @@ internal static class CardCraftScreenManager
 
     private static float _lastWaitSpeak;
 
+    // MP map shops: the ready-vote close (master coroutine or NET_CloseCardCraft receive) calls
+    // ExitCardCraft, which silently no-ops while a purchase holds `blocked` — and nothing
+    // game-side ever retries, stranding this client in a shop no vote can close again. The
+    // ExitCardCraft postfix flags the swallowed close; Tick retries once blocked clears.
+    private static bool _retryExitWhenUnblocked;
+    // Watchdog for `blocked` itself: the game's own 5s BlockedCo safety dies with its coroutines
+    // (e.g. the GameObject deactivating mid-purchase), leaving every key "Please wait" forever.
+    private static float _blockedSince = -1f;
+    private static bool _divWaitingAnnounced;
+
     private static CardCraftManager Mgr => CardCraftManager.Instance;
 
     /// <summary>True for the five screens this layer owns (5–7 are challenge/corruption flows).</summary>
@@ -52,6 +62,39 @@ internal static class CardCraftScreenManager
     public static void Tick()
     {
         var m = Mgr;
+
+        // Blocked watchdog + swallowed-close retry run before every gate — they must work even
+        // while the GameObject is inactive or another context owns input.
+        if (m != null)
+        {
+            if (m.blocked)
+            {
+                if (_blockedSince < 0f)
+                    _blockedSince = Time.unscaledTime;
+                else if (Time.unscaledTime - _blockedSince > 6f)
+                {
+                    m.blocked = false; // game's own 5s ceiling has passed — its watchdog is dead
+                    _blockedSince = -1f;
+                }
+            }
+            else
+            {
+                _blockedSince = -1f;
+                if (_retryExitWhenUnblocked)
+                {
+                    _retryExitWhenUnblocked = false;
+                    SpeechManager.SpeakQueued("Shop closed.");
+                    m.ExitCardCraft();
+                    return;
+                }
+            }
+        }
+        else
+        {
+            _retryExitWhenUnblocked = false;
+            _blockedSince = -1f;
+        }
+
         if (!Owned(m) || !m.gameObject.activeSelf)
         {
             if (m == null && _announcedInstanceId != 0)
@@ -61,6 +104,7 @@ internal static class CardCraftScreenManager
                 _region = Region.List;
                 _pendingPageAnnounce = false;
                 _pendingMatchAnnounce = false;
+                _divWaitingAnnounced = false;
             }
             return;
         }
@@ -68,6 +112,7 @@ internal static class CardCraftScreenManager
         int id = m.GetInstanceID();
         if (id == _announcedInstanceId)
         {
+            TickDivinationWaiting(m);
             TickPendingPage(m);
             return;
         }
@@ -89,7 +134,39 @@ internal static class CardCraftScreenManager
         _pendingPageAnnounce = false;
         _pendingActionCard = "";
         _pendingReplacedItem = "";
+        _divWaitingAnnounced = false; // a waiting-state arrival is announced by the next Tick
         SpeechManager.Speak(BuildOverview(m));
+    }
+
+    /// <summary>Called from the ExitCardCraft postfix when a ready-vote close was swallowed by
+    /// <c>blocked</c> (MP map shops only) — Tick retries the exit once blocked clears.</summary>
+    internal static void OnExitSwallowedByBlocked() => _retryExitWhenUnblocked = true;
+
+    /// <summary>MP divination goes into a "waiting for players" state after a buy (and an invitee
+    /// opens the screen already waiting). The game charges nothing at buy time in MP, so nothing
+    /// else speaks — announce the state edge with the game's own status line, and keep the tier
+    /// rows honest via the guards in Move/Activate.</summary>
+    private static void TickDivinationWaiting(CardCraftManager m)
+    {
+        if (m.craftType != 3)
+            return;
+        bool waiting = m.IsWaitingDivination();
+        if (waiting && !_divWaitingAnnounced)
+        {
+            _divWaitingAnnounced = true;
+            SpeechManager.SpeakQueued("Divination chosen. " + DivinationWaitingLine(m));
+        }
+        else if (!waiting)
+        {
+            _divWaitingAnnounced = false;
+        }
+    }
+
+    private static string DivinationWaitingLine(CardCraftManager m)
+    {
+        string msg = m.divinationWaitingMsg != null
+            ? AccessibleMenuBase.StripRichText(m.divinationWaitingMsg.text) : "";
+        return msg.Length > 0 ? msg : "Waiting for the other players.";
     }
 
     /// <summary>After a page change (ours or the game's reroll/shop-toggle), wait for the grid
@@ -165,6 +242,14 @@ internal static class CardCraftScreenManager
         if (!Owned(m) || BlockedGuard())
             return;
 
+        // MP divination waiting state: the tier children still read active under the swapped-out
+        // container, so the normal walk would announce buyable tiers that no longer exist.
+        if (m.craftType == 3 && m.IsWaitingDivination())
+        {
+            SpeechManager.Speak(DivinationWaitingLine(m));
+            return;
+        }
+
         if (_phase == Phase.FilterModal)
         {
             MoveFilter(m, delta);
@@ -234,6 +319,14 @@ internal static class CardCraftScreenManager
         var m = Mgr;
         if (!Owned(m) || BlockedGuard())
             return;
+
+        // MP divination waiting state: the tier buttons are gone (container swapped); a second
+        // buy would only raise the game's "round exists" alert. Speak the live status instead.
+        if (m.craftType == 3 && m.IsWaitingDivination())
+        {
+            SpeechManager.Speak(DivinationWaitingLine(m));
+            return;
+        }
 
         switch (_phase)
         {
@@ -1592,6 +1685,26 @@ public class HeroAddItemPatch
     static void Postfix()
     {
         CardCraftScreenManager.OnItemPurchaseCompleted();
+    }
+}
+
+/// <summary>MP map (event) shops close by ready-vote: when every player is ready the master's
+/// CheckForAllManualReady calls ExitCardCraft locally and sends NET_CloseCardCraft (which also
+/// just calls ExitCardCraft) to the rest. ExitCardCraft silently no-ops while a purchase holds
+/// <c>blocked</c>, the close is one-shot, and every other client has already passed the
+/// "closevent" barrier — the blocked client is stranded in a shop no vote can ever close again
+/// (vanilla bug; the mod's Escape ready-vote routes players through its window). On the map in
+/// MP the only ExitCardCraft callers are that vote close (the mod's Escape only toggles Ready()
+/// there), so a blocked call here is always a swallowed close: flag it and let the manager's
+/// Tick retry once blocked clears.</summary>
+[HarmonyPatch(typeof(CardCraftManager), nameof(CardCraftManager.ExitCardCraft))]
+public class CardCraftSwallowedClosePatch
+{
+    static void Postfix(CardCraftManager __instance)
+    {
+        if (__instance != null && __instance.blocked
+            && MpSpeech.IsMp && TownManager.Instance == null && MapManager.Instance != null)
+            CardCraftScreenManager.OnExitSwallowedByBlocked();
     }
 }
 

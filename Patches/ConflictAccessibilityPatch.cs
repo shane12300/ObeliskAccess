@@ -298,35 +298,54 @@ public class ConflictRuleSelectedAnnouncePatch
     static void Postfix(int option) => ConflictScreenManager.OnRuleChosen(option);
 }
 
+/// <summary>All of the announce postfixes below execute INSIDE the game's deterministic roll
+/// coroutines, which run in lock-step on every client — an uncaught exception would kill the
+/// local roll loop and desync a screen that has no cancel. Speech is never worth that: swallow
+/// and log instead.</summary>
+internal static class ConflictSafe
+{
+    internal static void Run(System.Action body)
+    {
+        try
+        {
+            body();
+        }
+        catch (System.Exception e)
+        {
+            Plugin.Logger.LogWarning("Conflict announce failed: " + e.Message);
+        }
+    }
+}
+
 /// <summary>Network echo path — the master's NET_SelectConflictOption lands here on other clients.
 /// The manager dedupes, so a chooser hearing both paths speaks once.</summary>
 [HarmonyPatch(typeof(ConflictManager), nameof(ConflictManager.SelectOptionFromOutside))]
 public class ConflictRuleEchoAnnouncePatch
 {
-    static void Postfix(int option) => ConflictScreenManager.OnRuleChosen(option);
+    static void Postfix(int option) => ConflictSafe.Run(() => ConflictScreenManager.OnRuleChosen(option));
 }
 
 [HarmonyPatch(typeof(ConflictManager), "DoCard")]
 public class ConflictCardFlipAnnouncePatch
 {
-    static void Postfix(int heroIndex) => ConflictScreenManager.OnCardFlipped(heroIndex);
+    static void Postfix(int heroIndex) => ConflictSafe.Run(() => ConflictScreenManager.OnCardFlipped(heroIndex));
 }
 
 /// <summary>Fires at coroutine creation — see OnRollRoundComplete for why that is safe here.</summary>
 [HarmonyPatch(typeof(ConflictManager), "RollResult")]
 public class ConflictRollResultAnnouncePatch
 {
-    static void Postfix() => ConflictScreenManager.OnRollRoundComplete();
+    static void Postfix() => ConflictSafe.Run(ConflictScreenManager.OnRollRoundComplete);
 }
 
 [HarmonyPatch(typeof(ConflictManager), "TurnOffCharacter")]
 public class ConflictEliminationAnnouncePatch
 {
-    static void Postfix(int heroIndex) => ConflictScreenManager.OnHeroEliminated(heroIndex);
+    static void Postfix(int heroIndex) => ConflictSafe.Run(() => ConflictScreenManager.OnHeroEliminated(heroIndex));
 }
 
 [HarmonyPatch(typeof(ConflictManager), "FinalResolution")]
 public class ConflictWinnerAnnouncePatch
 {
-    static void Postfix(int heroWinner) => ConflictScreenManager.OnWinner(heroWinner);
+    static void Postfix(int heroWinner) => ConflictSafe.Run(() => ConflictScreenManager.OnWinner(heroWinner));
 }

@@ -42,8 +42,11 @@ public static class MapNavigator
 
     // ---------------------------------------------------------------- lifecycle
 
-    /// <summary>Called when the map has finished drawing. Resets focus to the node region and speaks
-    /// the map info summary.</summary>
+    /// <summary>Called when the map has finished drawing. Resets focus to the node region and arms
+    /// the arrival summary — spoken from <see cref="TickArrival"/> on the first frame the map
+    /// actually owns input. BeginMapContinueEnd fires while the screen can still be masked (MP
+    /// barriers; a non-master's map is not even drawn until the master's node RPC lands), so
+    /// speaking here narrated a map the player could not touch.</summary>
     public static void OnMapReady()
     {
         CurrentRegion = Region.Nodes;
@@ -54,6 +57,27 @@ public static class MapNavigator
         ResetVoteState();
         RebuildCoordinates();
         RebuildReachable();
+        _arrivalPending = true;
+    }
+
+    private static bool _arrivalPending;
+
+    /// <summary>Per-frame (from the poller, outside every gate): speak the armed arrival summary
+    /// once the map context is genuinely interactive — world shown, mask down, no event or
+    /// corruption over it. Waits out MP sync barriers and speaks after whatever covered the map.</summary>
+    public static void TickArrival()
+    {
+        if (!_arrivalPending)
+            return;
+        if (MapManager.Instance == null)
+        {
+            _arrivalPending = false; // scene torn down under the pending announce
+            return;
+        }
+        if (!ObeliskAccess.Input.Contexts.MapInputContext.IsCurrentlyActive)
+            return;
+        _arrivalPending = false;
+        EnsureFresh(); // the reachable row may have been rebuilt empty while the world was hidden
         SpeakMapInfo();
     }
 

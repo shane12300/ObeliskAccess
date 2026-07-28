@@ -156,10 +156,15 @@ public class RouterDoKeyBindingPatch
         if (!InputRouter.AltHeld)
             return true;
         // Alt review keys must also stay quiet over the in-combat modals that sit above the combat
-        // context (an alert such as the retry dialog), or Alt+R would fire an emote ping.
+        // context (an alert such as the retry dialog), or Alt+R would fire an emote ping. The
+        // character sheet and perk tree open over combat too, and the game's KeyboardEmote checks
+        // neither (only KeyboardNum/Enter/Space respect the sheet) — without them Alt+R over the
+        // sheet in MP broadcast a heart emote to the whole party.
         if (!ObeliskAccess.Input.Contexts.CombatInputContext.IsCurrentlyActive && !selectorActive
             && !ObeliskAccess.Input.Contexts.AlertInputContext.IsCurrentlyActive
-            && !ObeliskAccess.Input.Contexts.DeathScreenInputContext.IsCurrentlyActive)
+            && !ObeliskAccess.Input.Contexts.DeathScreenInputContext.IsCurrentlyActive
+            && !ObeliskAccess.Input.Contexts.CharWindowInputContext.IsCurrentlyActive
+            && !ObeliskAccess.Input.Contexts.PerkTreeInputContext.IsCurrentlyActive)
             return true;
 
         return !(control == kb[Key.R] || control == kb[Key.E] || control == kb[Key.S]
@@ -215,7 +220,13 @@ public class RouterDoButtonNorthPatch
               // The in-run character sheet uses Alt+T/I/R as review keys; a bare Alt would
               // right-click whatever sits under the stale cursor (in combat that reopens the
               // card-inspection window or another character's sheet).
-              || ObeliskAccess.Input.Contexts.CharWindowInputContext.IsCurrentlyActive);
+              || ObeliskAccess.Input.Contexts.CharWindowInputContext.IsCurrentlyActive
+              // Alerts and the MP players panel also document Alt+R; the raycast ignores their
+              // UI canvas entirely, so a bare Alt under an alert (e.g. an MP disconnect dialog
+              // over hero selection) right-clicked whatever sat beneath — opening a surprise
+              // window the first post-alert Escape then lands in.
+              || ObeliskAccess.Input.Contexts.AlertInputContext.IsCurrentlyActive
+              || ObeliskAccess.Input.Contexts.PlayersPanelInputContext.IsCurrentlyActive);
     }
 }
 
@@ -261,6 +272,13 @@ public class RouterDoEscapePatch
             ObeliskAccess.Patches.ChatSpeech.CancelTyping();
             return false;
         }
+
+        // The game's on-screen virtual keyboard (opened by a synthetic click landing on an input
+        // field, or gamepad Y in MP) can only be closed by the game's own Escape — if a context
+        // swallowed Escape here, the overlay would be stuck until a scene change. Let the game
+        // handle it (EscapeFunction's first check closes the keyboard).
+        if (KeyboardManager.Instance != null && KeyboardManager.Instance.IsActive())
+            return true;
 
         InputRouter.Controller = __instance;
         return !InputRouter.Cancel(); // swallow (return false) iff a context handled it

@@ -122,6 +122,15 @@ internal static class RewardsScreenManager
             var slot = rm.characterRewardArray[h];
             if (slot == null || !slot.gameObject.activeSelf)
                 return false;
+
+            // A row whose pick has already landed needs no settling. This is load-bearing in MP:
+            // a partner's card pick (NET_CardSelected → ShowSelected) DESTROYS the row's other
+            // cards mid-flip and nulls the CharacterReward's card list, so animationsDone is
+            // never set for it — without this the gate starves and every key answers "Rewards
+            // are still appearing" forever, stranding the whole party.
+            if (rm.cardSelectedArr[h] != null)
+                continue;
+
             var cr = slot.GetComponent<CharacterReward>();
             if (cr == null || !Traverse.Create(cr).Field<bool>("animationsDone").Value)
                 return false;
@@ -210,6 +219,15 @@ internal static class RewardsScreenManager
         if (!EnsureReady())
             return;
         var rm = RewardsManager.Instance;
+
+        // A partner's confirmed restart masks the screen ~1s before the reload; the master
+        // drops any pick RPC sent during it, so a local Enter would mutate this screen only
+        // (row shrinks, nothing announced) and be wiped by the reload. Refuse with a reason.
+        if (GameManager.Instance != null && GameManager.Instance.IsMaskActive())
+        {
+            SpeechManager.Speak("Restarting — please wait.");
+            return;
+        }
 
         if (_row < 0)
         {
@@ -409,6 +427,14 @@ internal static class RewardsScreenManager
 
     public static void OnRestart()
     {
+        // On a non-master MP client RestartRewards does NOT restart: it hides the local Restart
+        // button and asks the master via RPC (the master gets a confirm alert; a decline changes
+        // nothing here). Announcing "Restarting" and wiping state would fake a completed restart.
+        if (MpSpeech.IsMp && NetworkManager.Instance != null && !NetworkManager.Instance.IsMaster())
+        {
+            SpeechManager.Speak("Restart request sent to the host. Waiting for them to confirm.");
+            return;
+        }
         SpeechManager.Speak("Restarting rewards.");
         // The scene reloads with the same seed (state snapshot restored); re-detect from scratch
         // so the overview re-announces on the fresh screen.

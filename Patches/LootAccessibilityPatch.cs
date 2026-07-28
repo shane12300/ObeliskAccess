@@ -242,6 +242,15 @@ internal static class LootScreenManager
             return;
         var lm = LootManager.Instance;
 
+        // A partner's confirmed restart masks the screen before the reload; partners ignore
+        // pick RPCs sent during it, so a local Enter would mutate this client alone and be
+        // wiped by the reload. Refuse with a reason.
+        if (GameManager.Instance != null && GameManager.Instance.IsMaskActive())
+        {
+            SpeechManager.Speak("Restarting — please wait.");
+            return;
+        }
+
         if (_region == Region.Party)
         {
             ActivatePartyHero(lm);

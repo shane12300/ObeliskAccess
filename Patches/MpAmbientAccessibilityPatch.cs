@@ -22,8 +22,10 @@ namespace ObeliskAccess.Patches;
 [HarmonyPatch(typeof(NetworkManager), "DoReadyStatus")]
 internal static class MpReadyStatusAnnouncePatch
 {
-    private static int _lastReady = -1;
-    private static int _lastTotal = -1;
+    // Dedup on the COMPOSED line, not the bare counts: counts alone swallowed a real update when
+    // one screen ended at 1-of-2 and the next screen's first update was again 1-of-2 with a
+    // different player waiting.
+    private static string _lastSpoken = "";
 
     static void Postfix(NetworkManager __instance)
     {
@@ -32,8 +34,7 @@ internal static class MpReadyStatusAnnouncePatch
         var dict = __instance.PlayerManualReady;
         if (dict == null || dict.Count == 0)
         {
-            _lastReady = -1;
-            _lastTotal = -1;
+            _lastSpoken = "";
             return;
         }
         if (HeroSelectionManager.Instance != null)
@@ -45,12 +46,11 @@ internal static class MpReadyStatusAnnouncePatch
             if (kv.Value)
                 ready++;
 
-        if (ready == _lastReady && total == _lastTotal)
-            return;
-        _lastReady = ready;
-        _lastTotal = total;
         if (ready == 0)
-            return; // between-screens reset state; the game shows nothing here either
+        {
+            _lastSpoken = ""; // between-screens reset state; the game shows nothing here either
+            return;
+        }
 
         var sb = new StringBuilder();
         sb.Append("Players ready: ").Append(ready).Append(" of ").Append(total).Append(".");
@@ -62,7 +62,11 @@ internal static class MpReadyStatusAnnouncePatch
                     waiting.Add(MpSpeech.DisplayNick(kv.Key));
             sb.Append(" Waiting for ").Append(string.Join(", ", waiting.ToArray())).Append(".");
         }
-        SpeechManager.SpeakQueued(sb.ToString());
+        string line = sb.ToString();
+        if (line == _lastSpoken)
+            return;
+        _lastSpoken = line;
+        SpeechManager.SpeakQueued(line);
     }
 }
 
