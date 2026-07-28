@@ -54,8 +54,10 @@ public static class SpeechManager
     public static void Speak(string text)
     {
         if (!_ready) return;
+        var sw = StartTimingIfDebug();
         Lib.Stop();
         Lib.Announce(text);
+        LogIfSlow(sw, "Speak", text);
     }
 
     /// <summary>
@@ -65,7 +67,36 @@ public static class SpeechManager
     public static void SpeakQueued(string text)
     {
         if (!_ready) return;
+        var sw = StartTimingIfDebug();
         Lib.Announce(text);
+        LogIfSlow(sw, "SpeakQueued", text);
+    }
+
+    // ---- speech-latency diagnostic (debug mode) ----
+    // Speech goes out through synchronous native calls (screen-reader client, or the SAPI
+    // fallback when no reader is running), so a slow backend stalls the Unity main thread for the
+    // duration of the call. In multiplayer that matters beyond feel: combat is lock-step, so a
+    // stalled frame on this client extends the sync barriers every OTHER player is waiting on —
+    // "my partner says his game gets slow" can literally be this client's speech calls. With debug
+    // logging enabled, any call that blocks longer than a frame's budget is logged with its text.
+
+    private const long SlowSpeechMs = 15;
+
+    private static System.Diagnostics.Stopwatch StartTimingIfDebug()
+        => AccessibilityOptions.DebugEnabled ? System.Diagnostics.Stopwatch.StartNew() : null;
+
+    private static void LogIfSlow(System.Diagnostics.Stopwatch sw, string call, string text)
+    {
+        if (sw == null)
+            return;
+        sw.Stop();
+        if (sw.ElapsedMilliseconds < SlowSpeechMs)
+            return;
+        if (text != null && text.Length > 80)
+            text = text.Substring(0, 80) + "…";
+        Plugin.Logger.LogInfo(
+            "[speech-timing] " + call + " blocked the main thread " + sw.ElapsedMilliseconds
+            + " ms: \"" + text + "\"");
     }
 
     /// <summary>Re-speak the most recent message (for a "repeat last" hotkey).</summary>

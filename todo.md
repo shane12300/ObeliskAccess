@@ -129,6 +129,16 @@ Priority = how often a player hits it in a normal run × how hard it blocks a bl
       verify the give-receipt transfer signature never speaks on non-give flows (loot splits,
       divination costs, shop refunds). *Give and Chat themselves implemented as MP plan phase 4 —
       see Completed.*
+- [ ] **MP look-effect slowdown on the partner's machine — investigation open** — during a
+      partner's look/discard effects the partner reported his game running slower than vanilla.
+      The local client is exonerated: a debug-mode playtest (2026-07-28) showed zero
+      `[speech-timing]` lines (no speech call blocked ≥15 ms), so this client isn't delaying
+      the lock-step sync barriers. Next steps: ask whether the partner runs the mod, and if so
+      have him run with debug mode on and check HIS `BepInEx/LogOutput.log` for
+      `[speech-timing]` clusters around the `[selector]` open/close lines (a modded sighted
+      machine without a screen reader falls back to SAPI — the slowest backend; the likely fix
+      is simply not running the mod there). If he runs vanilla, reproduce with a vanilla-only
+      lobby to rule the mod out entirely.
 - [ ] **Emotes — playtest follow-ups** — confirm the S/A ping wording ("a ping" / "an attack
       ping") against the actual sprites in a live MP session (log `emotesSprite` names under
       DebugMode if unsure); cosmetic hero-selection echoes (skins/card backs/classic variants)

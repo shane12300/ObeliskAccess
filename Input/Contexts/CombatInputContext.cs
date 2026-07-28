@@ -94,8 +94,30 @@ public class CombatInputContext : InputContextBase
         // element. Fire the game's own click path (raycast under the warped cursor), which picks
         // up / plays the focused card, confirms a target, or presses End Turn. Same idiom as
         // MainMenuInputContext.
+        //
+        // Exception — a card in our own hand activates DIRECTLY, not via the raycast: unrelated
+        // colliders can eclipse a hand card at its warped-cursor point, silently eating both the
+        // click and the hover. Confirmed live by [enter-probe]: in MP the chat window's prefab
+        // click-catcher ("Collider" under ChatGO) covers the bottom-left of the screen, and with a
+        // full hand the LEFTMOST card sits under it until a relayout moves it — Enter dead, no
+        // hover noise, while the card itself is perfectly playable. OnMouseUpController is exactly
+        // what the raycast would have invoked on the card (insta-cast or pickup); restricted to
+        // CardItemTable members so pile widgets and enemy intent cards keep the raycast path, and
+        // to our own turn so Enter can't trigger the game's not-your-turn card ping.
+        CombatNavigator.DebugLogEnterTarget();
         bool wasDragging = m != null && m.CardDrag;
-        Traverse.Create(controller).Method("DoFirePerformed").GetValue();
+        CardItem handCard = null;
+        if (m != null && !wasDragging && m.IsYourTurn())
+        {
+            var focused = CombatNavigator.FocusedTransform;
+            var card = focused != null ? focused.GetComponent<CardItem>() : null;
+            if (card != null && m.CardItemTable != null && m.CardItemTable.Contains(card))
+                handCard = card;
+        }
+        if (handCard != null)
+            handCard.OnMouseUpController();
+        else
+            Traverse.Create(controller).Method("DoFirePerformed").GetValue();
 
         // The pickup half of a two-step cast is otherwise silent — say what happened.
         if (m != null && !wasDragging && m.CardDrag)

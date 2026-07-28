@@ -255,3 +255,17 @@
   leaving and what happens next — are spoken as they occur; a co-op divination invitation is
   read aloud and can be joined from a new "Join divination" item at the top of the town list;
   and cinematic skip votes are counted out loud.
+- Fixed: in multiplayer the corruption offer could speak the wrong rewards — the previous
+  offer's text, or a leftover "heal" placeholder shown as both options — because the
+  announcement raced the network sync that fills the real labels in. The offer is now only
+  spoken once the actual rewards for the current node have arrived, so what you hear always
+  matches what your partners see.
+- Fixed: in multiplayer, the leftmost card of a full hand could be silently unplayable — no
+  hover sound when focusing it, and Enter did nothing — until some other card was played. The
+  chat window's invisible click area sits over that corner of the screen and was swallowing
+  the keyboard's card activation. Pressing Enter on a card in your hand now always plays (or
+  picks up) that exact card, and the usual card hover sound plays when focusing it even while
+  the chat area covers it.
+- Debug mode (Accessibility tab) now records more detail for troubleshooting: what each
+  combat Enter press actually lands on, and any speech call slow enough to hitch the game —
+  useful evidence to attach when reporting multiplayer slowdowns or dead keys.

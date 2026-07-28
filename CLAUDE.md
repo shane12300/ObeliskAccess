@@ -96,7 +96,11 @@ screen owns the keyboard and translates raw keys into semantic events; per-scree
   2026-07-25 audit **every context is in the list except Combat**, which deliberately stays out:
   in combat Enter maps to `BattleKeyboard.KeyboardEnter` (inert in plain combat, but the only
   working Enter for the not-yet-covered energy-transfer selector `UIEnergySelector`), and the
-  combat context's Confirm rides the game's warped-cursor click path by design. Any new
+  combat context's Confirm rides the game's warped-cursor click path by design — EXCEPT for cards
+  in our own hand (`CardItemTable` members, own turn), which activate via `OnMouseUpController()`
+  directly: the raycast at a hand card's warp point can be eclipsed by unrelated colliders — in MP
+  the chat prefab's click-catcher ("Collider" under ChatGO) covers the bottom-left and ate Enter
+  (and hover noise) on the leftmost card of a full hand until a relayout moved it. Any new
   self-activating context MUST be added to the list. A `DoFirePerformed` prefix likewise
   suppresses the bare-Ctrl "click" on screens where Ctrl is a modifier (map look-ahead, detail
   drills), and a `DoButtonNorth` prefix suppresses the bare-Alt synthetic right-click on screens

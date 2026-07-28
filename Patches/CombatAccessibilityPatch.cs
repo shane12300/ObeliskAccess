@@ -6,6 +6,8 @@ using HarmonyLib;
 using ObeliskAccess.Input.Contexts;
 using TMPro;
 using UnityEngine;
+using UnityEngine.EventSystems;
+using UnityEngine.InputSystem;
 
 namespace ObeliskAccess.Patches;
 
@@ -40,6 +42,19 @@ public static class CombatNavigator
     private static int _lastIndex = -1;
     private static int _lastInstanceId;
     private static Section _lastSection = Section.None;
+
+    // ---- hover-sound fallback ----
+    // Focusing a hand card normally plays the game's hover noise for free: the warp puts the real
+    // cursor on the card, Unity delivers OnMouseEnter next frame, fOnMouseEnter plays the sound.
+    // But an eclipsing collider (the MP chat click-catcher over the leftmost card) receives the
+    // hover instead and the card stays silent. So each hand-card focus records an EXPECTED hover;
+    // a real fOnMouseEnter (recorded by a postfix) clears it, and if none arrives within a few
+    // frames TickHoverFallback plays the same sound the game would have.
+    private static CardItem _pendingHoverCard;
+    private static int _pendingHoverFrame;
+    private static CardItem _lastEnterCard;
+    private static int _lastEnterFrame;
+    private const int HOVER_WAIT_FRAMES = 3; // warp → OS cursor → mouse event can take 2 frames
 
     // ---- current focus + drill-in state ----
     private static Transform _focusedTransform;
@@ -252,6 +267,16 @@ public static class CombatNavigator
 
         _lastIndex = idx;
         _lastInstanceId = iid;
+
+        // A hand-card focus should be followed by the game's own hover (sound + grow) once the
+        // warped cursor lands; register the expectation so the fallback can fill in the sound if
+        // an eclipsing collider swallows it.
+        var focusCard = t.GetComponent<CardItem>();
+        if (focusCard != null && mm.CardItemTable != null && mm.CardItemTable.Contains(focusCard))
+        {
+            _pendingHoverCard = focusCard;
+            _pendingHoverFrame = Time.frameCount;
+        }
 
         // Moving focus ends any in-progress drill.
         _drill = DrillMode.None;
@@ -741,12 +766,60 @@ public static class CombatNavigator
     public static void TickFlush()
     {
         TickAuraWatch();
+        TickHoverFallback();
 
         if (_ctBuffer.Count == 0)
             return;
         if (Time.time - _lastCtTime < CT_FLUSH_DELAY)
             return;
         Flush();
+    }
+
+    /// <summary>Records every real hover the game delivers (postfix on <c>CardItem.fOnMouseEnter</c>
+    /// — fires for warped-cursor hovers, real mouse hovers, and MP amplify mirrors alike).</summary>
+    public static void OnCardMouseEnter(CardItem card)
+    {
+        _lastEnterCard = card;
+        _lastEnterFrame = Time.frameCount;
+    }
+
+    /// <summary>
+    /// Plays the game's card-hover sound for a focused hand card whose real hover never arrived
+    /// (eclipsed by an unrelated collider — the MP chat click-catcher over the leftmost card).
+    /// Mirrors fOnMouseEnter's own gating: silent while a modal owns input, while a card is held,
+    /// and during a partner's turn (the game suppresses own-hand hover feedback there too).
+    /// </summary>
+    private static void TickHoverFallback()
+    {
+        if (_pendingHoverCard == null)
+            return;
+
+        // The real hover arrived for the expected card — nothing to do.
+        if (_lastEnterCard == _pendingHoverCard && _lastEnterFrame >= _pendingHoverFrame)
+        {
+            _pendingHoverCard = null;
+            return;
+        }
+
+        if (Time.frameCount - _pendingHoverFrame < HOVER_WAIT_FRAMES)
+            return; // still within the warp → mouse-event delivery window
+
+        var card = _pendingHoverCard;
+        _pendingHoverCard = null;
+
+        var mm = MatchManager.Instance;
+        if (mm == null || !CombatInputContext.IsCurrentlyActive || mm.CardDrag)
+            return;
+        if (card == null || mm.CardItemTable == null || !mm.CardItemTable.Contains(card))
+            return; // card left the hand while we waited
+        if (GameManager.Instance.IsMultiplayer() && !mm.IsYourTurn())
+            return;
+
+        // The exact sound choice fOnMouseEnter makes (CardItem.cs:3513).
+        if (GameManager.Instance.ConfigUseLegacySounds || AudioManager.Instance.soundCardHover == null)
+            GameManager.Instance.PlayLibraryAudio("card_play");
+        else
+            GameManager.Instance.PlayAudio(AudioManager.Instance.soundCardHover, 0.1f);
     }
 
     private static void TickAuraWatch()
@@ -872,6 +945,83 @@ public static class CombatNavigator
         }
 
         SpeechManager.SpeakQueued(sb.ToString());
+    }
+
+    // ======================= Enter-raycast diagnostic (debug mode) =======================
+
+    /// <summary>
+    /// Debug-mode probe for the MP "focused hand card is silently unplayable" reports (no hover
+    /// noise, Enter does nothing, mod still reads it as playable). Both symptoms mean the game's
+    /// screen-position resolution isn't landing on the card the mod describes: hover events go to
+    /// the topmost collider under the cursor, and the combat Enter is DoFirePerformed's
+    /// Physics2D raycast at the same point (plus a UI-under-cursor veto inside CardItem.OnMouseDown).
+    /// Called just before OnConfirm fires the synthetic click, this logs what that click will
+    /// actually resolve to, against what the mod has focused — a mismatch names the eclipsing
+    /// object. Silent unless debug logging is enabled in Accessibility settings.
+    /// </summary>
+    public static void DebugLogEnterTarget()
+    {
+        if (!AccessibilityOptions.DebugEnabled)
+            return;
+        var cam = GameManager.Instance != null ? GameManager.Instance.cameraMain : null;
+        var mouse = Mouse.current;
+        if (cam == null || mouse == null)
+            return;
+
+        Vector2 screen = mouse.position.ReadValue();
+        var sb = new StringBuilder("[enter-probe] cursor=").Append(screen);
+
+        var f = _focusedTransform;
+        sb.Append(" focus=");
+        if (f == null)
+        {
+            sb.Append("none");
+        }
+        else
+        {
+            sb.Append(f.name);
+            var fc = f.GetComponent<CardItem>();
+            if (fc != null && fc.CardData != null)
+            {
+                var col = fc.GetComponent<Collider2D>();
+                sb.Append(" card=").Append(fc.CardData.Id)
+                  .Append(" playable=").Append(fc.IsPlayableRightNow())
+                  .Append(" collider=").Append(col == null ? "missing" : (col.enabled ? "on" : "off"));
+            }
+        }
+
+        // The same physics raycast DoFirePerformed will run for the card/character branch.
+        var hit = Physics2D.Raycast(cam.ScreenToWorldPoint(screen), Vector2.zero);
+        sb.Append(" physicsHit=");
+        if (hit.collider == null)
+        {
+            sb.Append("nothing");
+        }
+        else
+        {
+            var t = hit.collider.transform;
+            sb.Append(t.name);
+            if (t.parent != null)
+                sb.Append(" (under ").Append(t.parent.name).Append(')');
+            var hc = hit.collider.GetComponent<CardItem>();
+            if (hc != null && hc.CardData != null)
+                sb.Append(" card=").Append(hc.CardData.Id);
+            if (f != null && t != f && !t.IsChildOf(f))
+                sb.Append(" MISMATCH");
+        }
+
+        // CardItem.OnMouseDown additionally refuses the pickup when any UI element sits under the
+        // cursor (EventSystem.IsPointerOverGameObject) — in MP the chat window lives bottom-left,
+        // near the leftmost hand card.
+        sb.Append(" overUI=").Append(EventSystem.current != null && EventSystem.current.IsPointerOverGameObject());
+
+        var mm = MatchManager.Instance;
+        if (mm != null)
+            sb.Append(" yourTurn=").Append(mm.IsYourTurn())
+              .Append(" waitAddDiscard=").Append(mm.heroIndexWaitingForAddDiscard)
+              .Append(" busy=").Append(mm.IsGameBusy());
+
+        Plugin.Logger.LogInfo(sb.ToString());
     }
 
     private static Character OwnerCharacter(CombatText src)
@@ -1424,6 +1574,14 @@ public class CombatFocusPatch
 public class CombatTurnChangePatch
 {
     static void Postfix() => CombatNavigator.OnTurnChanged();
+}
+
+/// <summary>Feeds the hover-sound fallback: marks that the game's own hover reached this card, so
+/// the fallback stays silent (no double sound) and only fills in for eclipsed cards.</summary>
+[HarmonyPatch(typeof(CardItem), nameof(CardItem.fOnMouseEnter))]
+public class CombatCardHoverPatch
+{
+    static void Postfix(CardItem __instance) => CombatNavigator.OnCardMouseEnter(__instance);
 }
 
 /// <summary>Announces victory/defeat.</summary>

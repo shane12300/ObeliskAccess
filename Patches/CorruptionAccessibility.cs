@@ -1,4 +1,5 @@
 using System.Text;
+using HarmonyLib;
 
 namespace ObeliskAccess.Patches;
 
@@ -21,19 +22,33 @@ public static class CorruptionAccessibility
         => MpSpeech.IsMp && NetworkManager.Instance != null && !NetworkManager.Instance.IsMaster();
 
     /// <summary>The prompt GameObject activates BEFORE the MP draw barrier fills the labels in
-    /// (DrawCorruptionCo waits on all players); acting in that window silently declines the
-    /// corruption for everyone before any client has even seen it.</summary>
-    private static bool Drawn
+    /// (DrawCorruptionCo parks on a network sync before touching any UI); acting — or reading — in
+    /// that window is wrong: the children still hold the PREVIOUS corruption's labels (or the
+    /// prefab's placeholder text on the first one), so heuristics like "banner active" or "label
+    /// non-empty" pass on stale state and the announce speaks the wrong rewards. In single-player
+    /// the coroutine body has no yields, so the window never exists. The only reliable signal is
+    /// the fill itself: <c>CorruptionText</c> is called exactly twice, only from DrawCorruptionCo's
+    /// label-fill block, so a postfix on it marks the labels fresh (see patches below).</summary>
+    private static bool Drawn => _labelsFilled;
+
+    /// <summary>True once DrawCorruptionCo has built the reward labels for the CURRENT draw;
+    /// cleared when a new draw starts (InitCorruption locally, DrawCorruptionFromNet via RPC).</summary>
+    private static bool _labelsFilled;
+
+    /// <summary>Bumped once per completed label fill. The map poller announces when it sees a
+    /// serial it hasn't spoken yet — which also re-announces a master's NextCorruption re-roll
+    /// (the prompt stays active across re-rolls, so an "announced once while open" edge misses
+    /// them).</summary>
+    internal static int FillSerial { get; private set; }
+
+    internal static void OnDrawStarted() => _labelsFilled = false;
+
+    internal static void OnLabelFilled()
     {
-        get
-        {
-            var c = MapManager.Instance?.corruption;
-            if (c == null)
-                return false;
-            if (c.corruptionOnlyMaster != null && c.corruptionOnlyMaster.gameObject.activeSelf)
-                return true; // non-master view: banner up = drawn
-            return RewardText(c.rewardBotA).Length > 0 || RewardText(c.rewardBotB).Length > 0;
-        }
+        if (_labelsFilled)
+            return; // second CorruptionText call of the same fill
+        _labelsFilled = true;
+        FillSerial++;
     }
 
     /// <summary>Spoken once when the prompt opens (driven by the hotkey poller's edge detection).
@@ -119,4 +134,34 @@ public static class CorruptionAccessibility
         => reward != null && reward.text != null ? Strip(reward.text.text) : "";
 
     private static string Strip(string text) => AccessibleMenuBase.StripRichText(text ?? "");
+}
+
+// ======================= draw-lifecycle patches =======================
+// A new draw begins either locally (InitCorruption — master, and every SP prompt; also the
+// master's NextCorruption re-roll, which calls InitCorruption again while the prompt is open) or
+// from the master's RPC (DrawCorruptionFromNet on non-masters). Both start DrawCorruptionCo, which
+// in MP parks on a network barrier BEFORE touching the labels — so the fresh-draw mark must be
+// cleared here, at the start, and only set again by the fill itself.
+
+[HarmonyPatch(typeof(CorruptionManager), nameof(CorruptionManager.InitCorruption))]
+internal static class CorruptionInitDrawPatch
+{
+    static void Prefix() => CorruptionAccessibility.OnDrawStarted();
+}
+
+[HarmonyPatch(typeof(CorruptionManager), nameof(CorruptionManager.DrawCorruptionFromNet))]
+internal static class CorruptionNetDrawPatch
+{
+    static void Prefix() => CorruptionAccessibility.OnDrawStarted();
+}
+
+/// <summary>
+/// <c>CorruptionText</c> (private) is called exactly twice, only from DrawCorruptionCo's label-fill
+/// block — the first reliable moment the reward labels reflect the current draw. Both calls land in
+/// the same synchronous run, so by the time the poller's next Update reads the labels, both are set.
+/// </summary>
+[HarmonyPatch(typeof(CorruptionManager), "CorruptionText")]
+internal static class CorruptionLabelsFilledPatch
+{
+    static void Postfix() => CorruptionAccessibility.OnLabelFilled();
 }
