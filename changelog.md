@@ -442,3 +442,6 @@
   character sheet): icon tags inside trait text are spoken as words, and traits that grant a
   card describe it — "Adds X to the deck" — instead of falling silent where the game leaves
   the description empty.
+- Resource icons inside story-event text (gold, dust, supplies, health, experience) are now
+  spoken using the game's own language setting instead of fixed English words; card
+  descriptions handle every icon-tag form the game produces.

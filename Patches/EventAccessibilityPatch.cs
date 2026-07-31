@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
-using System.Text.RegularExpressions;
 using HarmonyLib;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -44,8 +43,9 @@ internal static class EventScreenManager
         public float ReadAt;
     }
 
-    private static readonly Regex _spriteTag =
-        new Regex(@"<sprite\s+name=""?([^"">]+?)""?\s*/?>", RegexOptions.Compiled);
+    // The roll banner's deck icon is decorative — spoken text drops it.
+    private static readonly HashSet<string> _decorativeSprites =
+        new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "cards" };
 
     private static readonly List<Entry> _entries = new List<Entry>();
     private static readonly List<string> _textLines = new List<string>(); // title + description
@@ -801,35 +801,13 @@ internal static class EventScreenManager
     private static List<string> SplitBookText(string raw)
         => AccessibleMenuBase.SplitLines(raw, Clean);
 
-    /// <summary>Sprite-tag conversion + rich-text strip, the pipeline for all event speech.</summary>
+    /// <summary>Sprite-tag conversion + rich-text strip, the pipeline for all event speech.
+    /// Sprite words come from the shared, localized <see cref="CardSpeech.CleanDescription"/>.</summary>
     private static string Clean(string raw)
     {
         if (string.IsNullOrEmpty(raw))
             return "";
-        return AccessibleMenuBase.StripRichText(ConvertSpriteTags(raw));
-    }
-
-    /// <summary>
-    /// Converts TMP <c>&lt;sprite name=X&gt;</c> icons to words before stripping, so reward
-    /// lines keep their units ("gold 75" instead of a bare "75"). Unknown names (perk icons)
-    /// fall back to the sprite name itself. Kept local — StripRichText's other callers rely
-    /// on tags vanishing entirely.
-    /// </summary>
-    private static string ConvertSpriteTags(string raw)
-    {
-        return _spriteTag.Replace(raw, m =>
-        {
-            switch (m.Groups[1].Value.ToLowerInvariant())
-            {
-                case "gold": return " gold ";
-                case "dust": return " dust ";
-                case "experience": return " experience ";
-                case "supply": return " supplies ";
-                case "heart": return " health ";
-                case "cards": return " "; // decorative deck icon on the roll banner
-                default: return " " + m.Groups[1].Value + " ";
-            }
-        });
+        return AccessibleMenuBase.StripRichText(CardSpeech.CleanDescription(raw, _decorativeSprites));
     }
 
     private static string SafeText(string id, string fallback)

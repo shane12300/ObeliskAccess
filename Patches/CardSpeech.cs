@@ -13,19 +13,47 @@ namespace ObeliskAccess.Patches;
 /// </summary>
 internal static class CardSpeech
 {
-    private static readonly Regex _spriteTag = new Regex(@"<sprite name=([^>/ ]+)[^>]*>", RegexOptions.Compiled);
+    // Handles every TMP sprite-tag shape the game emits: unquoted/quoted names, extra
+    // whitespace, self-closing tags, and trailing attributes (index=N).
+    private static readonly Regex _spriteTag =
+        new Regex(@"<sprite\s+name=\s*""?([^"">\s/]+)[^>]*>", RegexOptions.Compiled);
 
-    /// <summary>Recover <c>&lt;sprite name=X&gt;</c> keyword words before tags are stripped, else they vanish.</summary>
-    public static string CleanDescription(string raw)
+    /// <summary>
+    /// Recover <c>&lt;sprite name=X&gt;</c> keyword words before tags are stripped, else they
+    /// vanish. Words come from the game's own localization, with a small English fallback for
+    /// the resource icons event text uses; <paramref name="suppress"/> drops purely decorative
+    /// icons. Substitutions are space-padded — every consumer strips afterwards, which
+    /// collapses the padding.
+    /// </summary>
+    public static string CleanDescription(string raw, ISet<string> suppress = null)
     {
         if (string.IsNullOrEmpty(raw))
             return "";
         return _spriteTag.Replace(raw, m =>
         {
             string key = m.Groups[1].Value;
-            string word = Texts.Instance != null ? Texts.Instance.GetText(key) : key;
-            return string.IsNullOrEmpty(word) ? key : word;
+            if (suppress != null && suppress.Contains(key))
+                return " ";
+            string word = Texts.Instance != null ? Texts.Instance.GetText(key) : "";
+            if (string.IsNullOrEmpty(word))
+                word = FallbackSpriteWord(key);
+            return " " + word + " ";
         });
+    }
+
+    /// <summary>English words for the sprite keys event text relies on, used only when the
+    /// localization table has no entry for the key.</summary>
+    private static string FallbackSpriteWord(string key)
+    {
+        switch (key.ToLowerInvariant())
+        {
+            case "gold": return "gold";
+            case "dust": return "dust";
+            case "experience": return "experience";
+            case "supply": return "supplies";
+            case "heart": return "health";
+            default: return key;
+        }
     }
 
     /// <summary>Split markup into logical lines (kept as a wrapper for existing callers).</summary>
