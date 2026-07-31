@@ -307,3 +307,21 @@
 - If the game's on-screen keyboard does open (for example from a controller), the arrow keys
   and Enter now drive the keyboard itself instead of secretly acting on the screen beneath
   it; Escape closes it as before.
+- Picking up a card in combat with Enter now speaks the card's name ("Fireball picked up…")
+  instead of the generic "Card picked up".
+- The in-combat card-selection windows (discard, look-at-deck, discover) now queue their
+  opening and closing announcements behind the ongoing combat narration instead of cutting
+  it off, refuse cleanly with "Not ready yet" while their cards are still appearing, and
+  refuse further Enter presses with "Already confirmed — resolving" once you have confirmed
+  in multiplayer (previously they could silently corrupt the shared selection).
+- The death popup now handles a second hero falling while it is open ("X also fell…")
+  instead of mixing the two heroes' details, no longer skips its first line when the popup
+  has no title, and reads stylised hero names without markup.
+- Multiplayer pings aimed at a character who just died are no longer announced as delivered
+  — matching the game, which ignores them.
+- The hover sound fallback for keyboard-focused cards now also covers cards hidden behind
+  other windows (for example the chat overlay), and a partner highlighting a card no longer
+  silences it.
+- After a party wipe on round 1 followed by a retry (and after a multiplayer desync reload),
+  the rebuilt combat announces its round, battlefield overview, and emote keys again —
+  previously the retried combat started silent.

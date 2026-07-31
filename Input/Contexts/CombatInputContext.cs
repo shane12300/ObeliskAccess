@@ -106,13 +106,16 @@ public class CombatInputContext : InputContextBase
         // to our own turn so Enter can't trigger the game's not-your-turn card ping.
         CombatNavigator.DebugLogEnterTarget();
         bool wasDragging = m != null && m.CardDrag;
+        // Capture the focused card BEFORE activating: a pickup synchronously warps focus to the
+        // auto-picked target character (MoveControllerToHeroes → ControllerMovement), so reading
+        // FocusedTransform afterwards would lose the card on both activation paths.
+        var preFocus = CombatNavigator.FocusedTransform;
+        CardItem preCard = preFocus != null ? preFocus.GetComponent<CardItem>() : null;
         CardItem handCard = null;
         if (m != null && !wasDragging && m.IsYourTurn())
         {
-            var focused = CombatNavigator.FocusedTransform;
-            var card = focused != null ? focused.GetComponent<CardItem>() : null;
-            if (card != null && m.CardItemTable != null && m.CardItemTable.Contains(card))
-                handCard = card;
+            if (preCard != null && m.CardItemTable != null && m.CardItemTable.Contains(preCard))
+                handCard = preCard;
         }
         if (handCard != null)
             handCard.OnMouseUpController();
@@ -122,11 +125,8 @@ public class CombatInputContext : InputContextBase
         // The pickup half of a two-step cast is otherwise silent — say what happened.
         if (m != null && !wasDragging && m.CardDrag)
         {
-            var card = CombatNavigator.FocusedTransform != null
-                ? CombatNavigator.FocusedTransform.GetComponent<CardItem>()
-                : null;
-            string name = card != null && card.CardData != null
-                ? AccessibleMenuBase.StripRichText(card.CardData.CardName)
+            string name = preCard != null && preCard.CardData != null
+                ? AccessibleMenuBase.StripRichText(preCard.CardData.CardName)
                 : "Card";
             SpeechManager.Speak(name + " picked up. Move to a target and press Enter.");
         }

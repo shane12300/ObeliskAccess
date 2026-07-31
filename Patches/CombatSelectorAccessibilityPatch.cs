@@ -71,7 +71,10 @@ public static class CombatSelectorManager
               .Append(" to ").Append(PlaceWord(place)).Append('.');
         }
         AppendKeyHints(sb, singleTake: !nonLimited && DiscardQuota == 1);
-        SpeechManager.Speak(sb.ToString());
+        // The window always opens mid-cast narration: flush the buffered events so they are heard
+        // before the prompt, and queue the prompt itself rather than cutting the current utterance.
+        CombatNavigator.FlushPendingEvents();
+        SpeechManager.SpeakQueued(sb.ToString());
     }
 
     public static void OnDeckWindowOpened(int type, int cardQuantity, int cardTotal, bool toVanish)
@@ -126,7 +129,9 @@ public static class CombatSelectorManager
             default:
                 return;
         }
-        SpeechManager.Speak(sb.ToString());
+        // Same flush-then-queue as the discard selector: never cut in-flight cast narration.
+        CombatNavigator.FlushPendingEvents();
+        SpeechManager.SpeakQueued(sb.ToString());
     }
 
     public static void OnClosed()
@@ -136,8 +141,13 @@ public static class CombatSelectorManager
             return;
         bool suppress = _suppressCloseAnnounce;
         Reset();
+        // Queued: in MP a PARTNER's confirm closes the window too, and an interrupting close line
+        // would cut whatever the resolution is currently narrating.
         if (!suppress)
-            SpeechManager.Speak("Window closed.");
+        {
+            CombatNavigator.FlushPendingEvents();
+            SpeechManager.SpeakQueued("Window closed.");
+        }
     }
 
     private static void AppendKeyHints(StringBuilder sb, bool singleTake)
@@ -235,6 +245,24 @@ public static class CombatSelectorManager
         if (!CanAct(m))
         {
             SpeechManager.Speak("Waiting for another player.");
+            return true;
+        }
+        // After a confirm the MP resolution runs over a multi-frame RPC round-trip with the window
+        // still open and the game's waitingFor* flags still set (they clear synchronously only in
+        // SP) — a further Enter would mutate the selection mid-resolution. Same latch as Space.
+        if (_confirmFired)
+        {
+            SpeechManager.Speak("Already confirmed — resolving.");
+            return true;
+        }
+        // During the MP sync barrier / card spawn-in the game hasn't armed the window yet:
+        // SelectCardTo* would silently no-op, leaving the keypress unanswered.
+        bool armed = _mode == Mode.Discover
+            ? m.WaitingForAddcardAssignment
+            : m.WaitingForDiscardAssignment || m.WaitingForLookDiscardWindow;
+        if (!armed)
+        {
+            SpeechManager.Speak("Not ready yet.");
             return true;
         }
         var cards = Cards();

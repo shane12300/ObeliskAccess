@@ -28,12 +28,23 @@ internal static class DeathScreenPopupManager
         if (death == null || hero == null)
             return;
 
+        // A second death while the popup is already up: the game skips SetCharacter, so the TMPs
+        // still show the FIRST hero — a full re-announce would mix the two. Note the extra death
+        // and keep the existing rows/owner.
+        if (_active)
+        {
+            SpeechManager.SpeakQueued(AccessibleMenuBase.StripRichText(hero.SourceName)
+                + " also fell. Death's Door added to their deck.");
+            return;
+        }
+
         _lines.Clear();
         string title = AccessibleMenuBase.StripRichText(death.textCharDeath.text);
         if (title.Length > 0)
             _lines.Add(title);
         _lines.AddRange(AccessibleMenuBase.SplitLines(death.textInstructions.text));
-        _lines.Add("Death's Door curse added to " + hero.SourceName + "'s deck.");
+        _lines.Add("Death's Door curse added to "
+            + AccessibleMenuBase.StripRichText(hero.SourceName) + "'s deck.");
         _index = 0;
         _active = true;
         _owner = string.IsNullOrEmpty(hero.Owner) ? "the host" : hero.Owner;
@@ -43,8 +54,11 @@ internal static class DeathScreenPopupManager
         string prompt = ButtonVisible()
             ? "Press Enter to continue."
             : "Waiting for " + _owner + " to continue.";
-        string firstLine = _lines.Count > 1 ? " " + _lines[1] : "";
-        SpeechManager.SpeakQueued(title + "." + firstLine + " " + prompt + " Up and down to read.");
+        // With an empty title the first body line sits at index 0, not 1.
+        int first = title.Length > 0 ? 1 : 0;
+        string firstLine = _lines.Count > first ? " " + _lines[first] : "";
+        string lead = title.Length > 0 ? title + "." : "";
+        SpeechManager.SpeakQueued(lead + firstLine + " " + prompt + " Up and down to read.");
     }
 
     public static void OnClosed()

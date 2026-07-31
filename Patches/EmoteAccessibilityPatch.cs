@@ -147,18 +147,20 @@ internal static class EmotePingManager
 
     internal static Character FindById(string id)
     {
+        // Mirror EmoteTarget's own target filter (alive + spawned item): the game silently no-ops
+        // a ping at a just-died character, so matching on Id alone would announce an undelivered ping.
         var mm = MatchManager.Instance;
         if (mm == null || string.IsNullOrEmpty(id))
             return null;
         var heroes = mm.GetTeamHero();
         if (heroes != null)
             foreach (var c in heroes)
-                if (c != null && c.Id == id)
+                if (c != null && c.Alive && c.HeroItem != null && c.Id == id)
                     return c;
         var npcs = mm.GetTeamNPC();
         if (npcs != null)
             foreach (var c in npcs)
-                if (c != null && c.Id == id)
+                if (c != null && c.Alive && c.NPCItem != null && c.Id == id)
                     return c;
         return null;
     }

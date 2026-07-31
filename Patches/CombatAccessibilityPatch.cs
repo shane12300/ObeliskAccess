@@ -213,6 +213,22 @@ public static class CombatNavigator
         _recentNegated.Clear();
     }
 
+    /// <summary>
+    /// Silent lifecycle reset at combat scene start. A round-1 wipe → retry (and the MP desync
+    /// reload) rebuilds the combat WITHOUT NewTurn.FinishCombat ever firing, and the reloaded
+    /// round 1 defeats the round-regression re-arm above (1 is not &lt; 1) — so without this the
+    /// retried combat gets no round line, no overview and no emote hint.
+    /// </summary>
+    public static void OnCombatStart()
+    {
+        _pendingNpcTurnName = null;
+        ResetFocus();
+        _overviewAnnounced = false;
+        _lastRound = -1;
+        _auraWatch.Clear();
+        _recentNegated.Clear();
+    }
+
     private static void ResetFocus()
     {
         _lastIndex = -1;
@@ -908,8 +924,12 @@ public static class CombatNavigator
         }
     }
 
-    /// <summary>Flush buffered events immediately, so they precede a queued turn/end announcement.</summary>
-    private static void FlushPendingEvents()
+    /// <summary>
+    /// Flush buffered events immediately, so they precede a queued turn/end announcement.
+    /// Internal: the combat-selector windows open mid-cast and must flush before their own
+    /// queued open/close announcements, or the buffered events would play after the prompt.
+    /// </summary>
+    internal static void FlushPendingEvents()
     {
         if (_ctBuffer.Count > 0)
             Flush();
@@ -1577,11 +1597,22 @@ public class CombatTurnChangePatch
 }
 
 /// <summary>Feeds the hover-sound fallback: marks that the game's own hover reached this card, so
-/// the fallback stays silent (no double sound) and only fills in for eclipsed cards.</summary>
+/// the fallback stays silent (no double sound) and only fills in for eclipsed cards. The original
+/// early-returns when the card is NOT the top transform under the cursor — the prefix captures that
+/// guard so an eclipsed card (or an MP NET_AmplifyCard mirror calling fOnMouseEnter directly) is
+/// not recorded as "hover arrived", which would suppress the fallback in exactly the eclipse case
+/// it exists for.</summary>
 [HarmonyPatch(typeof(CardItem), nameof(CardItem.fOnMouseEnter))]
 public class CombatCardHoverPatch
 {
-    static void Postfix(CardItem __instance) => CombatNavigator.OnCardMouseEnter(__instance);
+    static void Prefix(CardItem __instance, out bool __state)
+        => __state = Functions.IsTopTransform(__instance.transform);
+
+    static void Postfix(CardItem __instance, bool __state)
+    {
+        if (__state)
+            CombatNavigator.OnCardMouseEnter(__instance);
+    }
 }
 
 /// <summary>Announces victory/defeat.</summary>
@@ -1589,6 +1620,13 @@ public class CombatCardHoverPatch
 public class CombatEndPatch
 {
     static void Postfix(bool won) => CombatNavigator.OnCombatEnd(won);
+}
+
+/// <summary>Silent state reset when a combat scene (re)starts — see CombatNavigator.OnCombatStart.</summary>
+[HarmonyPatch(typeof(MatchManager), "Start")]
+public class CombatStartPatch
+{
+    static void Postfix() => CombatNavigator.OnCombatStart();
 }
 
 // The CombatText patches target the private Launch* methods, NOT the public SetDamageNew/SetText:
