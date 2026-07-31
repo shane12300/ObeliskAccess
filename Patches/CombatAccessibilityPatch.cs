@@ -1294,10 +1294,7 @@ internal static class CombatNavigator
     }
 
     private static string AuraName(AuraCurse a)
-    {
-        string name = AccessibleMenuBase.StripRichText(a.ACData.ACName);
-        return string.IsNullOrEmpty(name) ? a.ACData.Id : name;
-    }
+        => CardSpeech.AuraName(a?.ACData);
 
     /// <summary>
     /// A status description with its numeric placeholders (&lt;ChargesMultiplier&gt; and friends)

@@ -51,6 +51,18 @@ internal static class CardSpeech
         return cd != null ? AccessibleMenuBase.StripRichText(cd.CardName) : cardId;
     }
 
+    /// <summary>
+    /// Spoken aura/curse name: stripped ACName, falling back to the id when the name is empty.
+    /// Returns "" for null data (unknown aura id) so callers can supply their own fallback.
+    /// </summary>
+    public static string AuraName(AuraCurseData ac)
+    {
+        if (ac == null)
+            return "";
+        string name = AccessibleMenuBase.StripRichText(ac.ACName);
+        return string.IsNullOrEmpty(name) ? ac.Id : name;
+    }
+
     /// <summary>The five gear slots, in the armory's display order.</summary>
     public static readonly Enums.CardType[] EquipSlots =
     {

@@ -1165,10 +1165,10 @@ internal static class CharWindowScreenManager
                     Read = () =>
                     {
                         int charges = captured.GetCharges();
-                        return "Effect: " + AuraName(captured.ACData) + ", " + charges
+                        return "Effect: " + CardSpeech.AuraName(captured.ACData) + ", " + charges
                             + (charges == 1 ? " charge." : " charges.");
                     },
-                    Detail = () => AuraName(captured.ACData) + ": "
+                    Detail = () => CardSpeech.AuraName(captured.ACData) + ": "
                         + CardSpeech.CleanFlat(captured.ACData.Description),
                 });
             }
@@ -1203,21 +1203,16 @@ internal static class CharWindowScreenManager
                     return "No immunities.";
                 var names = new List<string>();
                 foreach (var id in immune)
-                    names.Add(AuraName(Globals.Instance.GetAuraCurseData(id)) ?? id);
+                {
+                    string n = CardSpeech.AuraName(Globals.Instance.GetAuraCurseData(id));
+                    names.Add(n.Length > 0 ? n : id);
+                }
                 return "Immune to: " + string.Join(", ", names.ToArray()) + ".";
             },
         });
 
         // Charge modifiers ("your Bleed applies +1"), merged the way DoStats merges them.
         _rows.Add(new Row { Read = () => ChargeModifierText(character) });
-    }
-
-    private static string AuraName(AuraCurseData acData)
-    {
-        if (acData == null)
-            return null;
-        string name = AccessibleMenuBase.StripRichText(acData.ACName);
-        return string.IsNullOrEmpty(name) ? acData.Id : name;
     }
 
     private static string ChargeModifierText(Character character)
@@ -1242,7 +1237,9 @@ internal static class CharWindowScreenManager
         {
             if (pair.Value == 0)
                 continue;
-            string name = AuraName(Globals.Instance.GetAuraCurseData(pair.Key)) ?? pair.Key;
+            string name = CardSpeech.AuraName(Globals.Instance.GetAuraCurseData(pair.Key));
+            if (name.Length == 0)
+                name = pair.Key;
             parts.Add(name + (pair.Value > 0 ? " plus " + pair.Value : " minus " + -pair.Value));
         }
         return parts.Count == 0
