@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 using System.Text.RegularExpressions;
+using HarmonyLib;
 using TMPro;
 using UnityEngine;
 
@@ -64,6 +65,16 @@ public abstract class AccessibleMenuBase
                 if (!string.IsNullOrEmpty(description))
                     raw += ". " + description;
             }
+        }
+
+        if (raw == null)
+        {
+            // The slot's delete affordance is a CHILD of MenuSaveButton whose visible label is a
+            // bare "X" glyph — resolve it by identity before the slot lookup below (which searches
+            // downward and would fall through to the TMP fallback, speaking "X").
+            var deleteSave = ResolveDeleteButtonSlot(item);
+            if (deleteSave != null)
+                return "Delete save slot " + SlotOrdinal(deleteSave);
         }
 
         if (raw == null)
@@ -205,17 +216,63 @@ public abstract class AccessibleMenuBase
     }
 
     /// <summary>
-    /// Builds a spoken label for a save slot from its visible TMP fields (only those currently
-    /// active and non-empty), joined with commas. Empty result falls back to the caller's default.
+    /// Builds a spoken label for a save slot: its 1-based page position first (so "Delete save
+    /// slot N" pairs with a numbered row — the game itself shows no numbers), then its visible
+    /// TMP fields (only those currently active and non-empty), joined with commas.
     /// </summary>
     protected static string GetSaveSlotText(MenuSaveButton save)
     {
         var sb = new StringBuilder();
+        sb.Append("Slot ").Append(SlotOrdinal(save));
         AppendField(sb, save.slotText);
         AppendField(sb, save.descriptionText);
         AppendField(sb, save.madnessText);
         AppendField(sb, save.playersText);
         return sb.ToString();
+    }
+
+    /// <summary>
+    /// Maps a controller item to the <see cref="MenuSaveButton"/> whose delete affordance it is,
+    /// or null. The delete button only enters the controller list while its slot is hovered (our
+    /// cursor warp triggers the game's HoverOn), and its visible label is a localisation-free "X"
+    /// glyph — identity, not text, is the only sound resolution.
+    /// </summary>
+    internal static MenuSaveButton ResolveDeleteButtonSlot(Transform item)
+    {
+        var save = item.GetComponentInParent<MenuSaveButton>();
+        if (save == null || save.deleteButton == null)
+            return null;
+        if (item != save.deleteButton && !item.IsChildOf(save.deleteButton))
+            return null;
+
+        if (!_deleteResolveLogged)
+        {
+            // One-time hierarchy confirmation for the playtest: the resolution assumes the
+            // controller entry sits inside the MenuSaveButton hierarchy.
+            _deleteResolveLogged = true;
+            Plugin.LogDebug("Save-delete proxy resolved: " + item.name + " under "
+                + (item.parent != null ? item.parent.name : "<root>"));
+        }
+        return save;
+    }
+
+    private static bool _deleteResolveLogged;
+
+    /// <summary>
+    /// 1-based position of the slot on the visible page (three slots per page). The game never
+    /// displays a slot number of its own, and the private slotNum spans 48 slots across the
+    /// SP/MP sections — it must not be spoken raw.
+    /// </summary>
+    internal static int SlotOrdinal(MenuSaveButton save)
+    {
+        var mgr = MainMenuManager.Instance;
+        if (mgr != null && mgr.menuSaveButtons != null)
+        {
+            int i = Array.IndexOf(mgr.menuSaveButtons, save);
+            if (i >= 0)
+                return i + 1;
+        }
+        return Traverse.Create(save).Field<int>("slotNum").Value % 6 + 1;
     }
 
     private static void AppendField(StringBuilder sb, TMP_Text field)

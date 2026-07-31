@@ -170,12 +170,12 @@ public class RouterDoButtonNorthPatch
 }
 
 /// <summary>
-/// The game maps a bare Ctrl press to a "click" (<c>DoFirePerformed</c>). Screens that repurpose
-/// Ctrl as a modifier (map look-ahead, card drills, give amount steps) or that carry live TMP
-/// input fields a synthetic click could focus (craft search bar, lobby fields — opening the
-/// on-screen keyboard over the mod screen) declare <see cref="IInputContext.UsesCtrlModifier"/>;
-/// the click is suppressed while one of them is open and Ctrl is held. Gamepad A (no Ctrl held)
-/// and mouse clicks are unaffected.
+/// The game maps a bare Ctrl press to a "click" (<c>DoFirePerformed</c>). No mod screen wants a
+/// stray click at the cursor — it can press an option, buy an item, or focus a live TMP field
+/// (craft search bar, lobby fields) and open the on-screen keyboard — so
+/// <see cref="IInputContext.UsesCtrlModifier"/> defaults to true and the click is suppressed
+/// whenever any mod screen is open and Ctrl is held. Gamepad A (no Ctrl held) and mouse clicks
+/// are unaffected.
 /// </summary>
 [HarmonyPatch(typeof(InputController), "DoFirePerformed")]
 public class RouterDoFirePerformedPatch

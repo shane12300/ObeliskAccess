@@ -63,9 +63,10 @@ public interface IInputContext
     /// cursor (cards, portraits) and pop an inaccessible window.</summary>
     bool SuppressesBareAlt { get; }
 
-    /// <summary>This screen uses Ctrl as a modifier (look-ahead, card drill, amount step) or
-    /// carries live input fields a synthetic click could focus: the game's bare-Ctrl click
-    /// (DoFirePerformed) is suppressed while Ctrl is held.</summary>
+    /// <summary>The game's bare-Ctrl synthetic click (DoFirePerformed) is suppressed while this
+    /// screen is open and Ctrl is held — default TRUE: no mod screen wants a stray click at the
+    /// cursor (it can press an option, buy an item, or focus a TMP field and open the on-screen
+    /// keyboard). Enter-triggered clicks (no Ctrl held) are unaffected.</summary>
     bool UsesCtrlModifier { get; }
 }
 
@@ -80,12 +81,12 @@ public abstract class InputContextBase : IInputContext
     public virtual bool OnNumber(int n) => false;
     public virtual bool OnSpace() => false;
 
-    // Suppression-flag defaults (see IInputContext): Enter-swallow is opt-OUT — forgetting it on
-    // a new self-activating context was a repeat bug source (mode-screen skip, event "always
-    // option 1") — the rest are opt-in.
+    // Suppression-flag defaults (see IInputContext): Enter-swallow and Ctrl-click suppression are
+    // opt-OUT — forgetting them on a new context was a repeat bug source (mode-screen skip, event
+    // "always option 1", stray Ctrl clicks on the main menu) — the rest are opt-in.
     public virtual bool SwallowsGameEnter => true;
     public virtual bool SwallowsGameSpace => false;
     public virtual bool UsesAltLetters => false;
     public virtual bool SuppressesBareAlt => false;
-    public virtual bool UsesCtrlModifier => false;
+    public virtual bool UsesCtrlModifier => true;
 }

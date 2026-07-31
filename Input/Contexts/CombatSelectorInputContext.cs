@@ -43,7 +43,6 @@ public class CombatSelectorInputContext : InputContextBase
     public override bool SwallowsGameSpace => true;
     public override bool UsesAltLetters => true;
     public override bool SuppressesBareAlt => true;
-    public override bool UsesCtrlModifier => true;
 
     public override bool OnMove(Vector2 direction)
     {

@@ -16,8 +16,6 @@ public class GiveInputContext : InputContextBase
 
     public override bool IsActive => IsCurrentlyActive;
 
-    // Ctrl scales the amount step — the bare-Ctrl click must stay inert under the modal.
-    public override bool UsesCtrlModifier => true;
 
     public override bool OnMove(Vector2 direction)
     {

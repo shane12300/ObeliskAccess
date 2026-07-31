@@ -30,8 +30,6 @@ public class LootInputContext : InputContextBase
 
     public override bool IsActive => IsCurrentlyActive;
 
-    // Ctrl+Up/Down is the item drill — the bare-Ctrl click could take an item under the cursor.
-    public override bool UsesCtrlModifier => true;
     // Alt+T/I/G/R review keys — the bare-Alt right-click could pop a loot item's window.
     public override bool SuppressesBareAlt => true;
 

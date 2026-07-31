@@ -137,6 +137,16 @@ public class MainMenuInputContext : InputContextBase
         // ControllerMovement and check the save menu before the mode screen.
         if (item != null && mgr.IsSaveMenuActive())
         {
+            // Delete affordance first: it is a CHILD of MenuSaveButton, so the downward search
+            // below never finds the slot from it. DeleteThis raises the game's own confirm
+            // dialog, which the global alert layer owns.
+            var deleteSave = ObeliskAccess.Patches.AccessibleMenuBase.ResolveDeleteButtonSlot(item);
+            if (deleteSave != null)
+            {
+                deleteSave.DeleteThis();
+                return true;
+            }
+
             var save = item.GetComponentInChildren<MenuSaveButton>();
             if (save != null)
             {

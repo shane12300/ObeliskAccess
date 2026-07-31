@@ -49,9 +49,6 @@ public class MapInputContext : InputContextBase
 
     public override bool IsActive => IsCurrentlyActive;
 
-    // Ctrl is the look-ahead modifier (and Ctrl+G opens the give window) — the game's bare-Ctrl
-    // click must not press a node under the stale cursor.
-    public override bool UsesCtrlModifier => true;
     // Alt+T/G/I/R review keys — the bare-Alt right-click could land on a node or portrait.
     public override bool SuppressesBareAlt => true;
 

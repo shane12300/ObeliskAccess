@@ -285,12 +285,10 @@ internal static class FinishRunScreenManager
             return;
         }
 
-        // The game's own path: warp the cursor onto the button (its controller list holds only
-        // the Main Menu button) and fire the synthetic click — the MainMenu idiom.
-        frm.ControllerMovement();
-        var controller = ObeliskAccess.Input.InputRouter.Controller;
-        if (controller != null)
-            Traverse.Create(controller).Method("DoFirePerformed").GetValue();
+        // Not the warp+synthetic-click idiom: WarpCursorPosition is asynchronous, so the click's
+        // raycast still saw the pre-warp cursor in the same frame — the first Enter missed (hover
+        // sound only) and the second landed. The button's own click path needs no cursor at all.
+        frm.mainMenuButton.Clicked();
     }
 
     public static string Overview()

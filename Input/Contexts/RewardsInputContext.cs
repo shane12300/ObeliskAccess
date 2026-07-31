@@ -30,8 +30,6 @@ public class RewardsInputContext : InputContextBase
 
     public override bool IsActive => IsCurrentlyActive;
 
-    // Ctrl+Up/Down is the card drill — the bare-Ctrl click could take a reward under the cursor.
-    public override bool UsesCtrlModifier => true;
     // Alt+T/I/R review keys — the bare-Alt right-click could pop a reward card's window.
     public override bool SuppressesBareAlt => true;
 

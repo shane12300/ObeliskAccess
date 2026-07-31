@@ -111,10 +111,11 @@ screen owns the keyboard and translates raw keys into semantic events; per-scree
   selector windows' confirm key vs the game's end-turn); `UsesAltLetters` (Alt review keys vs
   the game's MP emote binds R/E/S/A/W/Q); `SuppressesBareAlt` (bare Alt → `DoButtonNorth`
   synthetic right-click — on HeroSelection it would right-click the portrait under the cursor
-  and pop the character window); and `UsesCtrlModifier` (bare Ctrl → `DoFirePerformed` click, vs
-  map look-ahead, detail drills, and screens with live TMP fields the click could focus,
-  opening the on-screen keyboard). A new context declares what it repurposes and is otherwise
-  covered by the defaults — no router edits needed.
+  and pop the character window); and `UsesCtrlModifier` (bare Ctrl → `DoFirePerformed` click —
+  default **true**: no mod screen wants a stray click at the cursor, which could press an option
+  or focus a live TMP field and open the on-screen keyboard; Enter-triggered clicks are keyed on
+  Ctrl-held and unaffected). A new context declares what it repurposes and is otherwise covered
+  by the defaults — no router edits needed.
 - `Input/Contexts/*InputContext.cs` — one per screen (thin; delegates to a `Patches/` manager).
 - `Input/MapHotkeyPoller.cs`, `Input/CombatHotkeyPoller.cs`, `Input/EventHotkeyPoller.cs`,
   `Input/TownHotkeyPoller.cs`, `Input/CardCraftHotkeyPoller.cs`, `Input/AlertHotkeyPoller.cs`,

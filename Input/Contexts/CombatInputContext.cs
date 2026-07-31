@@ -42,11 +42,10 @@ public class CombatInputContext : InputContextBase
     /// for the (not yet mod-covered) energy-transfer selector — and OnConfirm deliberately rides
     /// the game's warped-cursor click path.</summary>
     public override bool SwallowsGameEnter => false;
-    // Alt+R/E/S/A/W/Q review keys collide with the game's MP emote binds; Ctrl is the drill-in
-    // modifier and bare Alt would right-click the card under the stale cursor.
+    // Alt+R/E/S/A/W/Q review keys collide with the game's MP emote binds; bare Alt would
+    // right-click the card under the stale cursor.
     public override bool UsesAltLetters => true;
     public override bool SuppressesBareAlt => true;
-    public override bool UsesCtrlModifier => true;
 
     public override bool OnMove(Vector2 direction)
     {

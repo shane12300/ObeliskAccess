@@ -459,3 +459,11 @@
   block", "No buffs" or "No curses" lines — it lists only what the character actually has
   (Alt+B and Alt+S still answer directly when asked) — and each effect now reads name and
   value first, category after: "Mark 2, curse" instead of "Curse, Mark, 2".
+- Leaving the end-of-run screen takes a single Enter press on the Main Menu row (previously
+  the first press only played a hover sound and a second press was needed to actually leave).
+- Pressing Ctrl on its own no longer clicks anything, on any screen — previously the game
+  treated a bare Ctrl as a mouse click, which on the main menu (and a few other screens)
+  could silently activate whatever the cursor was resting on.
+- Save slots now announce their number — "Slot 1", "Slot 2", "Slot 3" — and each slot's
+  delete button reads "Delete save slot N" instead of a bare letter "X". Pressing Enter on
+  it asks the game's own delete confirmation, which is read like any other dialog.

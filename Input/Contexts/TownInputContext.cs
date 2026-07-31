@@ -31,8 +31,6 @@ public class TownInputContext : InputContextBase
 
     public override bool IsActive => IsCurrentlyActive;
 
-    // Ctrl+G opens the give window — the Ctrl press must not synthetically click a hub building.
-    public override bool UsesCtrlModifier => true;
     // Alt+T/G/I/R review keys — suppress the game's bare-Alt synthetic right-click.
     public override bool SuppressesBareAlt => true;
 

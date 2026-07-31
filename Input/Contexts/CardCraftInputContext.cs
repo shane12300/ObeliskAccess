@@ -41,9 +41,6 @@ public class CardCraftInputContext : InputContextBase
 
     public override bool IsActive => IsCurrentlyActive;
 
-    // The Forge search bar is a live TMP field: a bare-Ctrl synthetic click landing on it opens
-    // the game's on-screen keyboard over the mod screen. Ctrl has no mod meaning here — inert.
-    public override bool UsesCtrlModifier => true;
     // Alt+T/F review keys — the bare-Alt right-click could pop a shop card's inspection window.
     public override bool SuppressesBareAlt => true;
 
