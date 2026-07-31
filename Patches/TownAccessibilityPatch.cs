@@ -67,6 +67,9 @@ internal static class TownScreenManager
             _index = -1; // sentinel: the first Down lands on the first hub item
             _partyIndex = 0;
             _subScreenOpen = false;
+            // Row keys are stable across towns ("ready", "building:*"), so a stale key from the
+            // previous visit would let a blind first Enter relocate to — and fire — that row.
+            _focusedKey = null;
         }
 
         // Arrival announcement: give the scene ~half a second to finish laying out (treasures pop
@@ -99,6 +102,7 @@ internal static class TownScreenManager
         _entries.Clear();
         _region = Region.Main;
         _index = 0;
+        _focusedKey = null;
     }
 
     // ---------------------------------------------------------------- entry list
@@ -478,7 +482,7 @@ internal static class TownScreenManager
         var ato = AtOManager.Instance;
         var sb = new StringBuilder();
 
-        string zone = ato != null ? ato.GetTownZoneId() : "";
+        string zone = ZoneDisplayName(ato != null ? ato.GetTownZoneId() : "");
         sb.Append(string.IsNullOrEmpty(zone) ? "Town." : "Town of " + zone + ".");
 
         int treasures = 0;
@@ -507,6 +511,25 @@ internal static class TownScreenManager
 
         sb.Append(" Up and down to choose, Enter to open, Tab for party.");
         return sb.ToString();
+    }
+
+    /// <summary>Localized zone name the way the game's own node popup resolves it
+    /// (ZoneDataSource[id].ZoneName through Texts, then the id as a text key); the raw zone id is
+    /// an internal string and only a last resort.</summary>
+    private static string ZoneDisplayName(string zoneId)
+    {
+        if (string.IsNullOrEmpty(zoneId))
+            return "";
+        string name = "";
+        if (Texts.Instance != null)
+        {
+            var zds = Globals.Instance?.ZoneDataSource;
+            string id = zoneId.ToLower();
+            name = zds != null && zds.ContainsKey(id) && zds[id] != null
+                ? Texts.Instance.GetText(zds[id].ZoneName)
+                : Texts.Instance.GetText(id);
+        }
+        return string.IsNullOrEmpty(name) ? zoneId : AccessibleMenuBase.StripRichText(name);
     }
 
     private static int Wrap(int v, int count) => ((v % count) + count) % count;

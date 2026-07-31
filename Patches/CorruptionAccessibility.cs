@@ -41,7 +41,20 @@ public static class CorruptionAccessibility
     /// them).</summary>
     internal static int FillSerial { get; private set; }
 
-    internal static void OnDrawStarted() => _labelsFilled = false;
+    /// <summary>True once CorruptionContinue succeeded for the current draw. The prompt stays on
+    /// screen for the seconds until the combat scene loads (TravelToThisNodeCorruption polls
+    /// corruptionSetted), and the game silently ignores every choice call in that window — so the
+    /// mod must refuse instead of narrating outcomes that never happened. Cleared when a new draw
+    /// starts (the master's NextCorruption re-roll re-enables input).</summary>
+    private static bool _settled;
+
+    internal static void OnDrawStarted()
+    {
+        _labelsFilled = false;
+        _settled = false;
+    }
+
+    internal static void OnConfirmResolved(bool settled) => _settled = settled;
 
     internal static void OnLabelFilled()
     {
@@ -76,6 +89,11 @@ public static class CorruptionAccessibility
 
     private static bool RefuseIfNotChoosable()
     {
+        if (_settled)
+        {
+            SpeechManager.Speak("The corruption is locked in. Traveling.");
+            return true;
+        }
         if (!Drawn)
         {
             SpeechManager.Speak("The corruption offer is still appearing.");
@@ -119,8 +137,41 @@ public static class CorruptionAccessibility
     {
         if (RefuseIfNotChoosable())
             return;
-        SpeechManager.Speak("Confirming");
+        // CorruptionContinue can refuse (box checked but no reward chosen -> the game raises its
+        // "corruptionSelect" alert, spoken by the global alert dialogue). The settled flag flips
+        // synchronously via the CorruptionContinue postfix, so read it after the call and only
+        // announce a confirmation that actually happened.
         MapManager.Instance?.CorruptionContinue();
+        if (_settled)
+            SpeechManager.Speak("Corruption confirmed. Traveling.");
+    }
+
+    /// <summary>The host's choices reach non-masters only as RPCs (their own buttons are
+    /// disabled); speak them or the wait between the offer and the combat is dead silence.</summary>
+    internal static void OnHostChoseReward(short choosed)
+    {
+        if (!NonMasterMp || !Drawn)
+            return;
+        var c = MapManager.Instance?.corruption;
+        if (choosed == 1 || choosed == 2)
+        {
+            string reward = RewardText(choosed == 1 ? c?.rewardBotA : c?.rewardBotB);
+            SpeechManager.SpeakQueued("The host chose reward " + (choosed == 1 ? "A" : "B")
+                + (reward.Length > 0 ? ": " + reward : "") + ".");
+        }
+        else
+        {
+            SpeechManager.SpeakQueued("The host cleared the reward choice.");
+        }
+    }
+
+    internal static void OnHostBoxToggled(bool status)
+    {
+        if (!NonMasterMp || !Drawn)
+            return;
+        SpeechManager.SpeakQueued(status
+            ? "The host accepted the corruption."
+            : "The host declined the corruption.");
     }
 
     private static void AppendReward(StringBuilder sb, string label, BotonGeneric reward)
@@ -164,4 +215,29 @@ internal static class CorruptionNetDrawPatch
 internal static class CorruptionLabelsFilledPatch
 {
     static void Postfix() => CorruptionAccessibility.OnLabelFilled();
+}
+
+/// <summary>Runs synchronously inside every confirm (the mod's Enter and the mouse path alike), so
+/// the settled flag is current the moment CorruptionContinue returns. corruptionSetted is private
+/// on MapManager — Traverse.</summary>
+[HarmonyPatch(typeof(MapManager), nameof(MapManager.CorruptionContinue))]
+internal static class CorruptionContinueSettledPatch
+{
+    static void Postfix(MapManager __instance)
+        => CorruptionAccessibility.OnConfirmResolved(
+            Traverse.Create(__instance).Field<bool>("corruptionSetted").Value);
+}
+
+/// <summary>Master's reward pick arriving on the other clients (1 = A, 2 = B, 0 = cleared).</summary>
+[HarmonyPatch(typeof(MapManager), nameof(MapManager.NET_ChooseRewardCorruption))]
+internal static class CorruptionNetChoosePatch
+{
+    static void Postfix(short choosed) => CorruptionAccessibility.OnHostChoseReward(choosed);
+}
+
+/// <summary>Master's accept-box toggle arriving on the other clients.</summary>
+[HarmonyPatch(typeof(MapManager), nameof(MapManager.NET_BoxClicked))]
+internal static class CorruptionNetBoxPatch
+{
+    static void Postfix(bool status) => CorruptionAccessibility.OnHostBoxToggled(status);
 }

@@ -115,8 +115,14 @@ internal static class EventScreenManager
 
         // Covers Enter, mouse clicks, and multiplayer partners' picks. (The game's 0.5s
         // auto-select of a lone option used to arrive here too — it is now suppressed by
-        // EventAutoSelectSuppressPatch; single-choice events wait for Enter.)
-        SpeechManager.Speak("Selected: " + _selectedChoiceText);
+        // EventAutoSelectSuppressPatch; single-choice events wait for Enter.) A follower's
+        // auto-vote (AutoSelectClient with follow-the-leader on) also lands here un-flagged —
+        // phrase it as the host's pick, not the player's.
+        bool followAuto = !UserSelectionInProgress
+            && MpSpeech.IsMp
+            && NetworkManager.Instance != null && !NetworkManager.Instance.IsMaster()
+            && AtOManager.Instance != null && AtOManager.Instance.followingTheLeader;
+        SpeechManager.Speak((followAuto ? "Following the host: " : "Selected: ") + _selectedChoiceText);
         // In MP this was only the local VOTE: the event resolves when every player has chosen,
         // which can be minutes away. Without this the wait is dead silence.
         if (WaitingForVotes)

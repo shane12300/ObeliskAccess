@@ -325,3 +325,28 @@
 - After a party wipe on round 1 followed by a retry (and after a multiplayer desync reload),
   the rebuilt combat announces its round, battlefield overview, and emote keys again —
   previously the retried combat started silent.
+- Fixed: arriving in a new town and pressing Enter before any arrow key could silently
+  activate the row focused in the PREVIOUS town — worst case the Ready row, leaving town on
+  the spot. A fresh town now always starts unfocused.
+- Selling supplies in multiplayer now reports the sale correctly ("Sold 3 supply for 300
+  gold and 300 dust… Balances update shortly") instead of reading balances that hadn't
+  updated yet, and a sale of zero (or more than you have) now says "Nothing sold."
+- The combat-node detail (Alt+T) now reports the same enemy count a sighted player sees on
+  the hover popup: it accounts for the enemy removed on the default difficulty, the sandbox
+  "fewer enemies" option, and the randomized rosters of Obelisk challenges and the
+  "randomcombats" madness trait.
+- Map travel votes cast with the mouse are now announced as "Your vote for X is in" —
+  previously they were misread as "Following the host", even with follow-the-leader off.
+  Vote tallies are also no longer announced for broadcasts the game rejected.
+- Pressing Enter again in single player while travel is already underway now says "Already
+  traveling" once instead of re-announcing the destination on every press.
+- The corruption prompt goes quiet once the choice is locked in: after confirming, further
+  arrow keys say "The corruption is locked in. Traveling." instead of narrating choices the
+  game was ignoring, and Enter no longer says "Confirming" when the game is about to refuse
+  (reward accepted but none chosen). Other players in multiplayer now hear the host's
+  decisions as they happen: "The host chose reward A: …", "The host accepted/declined the
+  corruption."
+- Story-event names on the map (Alt+T) and the town name in the arrival overview are now
+  spoken in the game's language instead of their internal English names.
+- When follow-the-leader auto-picks a story-event choice for you, it is announced as
+  "Following the host: …" instead of "Selected: …" as if you had chosen it.

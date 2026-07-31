@@ -115,12 +115,33 @@ internal static class TownUpgradeScreenManager
         if (_inSellPanel)
         {
             int qty = CurrentSellQuantity(w);
+            int have = PlayerManager.Instance != null ? PlayerManager.Instance.SupplyActual : 0;
+            if (qty <= 0 || qty > have)
+            {
+                // CurrencyManager.SellSupply silently refuses these; don't claim a sale.
+                w.ShowSellSupply(false);
+                _inSellPanel = false;
+                SpeechManager.Speak("Nothing sold.");
+                return;
+            }
             w.SellSupplyAction();
             _inSellPanel = false;
-            var cm = AtOManager.Instance?.CurrencyManager;
-            SpeechManager.Speak("Sold " + qty + " supply. Gold " + (cm?.GetPlayerGold() ?? 0)
-                + ", dust " + (cm?.GetPlayerDust() ?? 0)
-                + ", supply " + (PlayerManager.Instance?.SupplyActual ?? 0));
+            if (MpSpeech.IsMp)
+            {
+                // In MP the gold/dust credit routes through a master RPC (CurrencyManager.SellSupply
+                // -> AskForGold/AskForDust), so local balances are still pre-sale this frame; the
+                // 100-per-supply rate is hardcoded in SellSupply.
+                SpeechManager.Speak("Sold " + qty + " supply for " + (qty * 100) + " gold and "
+                    + (qty * 100) + " dust. Supply " + (PlayerManager.Instance?.SupplyActual ?? 0)
+                    + ". Balances update shortly.");
+            }
+            else
+            {
+                var cm = AtOManager.Instance?.CurrencyManager;
+                SpeechManager.Speak("Sold " + qty + " supply. Gold " + (cm?.GetPlayerGold() ?? 0)
+                    + ", dust " + (cm?.GetPlayerDust() ?? 0)
+                    + ", supply " + (PlayerManager.Instance?.SupplyActual ?? 0));
+            }
             return;
         }
 

@@ -274,6 +274,12 @@ public static class MapNavigator
             m.PlayerSelectedNode(node);
             return;
         }
+        if (m.selectedNode)
+        {
+            // PlayerSelectedNode silently no-ops once travel is underway; don't re-claim it.
+            SpeechManager.Speak("Already traveling.");
+            return;
+        }
         SpeechManager.Speak("Traveling to " + NodeType(node));
         m.PlayerSelectedNode(node);
     }
@@ -319,6 +325,15 @@ public static class MapNavigator
             Plugin.LogDebug("OnVoteShare: unparseable vote share, skipped");
             return;
         }
+        // The game discards the whole broadcast (dict untouched) if ANY entry is empty or names an
+        // unknown node — mirror that before announcing votes it never counted.
+        var mm = MapManager.Instance;
+        if (mm == null)
+            return;
+        for (int i = 0; i < keys.Length; i++)
+            if (string.IsNullOrEmpty(keys[i]) || string.IsNullOrEmpty(vals[i]) || mm.GetNodeFromId(vals[i]) == null)
+                return;
+
         if (keys.Length < _announcedVotes.Count)
             _announcedVotes.Clear(); // new voting round
 
@@ -333,9 +348,20 @@ public static class MapNavigator
             if (!_announcedVotes.Add(key))
                 continue;
             if (keys[i] != localNick)
+            {
                 SpeechManager.SpeakQueued(MpSpeech.DisplayNick(keys[i]) + " votes for " + lastName + ".");
+            }
             else if (!_localVoteAnnounced)
-                SpeechManager.SpeakQueued("Following " + HostNick() + " to " + lastName + "."); // auto-vote cast for us
+            {
+                // An un-announced local vote is either the game's follow-the-leader auto-vote or
+                // a mouse-cast vote — only the former should claim we are "following".
+                bool follow = AtOManager.Instance != null && AtOManager.Instance.followingTheLeader
+                    && NetworkManager.Instance != null && !NetworkManager.Instance.IsMaster();
+                SpeechManager.SpeakQueued(follow
+                    ? "Following " + HostNick() + " to " + lastName + "."
+                    : "Your vote for " + lastName + " is in.");
+                _localVoteAnnounced = true;
+            }
         }
 
         int total = NetworkManager.Instance != null ? NetworkManager.Instance.GetNumPlayers() : 0;
@@ -633,12 +659,7 @@ public static class MapNavigator
             string assignedId = node.GetNodeAssignedId();
             if (action == "combat")
             {
-                var cd = Globals.Instance?.GetCombatData(assignedId);
-                int enemies = 0;
-                if (cd?.NPCList != null)
-                    foreach (var npc in cd.NPCList)
-                        if (npc != null)
-                            enemies++;
+                int enemies = CombatEnemyCount(node, assignedId);
                 if (enemies > 0)
                     sb.Append(", ").Append(enemies).Append(enemies == 1 ? " enemy" : " enemies");
             }
@@ -647,8 +668,13 @@ public static class MapNavigator
                 var ed = Globals.Instance?.GetEventData(assignedId);
                 if (ed != null)
                 {
-                    if (!string.IsNullOrEmpty(ed.EventName))
-                        sb.Append(", ").Append(AccessibleMenuBase.StripRichText(ed.EventName));
+                    // The game's popup prefers the localized "<EventId>_nm" text and only falls
+                    // back to the raw asset EventName.
+                    string enm = Texts.Instance != null ? Texts.Instance.GetText(ed.EventId + "_nm", "events") : "";
+                    if (string.IsNullOrEmpty(enm))
+                        enm = ed.EventName;
+                    if (!string.IsNullOrEmpty(enm))
+                        sb.Append(", ").Append(AccessibleMenuBase.StripRichText(enm));
                     string rarity = ShaderToRarity(ed.EventIconShader);
                     if (rarity != null)
                         sb.Append(", ").Append(rarity);
@@ -669,6 +695,97 @@ public static class MapNavigator
         if (coord != null)
             sb.Append(", at ").Append(coord);
         SpeechManager.Speak(sb.ToString());
+    }
+
+    /// <summary>Enemy count exactly as the game's hover popup (PopupNode) computes it: the
+    /// randomized roster for Obelisk challenges / "randomcombats" madness, the madness-0 enemy
+    /// removal, and the sandbox LessNPCs hide. GetRandomCombat reseeds UnityEngine.Random, so this
+    /// must only run from a discrete key handler (Alt+T), never per frame; the seed formula matches
+    /// the one the real combat uses, so the previewed roster is the roster that will spawn.</summary>
+    private static int CombatEnemyCount(Node node, string assignedId)
+    {
+        var globals = Globals.Instance;
+        var ato = AtOManager.Instance;
+        var gm = GameManager.Instance;
+        var nd = node?.nodeData;
+        if (globals == null || ato == null || gm == null || nd == null)
+            return 0;
+
+        bool randomized = nd.NodeCombatTier != 0
+            && ((MadnessManager.Instance != null && MadnessManager.Instance.IsMadnessTraitActive("randomcombats"))
+                || gm.IsObeliskChallenge()
+                || ato.IsChallengeTraitActive("randomcombats"))
+            && !nd.DisableRandom;
+        int lessNpcs = SandboxManager.Instance != null ? SandboxManager.Instance.LessNPCs : 0;
+
+        if (randomized)
+        {
+            var combatData = globals.GetCombatData(assignedId);
+            string combatId = combatData != null ? combatData.CombatId : "";
+            var freshNd = globals.GetNodeData(nd.NodeId);
+            var roster = Functions.GetRandomCombat(
+                freshNd != null ? freshNd.NodeCombatTier : nd.NodeCombatTier,
+                (nd.NodeId + ato.GetGameId() + combatId).GetDeterministicHashCode(),
+                nd.NodeId);
+            if (roster == null)
+                return 0;
+            int visible = 0;
+            int hideable = 0;
+            foreach (var npc in roster)
+            {
+                if (npc == null)
+                    continue;
+                visible++;
+                if (!npc.IsNamed && !npc.IsBoss)
+                    hideable++;
+            }
+            int hide = lessNpcs;
+            if (hide >= visible)
+                hide = visible - 1;
+            if (hide > hideable)
+                hide = hideable;
+            return hide > 0 ? visible - hide : visible;
+        }
+
+        var cd = globals.GetCombatData(assignedId);
+        if (cd?.NPCList == null)
+            return 0;
+        bool madness0Removal = ((gm.IsGameAdventure() && ato.GetMadnessDifficulty() == 0)
+                || (gm.IsSingularity() && ato.GetSingularityMadness() == 0))
+            && cd.NpcRemoveInMadness0Index > -1 && ato.GetActNumberForText() < 3;
+
+        int shown = 0;
+        // The game's LessNPCs hide order: weakest first (Hp, then list position), non-named
+        // non-boss only — built over ALL such entries, so a hide slot can land on the enemy the
+        // madness-0 removal already hid and then hides nothing visible. Replay that literally.
+        var hideOrder = new System.Collections.Generic.SortedDictionary<int, int>();
+        for (int i = 0; i < cd.NPCList.Length; i++)
+        {
+            var npc = cd.NPCList[i];
+            if (npc == null)
+                continue;
+            if (!(madness0Removal && cd.NpcRemoveInMadness0Index == i))
+                shown++;
+            if (!npc.IsNamed && !npc.IsBoss)
+                hideOrder.Add(npc.Hp * 10000 + i, i);
+        }
+        int hides = lessNpcs;
+        if (hides >= shown)
+            hides = shown - 1;
+        if (hides > hideOrder.Count)
+            hides = hideOrder.Count;
+        if (hides <= 0)
+            return shown;
+        int left = shown;
+        int taken = 0;
+        foreach (var kv in hideOrder)
+        {
+            if (taken++ >= hides)
+                break;
+            if (!(madness0Removal && cd.NpcRemoveInMadness0Index == kv.Value))
+                left--;
+        }
+        return left;
     }
 
     /// <summary>Alt+I and auto-on-open: position + active quest trackers + the current map tip.</summary>
