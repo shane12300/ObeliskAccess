@@ -133,13 +133,12 @@ public class CombatInputContext : InputContextBase
         else
             Traverse.Create(controller).Method("DoFirePerformed").GetValue();
 
-        // The pickup half of a two-step cast is otherwise silent — say what happened.
+        // The pickup half of a two-step cast is otherwise silent — say what happened, briefly.
         if (m != null && !wasDragging && m.CardDrag)
         {
-            string name = preCard != null && preCard.CardData != null
-                ? AccessibleMenuBase.StripRichText(preCard.CardData.CardName)
-                : "Card";
-            SpeechManager.Speak(name + " picked up. Move to a target and press Enter.");
+            SpeechManager.Speak(preCard != null && preCard.CardData != null
+                ? AccessibleMenuBase.StripRichText(preCard.CardData.CardName) + ". Select target."
+                : "Select target.");
         }
         return true;
     }

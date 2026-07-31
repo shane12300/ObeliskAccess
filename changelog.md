@@ -69,8 +69,8 @@
 - Fixed: cards with these deck effects could not be cast with the keyboard at all — after
   picking the card up, pressing Enter on the target hero silently did nothing (the game's
   deck icons that appear over each hero were swallowing the click). Enter on a character now
-  casts reliably, and picking a card up is announced ("Expert Tracker picked up. Move to a
-  target and press Enter.") instead of being silent.
+  casts reliably, and picking a card up is announced ("Expert Tracker. Select target.")
+  instead of being silent.
 - New "Debug mode" option at the bottom of the Accessibility settings tab (off by default).
   When on, the mod writes extra troubleshooting detail to its log file to help diagnose
   problems; normal play is unaffected either way.
@@ -307,8 +307,8 @@
 - If the game's on-screen keyboard does open (for example from a controller), the arrow keys
   and Enter now drive the keyboard itself instead of secretly acting on the screen beneath
   it; Escape closes it as before.
-- Picking up a card in combat with Enter now speaks the card's name ("Fireball picked up…")
-  instead of the generic "Card picked up".
+- Picking up a card in combat with Enter now speaks the card's name instead of the generic
+  "Card picked up".
 - The in-combat card-selection windows (discard, look-at-deck, discover) now queue their
   opening and closing announcements behind the ongoing combat narration instead of cutting
   it off, refuse cleanly with "Not ready yet" while their cards are still appearing, and
@@ -445,3 +445,17 @@
 - Resource icons inside story-event text (gold, dust, supplies, health, experience) are now
   spoken using the game's own language setting instead of fixed English words; card
   descriptions handle every icon-tag form the game produces.
+- Enemies that share a name are now numbered — "Warden 1", "Warden 2" — everywhere they are
+  spoken: combat event announcements, focus reads, the battlefield overview, turn order and
+  the per-character review keys. Previously, when the same effect hit two same-named
+  enemies, the second one's name was dropped and its effects merged into the first's
+  announcement. A twin keeps its number for the whole fight, even after the other dies.
+- Picking up a card that needs a target now says a brief "{card name}. Select target."
+  instead of the longer "picked up, move to a target and press Enter" phrasing.
+- Cards that play themselves when drawn (injuries and similar) are now announced with their
+  name and effect — previously they resolved in total silence or as unexplained damage,
+  since deliberate card plays are intentionally unnarrated.
+- The combat character drilldown (Ctrl with Up/Down) no longer reads placeholder "No
+  block", "No buffs" or "No curses" lines — it lists only what the character actually has
+  (Alt+B and Alt+S still answer directly when asked) — and each effect now reads name and
+  value first, category after: "Mark 2, curse" instead of "Curse, Mark, 2".

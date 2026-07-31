@@ -1,0 +1,442 @@
+OBELISKACCESS — TESTING CHECKLIST (audit fix pass, 2026-07-31)
+================================================================
+
+Notes before you start:
+- The build already copied the new ObeliskAccess.dll into the game's plugins
+  folder, so just launch the game.
+- The perk tree fixes (items 6.6 and 6.7) live in the uncommitted
+  PerkTreeAccessibilityPatch.cs along with your own in-progress diff — they are
+  in the built DLL, but remember that file still needs committing after this
+  playtest.
+- Single-player covers most items. Section 9 needs a second client.
+- The single biggest regression risk of the whole pass is item 1.1 — do it first.
+
+
+1. REGRESSION SWEEP (router refactor — do this first)
+-----------------------------------------------------
+
+[ ] 1.1 Enter single-fires everywhere.
+    The suppression lists were replaced with per-context flags; if that went
+    wrong, Enter double-fires like the old mode-screen bug.
+    Test: main menu > Enter on Play > pick a game mode with Enter > pick a save
+    slot. Then in a run: Enter on a map node, Enter on an event reply that is
+    NOT the first option, Enter on town rows.
+    Before and after should be identical: one action per press, the focused
+    item is the one activated (never "always option 1").
+
+[ ] 1.2 Alt review keys still work everywhere.
+    Test: Alt+T on a map node, Alt+T in a shop, Alt+I on hero selection,
+    Alt+R anywhere.
+    Before and after identical: the review speech fires, nothing else happens.
+
+[ ] 1.3 Bare Alt no longer clicks things.
+    Test: on a shop, the rewards screen, the map, or an event, tap and release
+    Alt on its own a few times with the mouse cursor wherever it happens to be.
+    Before: could silently right-click a card under the cursor and open the
+    inaccessible card-inspection overlay (you would suddenly need Escape).
+    Now: nothing happens.
+
+[ ] 1.4 Ctrl is inert on shops, lobby and events.
+    Test: in a Forge/shop, tap bare Ctrl a few times; same on an event page.
+    Before: Ctrl was a synthetic mouse click — over the Forge search bar it
+    could open the on-screen keyboard and leave you typing blind; on an event
+    it could silently eat a reply.
+    Now: nothing happens.
+
+
+2. ALERT DIALOGS (confirms, text entry)
+---------------------------------------
+
+[ ] 2.1 Submitting text speaks in the right order.
+    Test: hero selection > run options > seed > Enter to open the seed entry >
+    type something > walk down to the accept row > Enter.
+    Before: "Alert closed." was sometimes spoken before "Submitted X".
+    Now: you hear the submitted text, no stray "Alert closed." first.
+
+[ ] 2.2 The next dialog is not silenced.
+    Test: right after 2.1, trigger any confirm dialog (e.g. Escape to raise a
+    quit confirm) and answer it with the MOUSE.
+    Before: the answer could be silently eaten (a stale internal flag).
+    Now: the answer is announced.
+
+[ ] 2.3 Escape on a text-entry dialog.
+    Test: open the seed entry again, type a few letters, press Escape once
+    (ends the edit), then Escape again (dismisses).
+    Before: a timing race could make the FIRST Escape dismiss the whole dialog,
+    and the cancel could speak a stale button label from an earlier dialog
+    (e.g. "Abandon run").
+    Now: first Escape ends the edit and keeps your text; the dismiss speaks
+    "Cancelled." style wording, never an old label.
+
+[ ] 2.4 Text fields release the keyboard.
+    Test: after any text-entry dialog closes, check arrows and Enter still
+    drive the screen normally.
+    Before: the field could stay selected and quietly kill game-owned keys.
+    Now: everything responds.
+
+
+3. MAIN MENU AND SETTINGS
+-------------------------
+
+[ ] 3.1 Popups over the game-mode screen.
+    Test: on the mode-selection screen, open the Paradox account / DLC popup
+    (it is reachable from the PDX buttons in the mode list).
+    Before: arrows kept reading the game modes underneath and Enter could open
+    the save screen under the popup.
+    Now: while the popup is up, arrows and Enter drive the popup's own buttons.
+
+[ ] 3.2 Settings dropdown closed with the mouse.
+    Test: open a settings dropdown with Enter, then click somewhere else with
+    the mouse to close it, then press an arrow.
+    Before: arrows kept "previewing" invisible options and the first Escape was
+    swallowed.
+    Now: the mod notices the dropdown is gone; arrows move the settings list
+    and Escape closes the panel first time.
+
+[ ] 3.3 Keyboard-shortcuts toggle can't break the mod.
+    Test: settings > Gameplay > the "Keyboard shortcuts (always on for
+    accessibility)" row > toggle it.
+    Before: turning it off silently killed the game's Enter and cursor
+    navigation until the next game restart.
+    Now: it snaps straight back on and navigation keeps working.
+
+
+4. MAP, EVENTS AND CORRUPTION
+-----------------------------
+
+[ ] 4.1 Travel Enter spam.
+    Test: on the map, press Enter on a node, then press Enter again.
+    Before: it re-announced "Traveling to X" every press.
+    Now: second press says "Already traveling."
+
+[ ] 4.2 Enemy count matches the game.
+    Test: Alt+T on a combat node while playing madness 0 (a normal new run).
+    Before: the spoken enemy count could be one higher than the game's own
+    popup shows (and completely wrong in Obelisk-challenge runs).
+    Now: the count matches what a sighted player sees on the popup.
+
+[ ] 4.3 Corruption prompt stops narrating after confirming.
+    Test: at a corruption node, choose a reward, confirm with Enter, then press
+    arrows during the couple of seconds before the combat loads.
+    Before: it kept announcing "Reward A chosen..." as if you could still act,
+    and Enter said "Confirming" even when the game refused.
+    Now: after confirming you hear "Corruption confirmed. Traveling." and any
+    further keys say "The corruption is locked in. Traveling."
+    Also: Enter with the box ticked but NO reward chosen stays quiet and the
+    game's own "select a reward" alert speaks instead of a false "Confirming".
+
+
+5. TOWN AND SHOPS
+-----------------
+
+[ ] 5.1 Fresh town, first Enter is safe.
+    Test: in a town, arrow down to Ready but do NOT press it; leave town by
+    pressing Ready; in the NEXT town, press Enter immediately before touching
+    any arrow.
+    Before: that blind Enter could silently re-activate the row you had focused
+    in the previous town — worst case instantly leaving town via Ready.
+    Now: it acts on the current town's own focus, announced normally.
+
+[ ] 5.2 Church respects the deck minimum.
+    Test: take a hero to exactly 15-16 cards, open the Church, try to remove a
+    card (including an injury or boon if you have one).
+    Before: the keyboard could remove cards the game forbids, dropping the deck
+    below 15.
+    Now: you get a spoken refusal ("deck at the minimum of 15 cards") exactly
+    when the game's own remove button is disabled.
+
+[ ] 5.3 Altar transmute names the card.
+    Test: select an already-upgraded card at the Altar and preview the
+    transmute (the A/B variant swap).
+    Before: every transmute preview said "unknown card", and buying said
+    "Upgraded to card."
+    Now: the real target card name is spoken in both places.
+
+[ ] 5.4 Shops explain refusals.
+    Test: in any shop, exhaust its uses (or find one used up) and press Enter
+    on an item; in MP, press 1-4 to a partner's hero and try to buy.
+    Before: nothing happened, silently.
+    Now: "No uses left at this shop." / "X owns this hero — only they can buy
+    for it."
+
+[ ] 5.5 Reroll honesty.
+    Test: in a high New-Game-Plus town where the reroll is spent, press the
+    reroll row.
+    Before: it said "Rerolled" even when the game refused.
+    Now: "No rerolls left in this town."
+
+[ ] 5.6 Free crafts speak.
+    Test: any craft/removal whose price is 0 (tier-0 Singularity church, or a
+    town-upgrade discount that reaches 0).
+    Before: the purchase completed in total silence.
+    Now: the normal receipt is announced.
+
+[ ] 5.7 Escape during the purchase animation.
+    Test: buy something and immediately press Escape.
+    Before: silent nothing until the animation ended.
+    Now: "Please wait, finishing the purchase."
+
+[ ] 5.8 Armory Shift+Tab.
+    Test: in the Armory, Shift+Tab through the regions.
+    Before: it cycled forward regardless.
+    Now: it cycles backward.
+
+[ ] 5.9 Selling supplies (MP: see 9.8).
+    Test: town upgrades > sell supplies > set quantity 0 > confirm.
+    Before: "Sold 0 supply..."
+    Now: "Nothing sold."
+
+
+6. CHARACTER SHEET, POPUP AND PERK TREE
+---------------------------------------
+
+[ ] 6.1 Card Backs tab on revisits.
+    Test: open a hero's character window, Tab to Card Backs, Tab away, come
+    back to Card Backs (and try it again for a second hero).
+    Before: every visit after the first doubled the row count and half the rows
+    read as a generic "Card back"; Enter could equip through a dead row.
+    Now: the count is right every time (the build waits out the game's rebuild).
+
+[ ] 6.2 Card-backs panel closed with the mouse.
+    Test: while on the Card Backs tab, click the panel's close button.
+    Before: arrows kept walking invisible rows and Enter equipped card backs
+    sight-unseen.
+    Now: "Card backs panel closed." and you are back on a real tab.
+
+[ ] 6.3 Equipping a skin keeps you oriented.
+    Test: Skins tab, Enter on a skin.
+    Before: it said "X equipped" but the whole window had silently closed —
+    the next arrow moved the hero roster.
+    Now: the window re-opens on the Skins tab and you can keep browsing.
+
+[ ] 6.4 Re-clicking the open hero.
+    Test: with the character window open, click the same hero's side portrait
+    with the mouse (or press their number again).
+    Before: the full arrival announcement replayed and your reading position
+    reset to the top.
+    Now: silent; your row position is kept.
+
+[ ] 6.5 Stats: no phantom negative charge bonuses.
+    Test: Alt+T / stats tab on a character with auras applying a purely
+    negative charge modifier.
+    Before: the mod spoke a "minus N" bonus the game's own stats view never
+    displays.
+    Now: the spoken list matches the game's view.
+
+[ ] 6.6 Perk reset with nothing selected. (uncommitted file)
+    Test: open the perk tree with no perks selected, activate the Reset row.
+    Before: "All perks deselected... Press Space to save" — a lie.
+    Now: "No perks selected — nothing to reset."
+
+[ ] 6.7 Perk text punctuation. (uncommitted file)
+    Test: Alt+T a perk whose text ends in "!" or "?".
+    Before: spoken with a doubled terminator ("...!.").
+    Now: clean.
+
+[ ] 6.8 Weekly challenge wording.
+    Test: in a weekly challenge, open any hero's character popup.
+    Before: it blamed "locked hero" although every hero is restricted in weekly.
+    Now: "Perks, Rank and Card Backs are not available in the weekly challenge."
+
+
+7. COMBAT
+---------
+
+[ ] 7.1 Picking up a card speaks its name.
+    Test: on your turn, Enter on a hand card.
+    Before: only the generic "Card picked up. Move to a target and press
+    Enter."
+    Now: the card's name plus a brief "Select target." (see also 11.2).
+
+[ ] 7.2 Discard/choose windows behave at the edges.
+    Test: when a discard/look/discover window opens mid-fight, listen to the
+    ordering; press Enter immediately (before the cards finish appearing);
+    confirm with Space then press Enter again.
+    Before: the window announcement cut off the combat narration mid-word;
+    early Enter did nothing silently; post-confirm Enter could still toggle
+    cards (multiplayer desync risk).
+    Now: announcements queue after the narration; early Enter says "Not ready
+    yet."; post-confirm Enter says "Already confirmed — resolving."
+
+[ ] 7.3 Round-1 wipe and retry.
+    Test: lose a fight on round 1 (sandbox makes this easy) and accept the
+    retry.
+    Before: the retried combat started in silence — no "Round 1", no overview,
+    no emote-key hint.
+    Now: the fresh combat announces round, overview and hints normally.
+
+[ ] 7.4 Death popup edge cases.
+    Test: let a hero with a styled/colored name die; if you can, let a second
+    hero die while the popup is still up (MP or sandbox).
+    Before: rich-text tags could be read aloud in the Death's Door line, and a
+    second death re-read the FIRST hero's text with the second hero's curse
+    line mixed in.
+    Now: names read clean, and a second death adds "X also fell. Death's Door
+    added to their deck."
+
+
+8. REWARDS AND LOOT
+-------------------
+
+[ ] 8.1 The character window is no longer "not accessible".
+    Test: from the rewards screen press Enter on Deck; from loot, open a
+    hero's equipment.
+    Before: "Deck window opened. Not yet accessible; press Escape to close." /
+    "Character window opened. Not accessible yet..." — spoken over the fully
+    working screen's own announcements.
+    Now: the character sheet announces itself once; closing it from loot adds
+    "Back on loot."
+
+[ ] 8.2 Restarting rewards or loot.
+    Test: use the Restart row on a rewards screen (and a loot screen).
+    Before: the OLD screen's overview was re-spoken and the fresh screen then
+    arrived in silence with stale state.
+    Now: after "Restarting...", the new screen announces its arrival normally.
+
+[ ] 8.3 Restart after everyone has chosen.
+    Test: in rewards, once all picks are made (during the brief auto-close),
+    press Enter on Restart.
+    Before: it could still fire (in MP even sending the host a restart request
+    mid-teardown).
+    Now: "Restart is no longer available — everyone has chosen." and the row
+    drops out of the list.
+
+
+9. MULTIPLAYER (needs a second client)
+--------------------------------------
+
+[ ] 9.1 Kick names the right player.
+    Test: in a room, have player B leave and player C join (this used to
+    scramble the orders), then arm a kick on a slot.
+    Before: the announced name could belong to a DIFFERENT player than the one
+    actually kicked, and "that's you" could sit on the wrong slot.
+    Now: the announced name always matches the rendered slot — what you hear
+    is who gets kicked.
+
+[ ] 9.2 Players panel after someone leaves mid-run.
+    Test: mid-run, have a player disconnect, then open the players panel
+    (Alt+P) and walk the rows.
+    Before: one row could read the departed player's stale text and a player
+    "past the hole" was unreachable for mute/unmute.
+    Now: every remaining player is listed and reachable; no ghost row.
+
+[ ] 9.3 Give window over a shop.
+    Test: with a Forge/shop open, open the give-gold window from the game's
+    top-bar button.
+    Before: Enter bought shop items BEHIND the give window, and on a map shop
+    Escape cast the ready-vote instead of closing it.
+    Now: arrows/Enter/Escape all act on the give window.
+
+[ ] 9.4 Being kicked / leaving a room.
+    Test: get kicked while sitting on the room panel.
+    Before: a background error could eat a keypress ("room" reads crashed).
+    Now: the panel reads "Leaving the room." until the game moves you on.
+
+[ ] 9.5 Lobby text edits.
+    Test: start typing a room name, then switch panels (mouse-click Back).
+    Before: a spurious "Room name set to..." spoke over the next panel.
+    Now: the abandoned edit stays quiet.
+    Also: cancel a join-password prompt with Escape.
+    Before: "Wrong password. Press Enter on the room to try again." on a
+    deliberate cancel.
+    Now: silent cancel; "Wrong password" only after a real submit.
+
+[ ] 9.6 Join announcements.
+    Test: have someone join your room.
+    Before: their raw internal account id could be spoken.
+    Now: their real display name is announced (may arrive a moment after the
+    join, once the game shares it).
+
+[ ] 9.7 Denied armory buy doesn't echo later.
+    Test: as a non-host, attempt an armory buy the host denies (not enough
+    gold), then have the PARTNER buy any item.
+    Before: the partner's purchase triggered a bogus "Bought and equipped X"
+    for YOUR denied item.
+    Now: only the real purchase is echoed.
+
+[ ] 9.8 Selling supplies in MP.
+    Test: sell supplies from the town upgrades window in a multiplayer run.
+    Before: it read your OLD gold/dust balances (the credit arrives async).
+    Now: it states the amounts sold for and says "Balances update shortly."
+
+[ ] 9.9 Names read clean everywhere.
+    Spot-check: partner picks a reward, levels up, crafts, pings — anywhere
+    their name is spoken.
+    Before: styled names could include raw markup, and a missing name could
+    produce lines like "waiting for " with nothing after it.
+    Now: clean display names, with "Another player" whenever a name is missing.
+
+[ ] 9.10 Single-player ownership after an MP save.
+    Test: load a single-player continue of a run that was once multiplayer and
+    level a hero up.
+    Before: the sheet could refuse with "Only <name> can choose this trait"
+    because of a stale owner tag.
+    Now: level-up works normally in single player.
+
+
+10. QUICK SPOT-CHECKS (spoken-wording consolidations)
+-----------------------------------------------------
+
+[ ] 10.1 Trait descriptions: character sheet and hero-selection trait rows now
+    read sprite icons as words (e.g. "2 gold" instead of skipping the icon),
+    and card-granting traits say which card they add. Alt+T a few traits.
+[ ] 10.2 Event text: resource words in event pages follow the game language
+    (only audible if you play non-English; in English nothing should change).
+[ ] 10.3 Map and town party strips, card detail drill (Ctrl+Up/Down) in
+    rewards/loot/character sheet, and town treasure claims: these were
+    consolidated internally — behaviour and wording should be IDENTICAL to
+    before. Anything that sounds different here is a regression worth
+    reporting.
+
+11. PLAYTEST BUG BATCH (second round of fixes)
+----------------------------------------------
+
+[ ] 11.1 Twin enemies are numbered.
+    Test: a fight with two same-named enemies (e.g. two Wardens); hit both
+    with one effect, then arrow across them, and try Alt+V and Alt+O.
+    Before: "Warden Mark 2, Mark 2, Sight 2, Sight 2" — the second Warden's
+    name vanished and its effects merged into the first's clause; arrowing
+    over the two sounded identical.
+    Now: "Warden 1 Mark 2, Sight 2; Warden 2 Mark 2, Sight 2", and every
+    read (focus, overview, turn order, Alt keys) says "Warden 1"/"Warden 2".
+    Kill one twin: the survivor keeps its original number.
+
+[ ] 11.2 Brief targeting prompt.
+    Test: Enter on a card that needs a target.
+    Before: "{name} picked up. Move to a target and press Enter."
+    Now: "{name}. Select target."
+
+[ ] 11.3 Cards that play on draw are announced.
+    Test: draw a card that plays itself (e.g. an injury with an on-draw
+    effect); easiest via a Church-worthy injury-heavy deck.
+    Before: nothing — at most unexplained damage lines.
+    Now: "{hero} plays {card}, {effect}" arrives before the resulting
+    damage/status lines. In multiplayer a partner's draw announces once.
+
+[ ] 11.4 Drilldown reads only what's there, name first.
+    Test: Ctrl+Down through a character with no block and no effects, then
+    one with a curse.
+    Before: "No block", "No buffs", "No curses" placeholder lines; effects
+    read "Curse, Mark, 2".
+    Now: the empty lines are gone (Alt+B / Alt+S still answer "no block" /
+    "No buffs" when asked directly); effects read "Mark 2, curse".
+
+[ ] 11.5 Finish-run Main Menu is one press; Ctrl is inert in menus.
+    Test: finish a run, Enter on Main Menu; also tap bare Ctrl on the main
+    menu and on the finish-run screen.
+    Before: Enter needed two presses with two different sounds (hover, then
+    click); bare Ctrl clicked whatever the cursor sat on.
+    Now: one Enter, one click sound, straight to the menu; Ctrl does nothing.
+
+[ ] 11.6 Save-slot delete speaks properly.
+    Test: on the save screen, focus an occupied slot and arrow to its delete
+    button; press Enter.
+    Before: the delete button read as "X".
+    Now: rows read "Slot 1, ...", "Slot 2, ..." and the button reads "Delete
+    save slot N"; Enter raises the game's confirm dialog, answerable as usual.
+
+When you are done: if everything passes, commit
+Patches/PerkTreeAccessibilityPatch.cs (your perk-speech work plus items
+6.6/6.7); if anything fails, the fixes landed as small per-area commits
+(27257f6 through d900ede, plus this batch) so the offending change is easy
+to isolate.

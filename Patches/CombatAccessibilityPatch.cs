@@ -77,14 +77,19 @@ internal static class CombatNavigator
     private static bool _overviewAnnounced;
 
     // With CombineEnemyTurns on, an NPC's turn line is withheld and the "plays [card]" cast line
-    // marks the turn instead. This holds the NPC's name until a cast arrives; if its turn ends
+    // marks the turn instead. This holds the NPC until a cast arrives; if its turn ends
     // (next turn change) with no cast — stun, freeze — "takes no action" is spoken so the turn
-    // doesn't pass silently.
+    // doesn't pass silently. The name is captured too so the flag survives the character dying.
     private static string _pendingNpcTurnName;
+    private static Character _pendingNpcTurnChar;
 
     // ---- combat-event coalescing ----
-    private struct CtEntry { public string Owner; public string Text; }
+    // Owner is the affected CHARACTER, not its name: two same-named enemies must not merge into
+    // one clause (grouping by name once read "Warden Mark 2, Mark 2" for two Wardens). OwnerName
+    // is resolved at buffer time so the flush needn't touch possibly-dead characters.
+    private struct CtEntry { public Character Owner; public string OwnerName; public string Text; }
     private static readonly List<CtEntry> _ctBuffer = new List<CtEntry>();
+    private static readonly object _noOwnerKey = new object();
     private static float _lastCtTime;
     private const float CT_FLUSH_DELAY = 0.35f;
 
@@ -129,8 +134,9 @@ internal static class CombatNavigator
         // A merged NPC turn that produced no cast line ended just now — say so before moving on.
         if (_pendingNpcTurnName != null)
         {
-            Buffer(_pendingNpcTurnName, "takes no action");
+            Buffer(_pendingNpcTurnChar, "takes no action");
             _pendingNpcTurnName = null;
+            _pendingNpcTurnChar = null;
         }
 
         var sb = new StringBuilder();
@@ -141,7 +147,7 @@ internal static class CombatNavigator
             _lastRound = round;
         }
 
-        string name = actor != null ? AccessibleMenuBase.StripRichText(actor.SourceName) : "";
+        string name = actor != null ? Name(actor) : "";
         if (name.Length == 0)
         {
             // Don't emit a dangling "'s turn" with no name; speak the round change if there was one.
@@ -156,6 +162,7 @@ internal static class CombatNavigator
         {
             // Withhold the enemy turn line; the coming "plays [card]" line marks the turn.
             _pendingNpcTurnName = name;
+            _pendingNpcTurnChar = actor;
             if (sb.Length > 0)
             {
                 FlushPendingEvents();
@@ -205,6 +212,7 @@ internal static class CombatNavigator
     public static void OnCombatEnd(bool won)
     {
         _pendingNpcTurnName = null; // combat ended mid-turn; no "takes no action" chatter
+        _pendingNpcTurnChar = null;
         FlushPendingEvents();
         SpeechManager.SpeakQueued(won ? "Victory" : "Defeat");
         ResetFocus();
@@ -223,6 +231,7 @@ internal static class CombatNavigator
     public static void OnCombatStart()
     {
         _pendingNpcTurnName = null;
+        _pendingNpcTurnChar = null;
         ResetFocus();
         _overviewAnnounced = false;
         _lastRound = -1;
@@ -475,7 +484,7 @@ internal static class CombatNavigator
     private static string DescribeCharacter(Character c, CharacterItem ci)
     {
         var sb = new StringBuilder();
-        sb.Append(AccessibleMenuBase.StripRichText(c.SourceName));
+        sb.Append(Name(c));
         sb.Append(", ").Append(c.GetHp()).Append(" of ").Append(c.GetMaxHP());
 
         int block = c.GetBlock();
@@ -497,7 +506,7 @@ internal static class CombatNavigator
     private static string DescribeIcon(ItemCombatIcon icon)
     {
         Character c = icon.TheHero != null ? (Character)icon.TheHero : icon.TheNPC;
-        string owner = c != null ? AccessibleMenuBase.StripRichText(c.SourceName) : "";
+        string owner = c != null ? Name(c) : "";
 
         string type = icon.itemType;
         if (string.IsNullOrEmpty(type))
@@ -621,7 +630,7 @@ internal static class CombatNavigator
                 sb.Append("; ");
             any = true;
 
-            sb.Append(AccessibleMenuBase.StripRichText(c.SourceName));
+            sb.Append(Name(c));
             sb.Append(' ').Append(c.GetHp()).Append('/').Append(c.GetMaxHP());
             int block = c.GetBlock();
             if (block > 0)
@@ -656,7 +665,7 @@ internal static class CombatNavigator
             if (r.FullyEvaded) evaded = true;
         }
 
-        string owner = OwnerName(src);
+        Character owner = OwnerCharacter(src);
         if (dmg > 0)
             Buffer(owner, blocked > 0 ? "takes " + dmg + ", blocked " + blocked : "takes " + dmg);
         else if (evaded)
@@ -685,7 +694,7 @@ internal static class CombatNavigator
         if (string.IsNullOrEmpty(clean))
             return;
 
-        string owner = OwnerName(src);
+        Character owner = OwnerCharacter(src);
 
         // Block expiry floats as "-Block".
         if (type == Enums.CombatScrollEffectType.Block && clean.StartsWith("-"))
@@ -696,12 +705,13 @@ internal static class CombatNavigator
 
         if (negated)
         {
-            // Remember the names so the aura-loss watcher doesn't announce the same removal again.
+            // Remember them so the aura-loss watcher doesn't announce the same removal again.
+            // Keyed by InternalId, not name: a dispel on one twin must not mute the other's loss.
             foreach (var n in clean.Split(','))
             {
                 string trimmed = n.Trim();
                 if (trimmed.Length > 0)
-                    _recentNegated[owner.ToLower() + "|" + trimmed.ToLower()] = Time.time;
+                    _recentNegated[NegatedKey(owner, trimmed)] = Time.time;
             }
             Buffer(owner, clean + " negated");
             return;
@@ -755,7 +765,7 @@ internal static class CombatNavigator
             if (total != gained)
                 msg += ", total " + total;
         }
-        Buffer(Name(target), msg);
+        Buffer(target, msg);
     }
 
     /// <summary>Deaths and resurrections, from the combat-log channel both kill paths feed.</summary>
@@ -766,7 +776,7 @@ internal static class CombatNavigator
         Character c = hero ?? npc;
         if (c == null)
             return;
-        Buffer(Name(c), ev == Enums.EventActivation.Killed ? "killed" : "resurrected");
+        Buffer(c, ev == Enums.EventActivation.Killed ? "killed" : "resurrected");
     }
 
     /// <summary>Enemy (and automatic hero/pet/item) casts: name the card being played.</summary>
@@ -778,22 +788,47 @@ internal static class CombatNavigator
         // Any cast during a merged enemy turn means the turn was not skipped. (An item or pet proc
         // clearing it instead of the enemy's own card is a harmless rare miss of "takes no action".)
         _pendingNpcTurnName = null;
+        _pendingNpcTurnChar = null;
 
-        string caster = "";
+        Character caster = null;
         if (from != null)
         {
             var hi = from.GetComponent<HeroItem>();
             var ni = from.GetComponent<NPCItem>();
-            Character c = hi != null ? (Character)hi.Hero : (ni != null ? ni.NPC : null);
-            if (c != null)
-                caster = Name(c);
+            caster = hi != null ? (Character)hi.Hero : (ni != null ? ni.NPC : null);
         }
         Buffer(caster, "plays " + AccessibleMenuBase.StripRichText(card.CardName));
     }
 
-    private static void Buffer(string owner, string text)
+    /// <summary>
+    /// A card that plays itself when drawn (AutoplayDraw — injuries and the like). It rides the
+    /// same CastCard path as a deliberate hand cast, which is unnarrated by design (the player
+    /// pressed the key) — but here nobody acted, so without this line the card resolves as bare
+    /// damage fragments with no cause. Buffered, so it precedes its own effects: the CastCard
+    /// prefix runs at coroutine kickoff, ~0.35s before they land.
+    /// </summary>
+    public static void OnAutoplayCast(CardRealtimeData cd)
     {
-        _ctBuffer.Add(new CtEntry { Owner = owner, Text = text });
+        if (cd == null || (!cd.AutoplayDraw && !cd.AutoplayEndTurn))
+            return; // a normal player cast — stays silent
+
+        var mm = MatchManager.Instance;
+        if (mm == null || mm.MatchIsOver)
+            return;
+
+        string desc = CardSpeech.CleanFlat(cd.DescriptionNormalized);
+        Buffer(mm.CurrentHero, "plays " + AccessibleMenuBase.StripRichText(cd.CardName)
+            + (desc.Length > 0 ? ", " + desc : ""));
+    }
+
+    private static void Buffer(Character owner, string text)
+    {
+        _ctBuffer.Add(new CtEntry
+        {
+            Owner = owner,
+            OwnerName = owner != null ? Name(owner) : "",
+            Text = text,
+        });
         _lastCtTime = Time.time;
     }
 
@@ -910,8 +945,7 @@ internal static class CombatNavigator
                         continue;
 
                     // A dispel/cleanse already announced this one as "negated".
-                    string dedupeKey = Name(c).ToLower() + "|" + kv.Value.Name.ToLower();
-                    if (_recentNegated.TryGetValue(dedupeKey, out float t)
+                    if (_recentNegated.TryGetValue(NegatedKey(c, kv.Value.Name), out float t)
                         && Time.time - t < NEGATED_DEDUPE_WINDOW)
                         continue;
 
@@ -924,7 +958,7 @@ internal static class CombatNavigator
                         if (now > 0)
                             msg += ", total " + now;
                     }
-                    Buffer(Name(c), msg);
+                    Buffer(c, msg);
                 }
             }
             _auraWatch[c] = current;
@@ -944,16 +978,20 @@ internal static class CombatNavigator
 
     private static void Flush()
     {
-        // Group fragments by affected character, preserving first-seen order.
-        var order = new List<string>();
-        var byOwner = new Dictionary<string, List<string>>();
+        // Group fragments by affected character IDENTITY (not name — twins must stay separate
+        // clauses), preserving first-seen order. Ownerless entries share the one sentinel bucket.
+        var order = new List<object>();
+        var byOwner = new Dictionary<object, List<string>>();
+        var names = new Dictionary<object, string>();
         foreach (var e in _ctBuffer)
         {
-            if (!byOwner.TryGetValue(e.Owner, out var parts))
+            object key = (object)e.Owner ?? _noOwnerKey;
+            if (!byOwner.TryGetValue(key, out var parts))
             {
                 parts = new List<string>();
-                byOwner[e.Owner] = parts;
-                order.Add(e.Owner);
+                byOwner[key] = parts;
+                names[key] = e.OwnerName;
+                order.Add(key);
             }
             parts.Add(e.Text);
         }
@@ -961,14 +999,15 @@ internal static class CombatNavigator
 
         var sb = new StringBuilder();
         bool first = true;
-        foreach (var owner in order)
+        foreach (var key in order)
         {
             if (!first)
                 sb.Append("; ");
             first = false;
+            string owner = names[key];
             if (!string.IsNullOrEmpty(owner))
                 sb.Append(owner).Append(' ');
-            sb.Append(string.Join(", ", byOwner[owner].ToArray()));
+            sb.Append(string.Join(", ", byOwner[key].ToArray()));
         }
 
         SpeechManager.SpeakQueued(sb.ToString());
@@ -1059,11 +1098,9 @@ internal static class CombatNavigator
         return ci != null ? ci.Character : null;
     }
 
-    private static string OwnerName(CombatText src)
-    {
-        var c = OwnerCharacter(src);
-        return c != null ? AccessibleMenuBase.StripRichText(c.SourceName) : "";
-    }
+    /// <summary>Per-character negation-dedupe key — InternalId, so twins never mute each other.</summary>
+    private static string NegatedKey(Character c, string auraName)
+        => (c != null ? c.InternalId : "") + "|" + auraName.ToLower();
 
     // ======================= drill-in (Ctrl+Up/Down) =======================
     // On a card: walk the description line by line. On a character: cycle info categories. The first
@@ -1168,14 +1205,18 @@ internal static class CombatNavigator
     {
         into.Add(new DrillEntry { Speech = "Health, " + c.GetHp() + " of " + c.GetMaxHP() });
 
+        // Absent statuses get no placeholder rows — the drill lists only what the character HAS
+        // (Alt+B and Alt+S still answer "no block"/"no buffs" when asked directly).
         int block = c.GetBlock();
-        var blockData = Globals.Instance != null ? Globals.Instance.GetAuraCurseData("block") : null;
-        into.Add(new DrillEntry
+        if (block > 0)
         {
-            Speech = block > 0 ? "Block " + block : "No block",
-            AuraData = blockData,
-            Charges = block,
-        });
+            into.Add(new DrillEntry
+            {
+                Speech = "Block " + block,
+                AuraData = Globals.Instance != null ? Globals.Instance.GetAuraCurseData("block") : null,
+                Charges = block,
+            });
+        }
 
         // One entry per buff, then per curse, so Alt+T can read the focused effect's description.
         AddAuraEntries(c, buffs: true, into);
@@ -1232,20 +1273,17 @@ internal static class CombatNavigator
 
     private static void AddAuraEntries(Character c, bool buffs, List<DrillEntry> into)
     {
-        int added = 0;
         foreach (var a in LiveAuras(c, buffs))
         {
             into.Add(new DrillEntry
             {
-                Speech = (buffs ? "Buff, " : "Curse, ") + AuraName(a) + ", " + a.AuraCharges,
+                // Name and value lead; the category trails ("Mark 2, curse") — the identity is
+                // the information, the class is qualifier.
+                Speech = AuraName(a) + " " + a.AuraCharges + (buffs ? ", buff" : ", curse"),
                 AuraData = a.ACData,
                 Charges = a.AuraCharges,
             });
-            added++;
         }
-
-        if (added == 0)
-            into.Add(new DrillEntry { Speech = buffs ? "No buffs" : "No curses" });
     }
 
     private static string BuildStatusLine(Character c, bool buffs)
@@ -1455,7 +1493,33 @@ internal static class CombatNavigator
         return null;
     }
 
-    private static string Name(Character c) => AccessibleMenuBase.StripRichText(c.SourceName);
+    /// <summary>
+    /// Spoken character name, with an ordinal ("Warden 2") when another slot on the same team
+    /// shares the name — the game gives twins identical labels and sighted players tell them apart
+    /// by screen position. Counted over ALL slots, dead included, so a twin's number never shifts
+    /// mid-fight; ordinal order matches team index, which is the order arrow navigation visits.
+    /// Pets live outside the teams and simply keep their plain name.
+    /// </summary>
+    private static string Name(Character c)
+    {
+        string name = AccessibleMenuBase.StripRichText(c.SourceName);
+        var mm = MatchManager.Instance;
+        var team = mm != null ? (c.IsHero ? mm.GetTeamHero() : mm.GetTeamNPC()) : null;
+        if (team == null)
+            return name;
+
+        int ordinal = 0, matches = 0;
+        for (int i = 0; i < team.Count; i++)
+        {
+            Character other = team[i];
+            if (other == null || AccessibleMenuBase.StripRichText(other.SourceName) != name)
+                continue;
+            matches++;
+            if (ReferenceEquals(other, c))
+                ordinal = matches;
+        }
+        return matches > 1 && ordinal > 0 ? name + " " + ordinal : name;
+    }
 
     // ======================= Alt+T tooltip (hover detail) =======================
     // The extra information a sighted player gets on hover: a card's keyword definitions, or a
@@ -1641,6 +1705,18 @@ public class CombatAutomaticCastPatch
 {
     static void Postfix(CardRealtimeData theCardRealtimeData, Transform from)
         => CombatNavigator.OnAutomaticCast(theCardRealtimeData, from);
+}
+
+/// <summary>
+/// Announces cards that play themselves on being drawn. The autoplay-on-draw path never touches
+/// CastAutomatic — DealNewCard starts the same CastCard coroutine a hand cast uses — so the
+/// handler filters on the card's AutoplayDraw flag and normal player casts stay silent.
+/// </summary>
+[HarmonyPatch(typeof(MatchManager), nameof(MatchManager.CastCard))]
+public class CombatAutoplayDrawPatch
+{
+    static void Prefix(CardItem theCardItem, CardRealtimeData _card)
+        => CombatNavigator.OnAutoplayCast(_card ?? (theCardItem != null ? theCardItem.CardData : null));
 }
 
 /// <summary>
