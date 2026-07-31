@@ -5,10 +5,10 @@ namespace ObeliskAccess.Patches;
 
 /// <summary>
 /// One explicit-edit-mode session over a TMP_InputField — the generalized form of the alert
-/// dialogue's edit machinery (see <c>AlertDialogueManager</c>, which keeps its own tested local
-/// copy for now; consolidating it onto this class is a tracked cleanup). The field is resolved
-/// live through <c>FieldProvider</c> every frame, never cached, so a screen closing under the
-/// session can only ever make it abort.
+/// dialogue's edit machinery, now used by every screen with an explicit edit mode (lobby
+/// name/password, alert input/import fields). The field is resolved live through
+/// <c>FieldProvider</c> every frame, never cached, so a screen closing under the session can
+/// only ever make it abort.
 ///
 /// Responsibilities ported verbatim from the alert implementation:
 /// - <see cref="ArmDeactivate"/> undoes a game auto-focus once (120-frame give-up);

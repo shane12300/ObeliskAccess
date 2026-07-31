@@ -117,10 +117,9 @@ Priority = how often a player hits it in a normal run × how hard it blocks a bl
 ## P3 — multiplayer & rare
 
 - [ ] **MP lobby — playtest follow-ups** — verify the game's default Escape on the Join/Region
-      panels does nothing surprising; confirm the room-browser labels read well with real rooms;
-      consider adopting `TmpEditSession` inside `AlertDialogueManager` (zero-behaviour cleanup —
-      the lobby/chat sessions are the generalized port of its edit machinery). *The lobby itself
-      was implemented as MP plan phase 3 — see Completed.*
+      panels does nothing surprising; confirm the room-browser labels read well with real rooms.
+      *The lobby itself was implemented as MP plan phase 3 — see Completed; the
+      TmpEditSession-in-alert cleanup is also done — see Completed.*
 - [ ] **Virtual keyboard** — `KeyboardManager`: controller text entry (chat, seeds, names). Has
       `ControllerMovement`; highest modality priority. (Physical-keyboard users may bypass it —
       verify text fields accept real typing first.)
@@ -209,8 +208,9 @@ feature still requires stays in its original priority section (with a note point
       *Follow-ups in P3 (Enter-race latency, transfer-signature false positives).*
 - [x] **MP lobby** (was P3; MP plan phase 3, 2026-07-25) — `Patches/LobbyAccessibilityPatch.cs`
       (`LobbyScreenManager`) + `LobbyInputContext` + `LobbyHotkeyPoller` + the shared
-      `Patches/TmpEditSession.cs` (generalized port of the alert edit machinery; the alert keeps
-      its tested local copy for now). Panels derived live from RoomT/CreateRoomT/JoinRoomT/regions
+      `Patches/TmpEditSession.cs` (generalized port of the alert edit machinery; the alert now
+      uses it too — see the TmpEditSession-in-alert entry below). Panels derived live from
+      RoomT/CreateRoomT/JoinRoomT/regions
       activeSelf; rows rebuilt per read; all actions call public LobbyManager methods (the
       buttons are inspector-wired Transforms — never simulate clicks; region quick-buttons go
       straight to `SetRegion`). Region select (crossplay lock reason, quick buttons, 13-region
@@ -220,8 +220,14 @@ feature still requires stays in its original priority section (with a note point
       password row hidden while the toggle is off, empty-name refusal mirrors the game's silent
       no-op), room panel (slots read the game's own rich slot text, spelled room code via
       `HeroSpeech.SpellSeed`, two-step Enter kick — the game has NO kick confirm, Launch
-      enable-edge + occupancy edges from Tick). *Follow-ups (Escape defaults, label check,
-      TmpEditSession-in-alert) tracked in P3.*
+      enable-edge + occupancy edges from Tick). *Follow-ups (Escape defaults, label check)
+      tracked in P3.*
+- [x] **TmpEditSession adopted in AlertDialogueManager** (was a P3 sub-item of the MP lobby
+      follow-ups; 2026-07-31) — the alert's local edit-machinery fork (the session's ancestor)
+      replaced with a shared `TmpEditSession` instance, picking up the two fixes the fork had
+      missed: `ClearSelection` on edit end (the chat-lockup focus-steal hazard) and the
+      `EndedThisFrame` stamp (the Enter/Escape that ends an edit can no longer also activate a
+      row or answer/dismiss the dialog).
 - [x] **Multiplayer map voting + conflict screen** (MP plan phase 2, 2026-07-25; the
       `ConflictManager` half was the P0 "Map adjuncts" entry) — MapNavigator now treats MP Enter
       as a vote ("Voting to travel to…", locked-vote and follow-the-leader refusals explained),

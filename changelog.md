@@ -434,3 +434,7 @@
 - Holding or tapping Alt (the review-key modifier) no longer risks a stray right-click on
   the shop, reward, loot, map, event, conflict, lobby, settings, town or end-of-run screens —
   previously it could silently open a card inspection window under your feet.
+- Text entry in dialogs (run seed, room password, deck import) is more robust: the Enter or
+  Escape that ends typing can no longer slip through and press a dialog button or dismiss
+  the dialog underneath, and an ended edit always releases the keyboard fully — no more
+  stuck text fields.
