@@ -15,6 +15,9 @@ public class FinishRunInputContext : InputContextBase
 
     public override bool IsActive => IsCurrentlyActive;
 
+    // Alt+T/I/R review keys — the game's bare-Alt right-click could pop an unlocked card's window.
+    public override bool SuppressesBareAlt => true;
+
     public override bool OnMove(Vector2 direction)
     {
         if (FinishRunScreenManager.CardsMode)

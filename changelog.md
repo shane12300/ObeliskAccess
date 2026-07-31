@@ -1,4 +1,4 @@
-# ObeliskAccess Changelog
+﻿# ObeliskAccess Changelog
 
 ## Version 1.0 — Initial release
 
@@ -431,3 +431,6 @@
   "waiting for" with nobody named.
 - Single player no longer misreports a hero as owned by another player after loading a save
   that was created in multiplayer — level-up choices work normally again.
+- Holding or tapping Alt (the review-key modifier) no longer risks a stray right-click on
+  the shop, reward, loot, map, event, conflict, lobby, settings, town or end-of-run screens —
+  previously it could silently open a card inspection window under your feet.

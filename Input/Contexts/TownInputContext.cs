@@ -33,6 +33,8 @@ public class TownInputContext : InputContextBase
 
     // Ctrl+G opens the give window — the Ctrl press must not synthetically click a hub building.
     public override bool UsesCtrlModifier => true;
+    // Alt+T/G/I/R review keys — suppress the game's bare-Alt synthetic right-click.
+    public override bool SuppressesBareAlt => true;
 
     public override bool OnMove(Vector2 direction)
     {

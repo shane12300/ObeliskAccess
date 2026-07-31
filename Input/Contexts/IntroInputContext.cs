@@ -17,6 +17,9 @@ public class IntroInputContext : InputContextBase
 
     public override bool IsActive => IsCurrentlyActive;
 
+    // Alt+R review key — suppress the game's bare-Alt synthetic right-click.
+    public override bool SuppressesBareAlt => true;
+
     public override bool OnMove(Vector2 direction)
     {
         if (direction.y > 0f)

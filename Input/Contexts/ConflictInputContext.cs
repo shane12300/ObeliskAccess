@@ -19,6 +19,9 @@ public class ConflictInputContext : InputContextBase
 
     public override bool IsActive => IsCurrentlyActive;
 
+    // Alt+R review key — the game's bare-Alt right-click could pop a flipped card's inspection.
+    public override bool SuppressesBareAlt => true;
+
     public override bool OnMove(Vector2 direction)
     {
         if (direction.y > 0f)

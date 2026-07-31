@@ -16,6 +16,10 @@ public class SettingsInputContext : InputContextBase
 
     public override bool IsActive => IsCurrentlyActive;
 
+    // Alt+T reads the option tooltip — the game's bare-Alt right-click would land beneath the
+    // panel (in combat: a card or character).
+    public override bool SuppressesBareAlt => true;
+
     public override bool OnMove(Vector2 direction)
     {
         SettingsMenuManager.HandleArrow(direction);

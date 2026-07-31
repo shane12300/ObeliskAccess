@@ -30,6 +30,8 @@ public class EventInputContext : InputContextBase
     // Ctrl has no mod meaning on the book, but the game's bare-Ctrl click could silently press a
     // reply the auto-select suppressor then discards — inert.
     public override bool UsesCtrlModifier => true;
+    // Alt+T/R review keys — the bare-Alt right-click could pop a preview card's window.
+    public override bool SuppressesBareAlt => true;
 
     public override bool OnMove(Vector2 direction)
     {
