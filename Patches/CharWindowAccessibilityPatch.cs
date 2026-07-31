@@ -700,31 +700,12 @@ internal static class CharWindowScreenManager
         return adjusted != null ? adjusted : td;
     }
 
+    // Both forward to the shared HeroSpeech pair; level rows use the bare card name mid-sentence.
     private static string TraitName(TraitData td)
-    {
-        if (td == null)
-            return "";
-        if (td.TraitCard != null)
-        {
-            var cd = Globals.Instance.GetCardData(td.TraitCard.Id, instantiate: false);
-            if (cd != null)
-                return AccessibleMenuBase.StripRichText(cd.CardName);
-        }
-        return AccessibleMenuBase.StripRichText(td.TraitName);
-    }
+        => HeroSpeech.TraitName(td, prefixCard: false);
 
     private static string TraitDescription(TraitData td)
-    {
-        if (td == null)
-            return "";
-        if (td.TraitCard == null)
-            return CardSpeech.CleanFlat(td.Description);
-        string cardName = TraitName(td);
-        string format = Texts.Instance != null ? Texts.Instance.GetText("traitAddCard") : "";
-        return string.IsNullOrEmpty(format)
-            ? "Adds " + cardName + " to the deck"
-            : CardSpeech.CleanFlat(string.Format(format, cardName));
-    }
+        => HeroSpeech.TraitDetail(td);
 
     /// <summary>The card a card-granting trait would add, at the tier the game would grant it
     /// (account perk tier, or the Obelisk-madness tiers) — same rules as Hero.LevelUp.</summary>
@@ -1609,17 +1590,7 @@ internal static class HeroLevelUpAnnouncePatch
         sb.Append(AccessibleMenuBase.StripRichText(__instance.SourceName));
         sb.Append(" leveled up to ").Append(__instance.Level);
         var td = Globals.Instance.GetTraitData(traitId, __instance);
-        string traitName = "";
-        if (td != null)
-        {
-            if (td.TraitCard != null)
-            {
-                var cd = Globals.Instance.GetCardData(td.TraitCard.Id, instantiate: false);
-                traitName = cd != null ? AccessibleMenuBase.StripRichText(cd.CardName) : "";
-            }
-            if (traitName == "")
-                traitName = AccessibleMenuBase.StripRichText(td.TraitName);
-        }
+        string traitName = HeroSpeech.TraitName(td, prefixCard: false);
         if (traitName != "")
             sb.Append(" — ").Append(traitName);
         sb.Append(". Max health now ").Append(__instance.Hp).Append('.');

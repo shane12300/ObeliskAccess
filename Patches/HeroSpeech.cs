@@ -283,8 +283,12 @@ internal static class HeroSpeech
         lines.Add(line);
     }
 
-    /// <summary>The trait's display name; card-granting traits read as the card's name.</summary>
-    public static string TraitName(TraitData trait)
+    /// <summary>
+    /// The trait's display name; card-granting traits read as the card's name — "the card X"
+    /// when <paramref name="prefixCard"/> (roster/popup rows), bare for mid-sentence use
+    /// (character-sheet level rows).
+    /// </summary>
+    public static string TraitName(TraitData trait, bool prefixCard = true)
     {
         if (trait == null)
             return "";
@@ -293,17 +297,26 @@ internal static class HeroSpeech
         {
             var card = Globals.Instance.GetCardData(trait.TraitCard.Id, instantiate: false);
             if (card != null)
-                return "the card " + CardSpeech.CleanFlat(card.CardName);
+                return (prefixCard ? "the card " : "") + CardSpeech.CleanFlat(card.CardName);
         }
         return CardSpeech.CleanFlat(trait.TraitName);
     }
 
-    /// <summary>The trait's description text, for Alt+T detail rows in the character window.</summary>
+    /// <summary>
+    /// The trait's description text. Card-granting traits often carry an empty Description, so
+    /// they read as the game's own "Adds X to the deck" line instead.
+    /// </summary>
     public static string TraitDetail(TraitData trait)
     {
         if (trait == null)
             return "";
         trait.SetNameAndDescription();
-        return CardSpeech.CleanFlat(trait.Description);
+        if (trait.TraitCard == null)
+            return CardSpeech.CleanFlat(trait.Description);
+        string cardName = TraitName(trait, prefixCard: false);
+        string format = Texts.Instance != null ? Texts.Instance.GetText("traitAddCard") : "";
+        return string.IsNullOrEmpty(format)
+            ? "Adds " + cardName + " to the deck"
+            : CardSpeech.CleanFlat(string.Format(format, cardName));
     }
 }

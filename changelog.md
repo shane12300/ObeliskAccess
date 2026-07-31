@@ -438,3 +438,7 @@
   Escape that ends typing can no longer slip through and press a dialog button or dismiss
   the dialog underneath, and an ended edit always releases the keyboard fully — no more
   stuck text fields.
+- Trait names and descriptions now read the same everywhere (roster, character popup and
+  character sheet): icon tags inside trait text are spoken as words, and traits that grant a
+  card describe it — "Adds X to the deck" — instead of falling silent where the game leaves
+  the description empty.
