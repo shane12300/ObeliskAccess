@@ -47,7 +47,11 @@ internal static class TutorialPopupManager
             if (b == null || !b.gameObject.activeInHierarchy || !b.buttonEnabled)
                 continue;
 
-            string label = AccessibleMenuBase.StripRichText(b.GetText());
+            // GetText() derefs the button's TMP label unguarded — an unlabeled BotonGeneric under
+            // a tutorial prefab would throw out of the Show postfix and break the popup opening.
+            string label = b.text != null
+                ? AccessibleMenuBase.StripRichText(b.GetText())
+                : b.gameObject.name;
             _entries.Add(new Entry { Speech = label + ", button", Button = b });
 
             if (b.gameObject.name == "Tutorial_Continue")

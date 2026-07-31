@@ -67,6 +67,10 @@ internal static class ChatSpeech
             if (cm != null && cm.chatInput != null && cm.chatInput.isFocused)
             {
                 cm.chatInput.DeactivateInputField();
+                // Also drop the EventSystem selection: the game's DoKeyBinding early-returns
+                // while a TMP field is merely SELECTED, so leaving it would permanently kill
+                // game-owned keys (e.g. the energy-transfer Enter) after a mouse-click focus.
+                TmpEditSession.ClearSelection(cm.chatInput);
                 _session.MarkEnded();
             }
         }

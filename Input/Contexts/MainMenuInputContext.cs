@@ -37,6 +37,16 @@ public class MainMenuInputContext : InputContextBase
         && MatchManager.Instance == null;
 
     /// <summary>
+    /// The DLC popup and the Paradox document popup open over the mode screen without
+    /// deactivating it, so IsGameModesActive() stays true beneath them. While one is up the
+    /// game's own ControllerMovement only offers the popup's buttons — driving the mode list
+    /// under it would arrow through invisible items and Enter could press a hidden mode button.
+    /// </summary>
+    private static bool PopupOver(MainMenuManager m) =>
+        (m.DLCpopup != null && m.DLCpopup.gameObject.activeSelf)
+        || (m.paradoxDocumentPopup != null && m.paradoxDocumentPopup.gameObject.activeSelf);
+
+    /// <summary>
     /// The game-mode screen lays its items out as a horizontal row, so the game's spatial
     /// navigation walks it with ←/→ (↓ from the Main Menu button, then sideways) — unintuitive
     /// next to every other screen. Take over movement there and walk one linear list with ↑/↓
@@ -47,7 +57,7 @@ public class MainMenuInputContext : InputContextBase
     public override bool OnMove(Vector2 direction)
     {
         var mgr = MainMenuManager.Instance;
-        if (mgr == null || mgr.IsSaveMenuActive() || !mgr.IsGameModesActive())
+        if (mgr == null || mgr.IsSaveMenuActive() || !mgr.IsGameModesActive() || PopupOver(mgr))
             return false;
 
         int step;
@@ -141,7 +151,7 @@ public class MainMenuInputContext : InputContextBase
                 return true;
             }
         }
-        else if (item != null && mgr.IsGameModesActive())
+        else if (item != null && mgr.IsGameModesActive() && !PopupOver(mgr))
         {
             // The controller item is a UI cursor-warp proxy (ButtonAM_UI etc.), not the real
             // world-space button — press the resolved button directly.

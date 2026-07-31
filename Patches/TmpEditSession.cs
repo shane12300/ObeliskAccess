@@ -133,11 +133,12 @@ internal sealed class TmpEditSession
         ClearSelection(_fieldProvider());
     }
 
-    /// <summary>Drop the EventSystem selection if it still points at our field. BeginEdit's
+    /// <summary>Drop the EventSystem selection if it still points at the given field. BeginEdit's
     /// Select() leaves the field selected after the edit ends, and a selected TMP field is a
     /// focus-steal hazard: any selection-based navigation that lands back on it re-activates it
-    /// (OnSelect → ActivateInputField) outside any session — the chat-lockup mechanism.</summary>
-    private static void ClearSelection(TMPro.TMP_InputField field)
+    /// (OnSelect → ActivateInputField) outside any session — the chat-lockup mechanism. Internal
+    /// so sessionless end paths (e.g. defocusing a mouse-focused chat field) can use it too.</summary>
+    internal static void ClearSelection(TMPro.TMP_InputField field)
     {
         var es = UnityEngine.EventSystems.EventSystem.current;
         if (es != null && field != null && es.currentSelectedGameObject == field.gameObject)

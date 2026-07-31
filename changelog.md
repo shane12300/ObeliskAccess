@@ -411,3 +411,17 @@
 - The character window explains the real reason Perks, Rank and Card Backs are unavailable
   during a weekly challenge (previously it blamed a "locked hero"), and a full party in
   multiplayer now gives the correct replace-your-own-slot hint.
+- The DLC and Paradox-account popups on the game-mode screen are now respected: while one is
+  open, arrows and Enter drive the popup's own buttons instead of silently acting on the
+  hidden mode list beneath it.
+- Settings dropdowns closed with a mouse click are now detected — arrows and Enter return to
+  the settings rows instead of adjusting an invisible option list, and Escape closes the
+  panel on the first press again.
+- The in-game "Keyboard shortcuts" setting can no longer silently break the mod's
+  navigation: turning it off is undone immediately, and its settings row is labelled
+  "always on for accessibility".
+- Cancelling mouse-focused chat typing with Escape now fully releases the keyboard — the
+  game's own key handling (for example the energy-transfer Enter in combat) no longer stays
+  dead afterwards.
+- Tutorial popups with an unlabelled button no longer risk failing to open their spoken
+  dialogue.

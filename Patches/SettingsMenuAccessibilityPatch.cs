@@ -93,6 +93,7 @@ internal static class SettingsMenuManager
 
     public static void HandleArrow(Vector2 v)
     {
+        ResyncDropdown();
         if (_dropdownOpen)
         {
             if (v.y > 0f) PreviewOption(-1);
@@ -114,6 +115,7 @@ internal static class SettingsMenuManager
         if (Time.frameCount == _openedFrame)
             return;
 
+        ResyncDropdown();
         if (_dropdownOpen)
         {
             ApplyDropdown();
@@ -156,12 +158,29 @@ internal static class SettingsMenuManager
     /// <summary>Cancels an open dropdown (used by the Escape prefix). Returns true if it consumed.</summary>
     public static bool CancelDropdown()
     {
+        ResyncDropdown();
         if (!_dropdownOpen)
             return false;
 
         CloseDropdown();
         SpeechManager.Speak("Cancelled");
         return true;
+    }
+
+    /// <summary>
+    /// A mouse click on TMP's blocker (or anywhere off the list) closes the dropdown without the
+    /// mod noticing — Show() spawns a "Dropdown List" child that Hide() destroys. If our tracked
+    /// dropdown no longer has that child, drop the sub-mode silently so arrows/Enter/Escape act on
+    /// the panel rows again instead of an invisible option list.
+    /// </summary>
+    private static void ResyncDropdown()
+    {
+        if (_dropdownOpen
+            && (_openDropdown == null || _openDropdown.transform.Find("Dropdown List") == null))
+        {
+            _dropdownOpen = false;
+            _openDropdown = null;
+        }
     }
 
     // ---- internals ----
@@ -335,7 +354,9 @@ internal static class SettingsMenuManager
                 AddToggle(s.acbackgroundEffectsToggle, "Background effects");
                 AddToggle(s.restartCombatOptionToggle, "Restart combat option");
                 AddToggle(s.screenShakeOptionToggle, "Screen shake");
-                AddToggle(s.keyboardShortcutsToggle, "Keyboard shortcuts");
+                // Forced back on by ForceKeyboardShortcutsOnSetPatch — the mod's entire key
+                // routing rides ConfigKeyboardShortcuts, so the label says why it won't stay off.
+                AddToggle(s.keyboardShortcutsToggle, "Keyboard shortcuts (always on for accessibility)");
                 AddToggle(s.followingTheLeaderToggle, "Following the leader");
                 AddToggle(s.extendedDescriptionsToggle, "Extended descriptions");
 
