@@ -58,9 +58,7 @@ internal static class CharWindowScreenManager
     private static int _popupIndex;
 
     // Ctrl+Up/Down drill-in, mirroring the rewards/loot screens.
-    private static bool _drill;
-    private static readonly List<string> _drillLines = new List<string>();
-    private static int _drillIndex;
+    private static readonly CardDrill _cardDrill = new CardDrill();
 
     /// <summary>Live "the sheet is open" check, so a mouse close can never strand the state.</summary>
     public static bool IsOpen
@@ -1420,30 +1418,17 @@ internal static class CharWindowScreenManager
     {
         if (!IsOpen)
             return;
-        if (!_drill)
+        if (!_cardDrill.Active)
         {
             var card = FocusedCard(out int? liveCost);
-            if (card == null)
-                return; // nothing to drill on this row
-            _drillLines.Clear();
-            _drillLines.AddRange(CardSpeech.DetailLines(card, liveCost));
-            _drill = true;
-            _drillIndex = 0;
-            SpeechManager.Speak(_drillLines.Count > 0 ? _drillLines[0] : "No description");
+            _cardDrill.Begin(card, liveCost);
             return;
         }
-        if (_drillLines.Count > 0)
-        {
-            _drillIndex = Mathf.Clamp(_drillIndex + dir, 0, _drillLines.Count - 1);
-            SpeechManager.Speak(_drillLines[_drillIndex]);
-        }
+        _cardDrill.Step(dir);
     }
 
-    public static bool TryDrillExit()
+    public static bool TryDrillExit() => _cardDrill.Exit(() =>
     {
-        if (!_drill)
-            return false;
-        ExitDrillSilently();
         if (_popupMode)
         {
             var cd = PopupCardData(_popupIndex);
@@ -1454,15 +1439,9 @@ internal static class CharWindowScreenManager
         {
             SpeechManager.Speak(_rows[_rowIndex].Read());
         }
-        return true;
-    }
+    });
 
-    private static void ExitDrillSilently()
-    {
-        _drill = false;
-        _drillLines.Clear();
-        _drillIndex = 0;
-    }
+    private static void ExitDrillSilently() => _cardDrill.Reset();
 
     // ------------------------------------------------------------------ review keys
 

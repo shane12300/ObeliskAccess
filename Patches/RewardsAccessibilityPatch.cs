@@ -45,9 +45,7 @@ internal static class RewardsScreenManager
     private static bool _announcedClose;
 
     // Ctrl+Up/Down card drill (same shape as CombatNavigator's).
-    private static bool _drill;
-    private static readonly List<string> _cardLines = new List<string>();
-    private static int _cardLineIndex;
+    private static readonly CardDrill _cardDrill = new CardDrill();
 
     // Card pending the Singularity overwrite confirm.
     private static string _pendingCardName;
@@ -118,9 +116,7 @@ internal static class RewardsScreenManager
         _rowHeroes.Clear();
         _row = -1;
         _col = 0;
-        _drill = false;
-        _cardLines.Clear();
-        _cardLineIndex = 0;
+        _cardDrill.Reset();
         _pendingCardName = null;
     }
 
@@ -330,42 +326,18 @@ internal static class RewardsScreenManager
     {
         if (!EnsureReady())
             return;
-
-        if (!_drill)
+        if (!_cardDrill.Active)
         {
             var card = FocusedCard();
-            if (card == null || card.CardData == null)
-                return; // nothing to drill on this element
-            _cardLines.Clear();
-            _cardLines.AddRange(CardSpeech.DetailLines(card.CardData));
-            _drill = true;
-            _cardLineIndex = 0;
-            SpeechManager.Speak(_cardLines.Count > 0 ? _cardLines[0] : "No description");
+            _cardDrill.Begin(card != null ? card.CardData : null);
             return;
         }
-
-        if (_cardLines.Count > 0)
-        {
-            _cardLineIndex = Clamp(_cardLineIndex + dir, 0, _cardLines.Count - 1);
-            SpeechManager.Speak(_cardLines[_cardLineIndex]);
-        }
+        _cardDrill.Step(dir);
     }
 
-    public static bool TryDrillExit()
-    {
-        if (!_drill)
-            return false;
-        ExitDrillSilently();
-        AnnounceFocus();
-        return true;
-    }
+    public static bool TryDrillExit() => _cardDrill.Exit(AnnounceFocus);
 
-    private static void ExitDrillSilently()
-    {
-        _drill = false;
-        _cardLines.Clear();
-        _cardLineIndex = 0;
-    }
+    private static void ExitDrillSilently() => _cardDrill.Reset();
 
     // ======================= review hotkeys =======================
 
