@@ -35,7 +35,7 @@ public class HeroSelectionHotkeyPoller : MonoBehaviour
 
         if (InputRouter.IsActive(PerkTreeContext))
         {
-            if (!(kb.leftAltKey.isPressed || kb.rightAltKey.isPressed))
+            if (!InputRouter.AltHeld)
                 return;
             if (kb.tKey.wasPressedThisFrame) PerkTreeScreenManager.SpeakNodeDetail();
             else if (kb.iKey.wasPressedThisFrame) PerkTreeScreenManager.SpeakPointsSummary();
@@ -45,7 +45,7 @@ public class HeroSelectionHotkeyPoller : MonoBehaviour
 
         if (InputRouter.IsActive(CharPopupContext))
         {
-            if (!(kb.leftAltKey.isPressed || kb.rightAltKey.isPressed))
+            if (!InputRouter.AltHeld)
                 return;
             if (kb.tKey.wasPressedThisFrame) CharPopupScreenManager.SpeakRowDetail();
             else if (kb.iKey.wasPressedThisFrame) CharPopupScreenManager.SpeakHeadline();
@@ -56,7 +56,7 @@ public class HeroSelectionHotkeyPoller : MonoBehaviour
         if (!InputRouter.IsActive(HeroSelectionContext))
             return;
 
-        if (!(kb.leftAltKey.isPressed || kb.rightAltKey.isPressed))
+        if (!InputRouter.AltHeld)
             return;
 
         if (kb.tKey.wasPressedThisFrame) HeroSelectionScreenManager.SpeakHeroSheet();

@@ -212,174 +212,185 @@ internal static class LobbyScreenManager
 
         switch (CurrentPanel(lm))
         {
-            case Panel.Region:
-                AddCrossplayRow(rows, lm);
-                AddQuickRegion(rows, lm, "Europe", "eu");
-                AddQuickRegion(rows, lm, "United States", "us");
-                AddQuickRegion(rows, lm, "Asia", "asia");
-                rows.Add(new Row
-                {
-                    Speech = "All regions: " + DropdownOption(lm.dropRegion) + ". Press Enter to choose",
-                    Dropdown = lm.dropRegion,
-                    DropdownApply = () =>
-                    {
-                        SpeechManager.Speak("Connecting to " + DropdownOption(lm.dropRegion) + ".");
-                        lm.SelectRegion();
-                    },
-                });
-                break;
-
-            case Panel.Connecting:
-                rows.Add(new Row
-                {
-                    Speech = StatusText(lm).Length > 0 ? StatusText(lm) : "Connecting",
-                    Activate = () => SpeechManager.Speak(StatusText(lm).Length > 0 ? StatusText(lm) : "Connecting"),
-                });
-                break;
-
-            case Panel.Join:
-                if (_joinRegion == JoinRegion.Rooms)
-                {
-                    var roomRows = RoomRows(lm);
-                    if (roomRows.Count == 0)
-                    {
-                        rows.Add(new Row
-                        {
-                            Speech = "No rooms found. The list refreshes automatically",
-                            Activate = () => SpeechManager.Speak("No rooms found. The list refreshes automatically."),
-                        });
-                    }
-                    foreach (var rl in roomRows)
-                    {
-                        var captured = rl;
-                        rows.Add(new Row
-                        {
-                            Speech = RoomRowSpeech(captured),
-                            Activate = () =>
-                            {
-                                SpeechManager.Speak("Joining " + RoomRowName(captured) + ".");
-                                captured.JoinRoom(); // password prompt = game AlertInput, alert context owns it
-                            },
-                        });
-                    }
-                }
-                else
-                {
-                    rows.Add(new Row
-                    {
-                        Speech = "Join by room code, button",
-                        Activate = () => lm.JoinRoomById(), // game AlertInput
-                    });
-                    rows.Add(new Row
-                    {
-                        Speech = "Set up a new game, button — opens the game setup on the main menu",
-                        Activate = () =>
-                        {
-                            SpeechManager.Speak("Opening game setup on the main menu.");
-                            lm.CreateMultiplayerGame();
-                        },
-                    });
-                    if (lm.regionsDisconnect != null && lm.regionsDisconnect.gameObject.activeSelf)
-                        rows.Add(new Row
-                        {
-                            Speech = "Disconnect from region, button",
-                            Activate = () =>
-                            {
-                                SpeechManager.Speak("Disconnecting.");
-                                lm.DisconnectRegion(_fromButton: true);
-                            },
-                        });
-                }
-                break;
-
-            case Panel.Create:
-                rows.Add(new Row
-                {
-                    Speech = "Room name: " + FieldValue(lm.UICreateName, "empty") + ". Press Enter to type",
-                    Edit = _editName,
-                });
-                rows.Add(new Row
-                {
-                    Speech = "Players: " + DropdownOption(lm.UICreatePlayers) + ". Press Enter to choose",
-                    Dropdown = lm.UICreatePlayers,
-                    DropdownApply = () => SpeechManager.Speak("Players: " + DropdownOption(lm.UICreatePlayers) + "."),
-                });
-                rows.Add(ToggleRow(lm.UITogglePwd, "Password protection",
-                    ", the password field appears below when on"));
-                if (lm.UITogglePwd != null && lm.UITogglePwd.isOn)
-                    rows.Add(new Row
-                    {
-                        Speech = "Password: " + FieldValue(lm.UICreatePwd, "empty")
-                            + " — will be uppercased. Press Enter to type",
-                        Edit = _editPwd,
-                    });
-                rows.Add(ToggleRow(lm.UIToggleLfm, "Looking for more players", ""));
-                rows.Add(new Row
-                {
-                    Speech = "Create room, button",
-                    Activate = () =>
-                    {
-                        string name = lm.UICreateName != null ? lm.UICreateName.text.Trim() : "";
-                        if (name.Length == 0)
-                        {
-                            SpeechManager.Speak("Room name is empty — nothing created.");
-                            return;
-                        }
-                        SpeechManager.Speak("Creating room " + AccessibleMenuBase.StripRichText(name) + ".");
-                        lm.CreateRoom();
-                    },
-                });
-                rows.Add(new Row
-                {
-                    Speech = "Back to the room list, button",
-                    Activate = () => lm.GoBack(),
-                });
-                break;
-
-            case Panel.Room:
-                rows.Add(new Row { Speech = RoomHeader(), Activate = () => SpeechManager.Speak(RoomHeader()) });
-                if (lm.roomWaiting != null)
-                {
-                    string status = CardSpeech.CleanFlat(lm.roomWaiting.text);
-                    if (status.Length > 0)
-                        rows.Add(new Row { Speech = status, Activate = () => SpeechManager.Speak(status) });
-                }
-                if (lm.roomSlots != null)
-                    for (int i = 0; i < lm.roomSlots.Length; i++)
-                    {
-                        var slot = lm.roomSlots[i];
-                        if (slot == null || !slot.gameObject.activeSelf)
-                            continue;
-                        int idx = i;
-                        bool kickable = lm.roomSlotsKick != null && idx < lm.roomSlotsKick.Length
-                            && lm.roomSlotsKick[idx] != null && lm.roomSlotsKick[idx].gameObject.activeSelf;
-                        rows.Add(new Row
-                        {
-                            Speech = SlotSpeech(lm, idx, kickable),
-                            KickSlot = kickable ? idx : -1,
-                            Activate = kickable ? (Action)null
-                                : () => SpeechManager.Speak(SlotSpeech(lm, idx, kickable: false)),
-                        });
-                    }
-                if (lm.buttonSteam != null && lm.buttonSteam.gameObject.activeSelf)
-                    rows.Add(new Row
-                    {
-                        Speech = "Invite a Steam friend, button",
-                        Activate = () =>
-                        {
-                            SpeechManager.Speak("Opening the Steam invite overlay.");
-                            lm.InviteSteam();
-                        },
-                    });
-                rows.Add(LaunchRow(lm));
-                rows.Add(new Row
-                {
-                    Speech = "Exit room, button",
-                    Activate = () => lm.ExitRoom(), // game confirm alert
-                });
-                break;
+            case Panel.Region: AddRegionRows(rows, lm); break;
+            case Panel.Connecting: AddConnectingRow(rows, lm); break;
+            case Panel.Join: AddJoinRows(rows, lm); break;
+            case Panel.Create: AddCreateRows(rows, lm); break;
+            case Panel.Room: AddRoomRows(rows, lm); break;
         }
         return rows;
+    }
+
+    private static void AddRegionRows(List<Row> rows, LobbyManager lm)
+    {
+        AddCrossplayRow(rows, lm);
+        AddQuickRegion(rows, lm, "Europe", "eu");
+        AddQuickRegion(rows, lm, "United States", "us");
+        AddQuickRegion(rows, lm, "Asia", "asia");
+        rows.Add(new Row
+        {
+            Speech = "All regions: " + DropdownOption(lm.dropRegion) + ". Press Enter to choose",
+            Dropdown = lm.dropRegion,
+            DropdownApply = () =>
+            {
+                SpeechManager.Speak("Connecting to " + DropdownOption(lm.dropRegion) + ".");
+                lm.SelectRegion();
+            },
+        });
+    }
+
+    private static void AddConnectingRow(List<Row> rows, LobbyManager lm)
+    {
+        rows.Add(new Row
+        {
+            Speech = StatusText(lm).Length > 0 ? StatusText(lm) : "Connecting",
+            Activate = () => SpeechManager.Speak(StatusText(lm).Length > 0 ? StatusText(lm) : "Connecting"),
+        });
+    }
+
+    private static void AddJoinRows(List<Row> rows, LobbyManager lm)
+    {
+        if (_joinRegion == JoinRegion.Rooms)
+        {
+            var roomRows = RoomRows(lm);
+            if (roomRows.Count == 0)
+            {
+                rows.Add(new Row
+                {
+                    Speech = "No rooms found. The list refreshes automatically",
+                    Activate = () => SpeechManager.Speak("No rooms found. The list refreshes automatically."),
+                });
+            }
+            foreach (var rl in roomRows)
+            {
+                var captured = rl;
+                rows.Add(new Row
+                {
+                    Speech = RoomRowSpeech(captured),
+                    Activate = () =>
+                    {
+                        SpeechManager.Speak("Joining " + RoomRowName(captured) + ".");
+                        captured.JoinRoom(); // password prompt = game AlertInput, alert context owns it
+                    },
+                });
+            }
+        }
+        else
+        {
+            rows.Add(new Row
+            {
+                Speech = "Join by room code, button",
+                Activate = () => lm.JoinRoomById(), // game AlertInput
+            });
+            rows.Add(new Row
+            {
+                Speech = "Set up a new game, button — opens the game setup on the main menu",
+                Activate = () =>
+                {
+                    SpeechManager.Speak("Opening game setup on the main menu.");
+                    lm.CreateMultiplayerGame();
+                },
+            });
+            if (lm.regionsDisconnect != null && lm.regionsDisconnect.gameObject.activeSelf)
+                rows.Add(new Row
+                {
+                    Speech = "Disconnect from region, button",
+                    Activate = () =>
+                    {
+                        SpeechManager.Speak("Disconnecting.");
+                        lm.DisconnectRegion(_fromButton: true);
+                    },
+                });
+        }
+    }
+
+    private static void AddCreateRows(List<Row> rows, LobbyManager lm)
+    {
+        rows.Add(new Row
+        {
+            Speech = "Room name: " + FieldValue(lm.UICreateName, "empty") + ". Press Enter to type",
+            Edit = _editName,
+        });
+        rows.Add(new Row
+        {
+            Speech = "Players: " + DropdownOption(lm.UICreatePlayers) + ". Press Enter to choose",
+            Dropdown = lm.UICreatePlayers,
+            DropdownApply = () => SpeechManager.Speak("Players: " + DropdownOption(lm.UICreatePlayers) + "."),
+        });
+        rows.Add(ToggleRow(lm.UITogglePwd, "Password protection",
+            ", the password field appears below when on"));
+        if (lm.UITogglePwd != null && lm.UITogglePwd.isOn)
+            rows.Add(new Row
+            {
+                Speech = "Password: " + FieldValue(lm.UICreatePwd, "empty")
+                    + " — will be uppercased. Press Enter to type",
+                Edit = _editPwd,
+            });
+        rows.Add(ToggleRow(lm.UIToggleLfm, "Looking for more players", ""));
+        rows.Add(new Row
+        {
+            Speech = "Create room, button",
+            Activate = () =>
+            {
+                string name = lm.UICreateName != null ? lm.UICreateName.text.Trim() : "";
+                if (name.Length == 0)
+                {
+                    SpeechManager.Speak("Room name is empty — nothing created.");
+                    return;
+                }
+                SpeechManager.Speak("Creating room " + AccessibleMenuBase.StripRichText(name) + ".");
+                lm.CreateRoom();
+            },
+        });
+        rows.Add(new Row
+        {
+            Speech = "Back to the room list, button",
+            Activate = () => lm.GoBack(),
+        });
+    }
+
+    private static void AddRoomRows(List<Row> rows, LobbyManager lm)
+    {
+        rows.Add(new Row { Speech = RoomHeader(), Activate = () => SpeechManager.Speak(RoomHeader()) });
+        if (lm.roomWaiting != null)
+        {
+            string status = CardSpeech.CleanFlat(lm.roomWaiting.text);
+            if (status.Length > 0)
+                rows.Add(new Row { Speech = status, Activate = () => SpeechManager.Speak(status) });
+        }
+        if (lm.roomSlots != null)
+            for (int i = 0; i < lm.roomSlots.Length; i++)
+            {
+                var slot = lm.roomSlots[i];
+                if (slot == null || !slot.gameObject.activeSelf)
+                    continue;
+                int idx = i;
+                bool kickable = lm.roomSlotsKick != null && idx < lm.roomSlotsKick.Length
+                    && lm.roomSlotsKick[idx] != null && lm.roomSlotsKick[idx].gameObject.activeSelf;
+                rows.Add(new Row
+                {
+                    Speech = SlotSpeech(lm, idx, kickable),
+                    KickSlot = kickable ? idx : -1,
+                    Activate = kickable ? (Action)null
+                        : () => SpeechManager.Speak(SlotSpeech(lm, idx, kickable: false)),
+                });
+            }
+        if (lm.buttonSteam != null && lm.buttonSteam.gameObject.activeSelf)
+            rows.Add(new Row
+            {
+                Speech = "Invite a Steam friend, button",
+                Activate = () =>
+                {
+                    SpeechManager.Speak("Opening the Steam invite overlay.");
+                    lm.InviteSteam();
+                },
+            });
+        rows.Add(LaunchRow(lm));
+        rows.Add(new Row
+        {
+            Speech = "Exit room, button",
+            Activate = () => lm.ExitRoom(), // game confirm alert
+        });
     }
 
     private static void AddCrossplayRow(List<Row> rows, LobbyManager lm)

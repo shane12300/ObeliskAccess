@@ -24,7 +24,7 @@ public class ConflictHotkeyPoller : MonoBehaviour
         if (!InputRouter.IsActive(ConflictContext))
             return;
 
-        if (!(kb.leftAltKey.isPressed || kb.rightAltKey.isPressed))
+        if (!InputRouter.AltHeld)
             return;
 
         if (kb.rKey.wasPressedThisFrame)

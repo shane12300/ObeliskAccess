@@ -209,13 +209,14 @@ public class ChatLineAnnouncePatch
 [HarmonyPatch(typeof(ChatManager), nameof(ChatManager.WelcomeMsg))]
 public class ChatWelcomeAnnouncePatch
 {
-    static void Postfix(string roomName)
+    static void Postfix(ChatManager __instance)
     {
         if (!MpSpeech.IsMp || AccessibilityOptions.SpeakChat == null || !AccessibilityOptions.SpeakChat.Value)
             return;
-        string line = Texts.Instance != null
-            ? CardSpeech.CleanFlat(string.Format(Texts.Instance.GetText("chatWelcome"), roomName))
-            : "";
+        // WelcomeMsg resets the buffer, so chatText holds exactly the welcome line — read the
+        // rendered text instead of re-running the localization format (stays correct if the game
+        // changes the string's shape).
+        string line = __instance.chatText != null ? CardSpeech.CleanFlat(__instance.chatText.text) : "";
         if (line.Length > 0)
             SpeechManager.SpeakQueued(line);
     }

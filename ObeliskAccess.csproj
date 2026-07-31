@@ -3,17 +3,17 @@
   <PropertyGroup>
     <TargetFramework>net46</TargetFramework>
     <AssemblyName>ObeliskAccess</AssemblyName>
-    <Product>My first plugin</Product>
+    <Product>ObeliskAccess</Product>
     <Version>1.0.0</Version>
-    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <LangVersion>latest</LangVersion>
     <RestoreAdditionalProjectSources>
       https://api.nuget.org/v3/index.json;
-      https://nuget.bepinex.dev/v3/index.json;
-      https://nuget.samboy.dev/v3/index.json
+      https://nuget.bepinex.dev/v3/index.json
     </RestoreAdditionalProjectSources>
     <RootNamespace>ObeliskAccess</RootNamespace>
-    <GameDir>C:\Program Files (x86)\Steam\steamapps\common\Across the Obelisk</GameDir>
+    <!-- Overridable: dotnet build -p:GameDir=... for a non-default install location. -->
+    <GameDir Condition="'$(GameDir)' == ''">C:\Program Files (x86)\Steam\steamapps\common\Across the Obelisk</GameDir>
+    <GameManagedDir>$(GameDir)\AcrossTheObelisk_Data\Managed</GameManagedDir>
   </PropertyGroup>
 
   <ItemGroup>
@@ -31,56 +31,56 @@
 
   <ItemGroup>
     <Reference Include="Assembly-CSharp">
-      <HintPath>C:\Program Files (x86)\Steam\steamapps\common\Across the Obelisk\AcrossTheObelisk_Data\Managed\Assembly-CSharp.dll</HintPath>
+      <HintPath>$(GameManagedDir)\Assembly-CSharp.dll</HintPath>
       <Private>false</Private>
     </Reference>
     <Reference Include="netstandard">
-      <HintPath>C:\Program Files (x86)\Steam\steamapps\common\Across the Obelisk\AcrossTheObelisk_Data\Managed\netstandard.dll</HintPath>
+      <HintPath>$(GameManagedDir)\netstandard.dll</HintPath>
       <Private>false</Private>
     </Reference>
     <!-- Game's own UnityEngine.dll is a type-forwarder shim (not the old monolithic build) -->
     <Reference Include="UnityEngine">
-      <HintPath>C:\Program Files (x86)\Steam\steamapps\common\Across the Obelisk\AcrossTheObelisk_Data\Managed\UnityEngine.dll</HintPath>
+      <HintPath>$(GameManagedDir)\UnityEngine.dll</HintPath>
       <Private>false</Private>
     </Reference>
     <Reference Include="UnityEngine.CoreModule">
-      <HintPath>C:\Program Files (x86)\Steam\steamapps\common\Across the Obelisk\AcrossTheObelisk_Data\Managed\UnityEngine.CoreModule.dll</HintPath>
+      <HintPath>$(GameManagedDir)\UnityEngine.CoreModule.dll</HintPath>
       <Private>false</Private>
     </Reference>
     <!-- NetworkManager derives from Photon's MonoBehaviourPunCallbacks, so any code touching it
          needs the game's Photon assembly on the compile path. -->
     <Reference Include="PhotonUnityNetworking">
-      <HintPath>C:\Program Files (x86)\Steam\steamapps\common\Across the Obelisk\AcrossTheObelisk_Data\Managed\PhotonUnityNetworking.dll</HintPath>
+      <HintPath>$(GameManagedDir)\PhotonUnityNetworking.dll</HintPath>
       <Private>false</Private>
     </Reference>
     <!-- Photon.Realtime.Player appears in the PUN callback signatures the mod patches
          (OnPlayerEnteredRoom/OnPlayerLeftRoom/OnMasterClientSwitched). -->
     <Reference Include="PhotonRealtime">
-      <HintPath>C:\Program Files (x86)\Steam\steamapps\common\Across the Obelisk\AcrossTheObelisk_Data\Managed\PhotonRealtime.dll</HintPath>
+      <HintPath>$(GameManagedDir)\PhotonRealtime.dll</HintPath>
       <Private>false</Private>
     </Reference>
     <Reference Include="UnityEngine.AudioModule">
-      <HintPath>C:\Program Files (x86)\Steam\steamapps\common\Across the Obelisk\AcrossTheObelisk_Data\Managed\UnityEngine.AudioModule.dll</HintPath>
+      <HintPath>$(GameManagedDir)\UnityEngine.AudioModule.dll</HintPath>
       <Private>false</Private>
     </Reference>
     <Reference Include="UnityEngine.Physics2DModule">
-      <HintPath>C:\Program Files (x86)\Steam\steamapps\common\Across the Obelisk\AcrossTheObelisk_Data\Managed\UnityEngine.Physics2DModule.dll</HintPath>
+      <HintPath>$(GameManagedDir)\UnityEngine.Physics2DModule.dll</HintPath>
       <Private>false</Private>
     </Reference>
     <Reference Include="UnityEngine.IMGUIModule">
-      <HintPath>C:\Program Files (x86)\Steam\steamapps\common\Across the Obelisk\AcrossTheObelisk_Data\Managed\UnityEngine.IMGUIModule.dll</HintPath>
+      <HintPath>$(GameManagedDir)\UnityEngine.IMGUIModule.dll</HintPath>
       <Private>false</Private>
     </Reference>
     <Reference Include="UnityEngine.UI">
-      <HintPath>C:\Program Files (x86)\Steam\steamapps\common\Across the Obelisk\AcrossTheObelisk_Data\Managed\UnityEngine.UI.dll</HintPath>
+      <HintPath>$(GameManagedDir)\UnityEngine.UI.dll</HintPath>
       <Private>false</Private>
     </Reference>
     <Reference Include="Unity.InputSystem">
-      <HintPath>C:\Program Files (x86)\Steam\steamapps\common\Across the Obelisk\AcrossTheObelisk_Data\Managed\Unity.InputSystem.dll</HintPath>
+      <HintPath>$(GameManagedDir)\Unity.InputSystem.dll</HintPath>
       <Private>false</Private>
     </Reference>
     <Reference Include="Unity.TextMeshPro">
-      <HintPath>C:\Program Files (x86)\Steam\steamapps\common\Across the Obelisk\AcrossTheObelisk_Data\Managed\Unity.TextMeshPro.dll</HintPath>
+      <HintPath>$(GameManagedDir)\Unity.TextMeshPro.dll</HintPath>
       <Private>false</Private>
     </Reference>
   </ItemGroup>

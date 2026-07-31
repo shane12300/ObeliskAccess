@@ -3,7 +3,7 @@ using HarmonyLib;
 namespace ObeliskAccess.Patches;
 
 [HarmonyPatch(typeof(MainMenuManager), nameof(MainMenuManager.ShowSaveGame))]
-public class SaveSlotOpenPatch : AccessibleMenuBase
+public class SaveSlotOpenPatch
 {
     static void Postfix(bool status)
     {

@@ -4,7 +4,6 @@ using System.Text;
 using System.Text.RegularExpressions;
 using TMPro;
 using UnityEngine;
-using UnityEngine.UI;
 
 namespace ObeliskAccess.Patches;
 
@@ -15,6 +14,8 @@ public abstract class AccessibleMenuBase
 
     public static string StripRichText(string text)
     {
+        if (string.IsNullOrEmpty(text))
+            return "";
         text = _richTextTag.Replace(text, " ");
         text = text.Replace("\n", " ").Replace("\r", " ");
         return Regex.Replace(text, @"\s+", " ").Trim();
@@ -234,11 +235,5 @@ public abstract class AccessibleMenuBase
     public static void AnnounceItem(Transform item)
     {
         SpeechManager.Speak(GetMenuItemText(item));
-    }
-
-    protected static void InvokeItemButton(Transform item)
-    {
-        var button = item.GetComponent<Button>();
-        button?.onClick.Invoke();
     }
 }

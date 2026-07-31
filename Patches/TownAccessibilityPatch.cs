@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 using HarmonyLib;
+using static ObeliskAccess.Patches.Nav;
 
 namespace ObeliskAccess.Patches;
 
@@ -532,7 +533,6 @@ internal static class TownScreenManager
         return string.IsNullOrEmpty(name) ? zoneId : AccessibleMenuBase.StripRichText(name);
     }
 
-    private static int Wrap(int v, int count) => ((v % count) + count) % count;
 }
 
 /// <summary>Confirmed treasure claims: speak what was gained (the "Confirmed" answer alone says nothing).</summary>

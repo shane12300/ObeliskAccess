@@ -79,13 +79,7 @@ internal static class EmotePingManager
         var ci = t != null
             ? (t.GetComponent<CharacterItem>() ?? t.GetComponentInParent<CharacterItem>())
             : null;
-        Character target = null;
-        if (ci != null)
-        {
-            target = Traverse.Create(ci).Field<Hero>("_hero").Value;
-            if (target == null)
-                target = Traverse.Create(ci).Field<NPC>("_npc").Value;
-        }
+        Character target = ci != null ? ci.Character : null;
         if (target == null)
         {
             SpeechManager.Speak("Arrow to a character first.");
@@ -190,11 +184,7 @@ internal static class EmotePingManager
         var mm = MatchManager.Instance;
         if (mm == null)
             return;
-        string card = "a card";
-        var tableList = mm.CardItemTable;
-        if (tableList != null && tablePosition >= 0 && tablePosition < tableList.Count
-            && tableList[tablePosition] != null && tableList[tablePosition].CardData != null)
-            card = AccessibleMenuBase.StripRichText(tableList[tablePosition].CardData.CardName);
+        string card = CardNameAt(mm, tablePosition);
         var team = isHero ? mm.GetTeamHero() : mm.GetTeamNPC();
         string target = team != null && characterIndex < team.Count
             ? CharacterName(team[characterIndex]) : "a character";
@@ -206,6 +196,16 @@ internal static class EmotePingManager
         _aimTable = -1;
         _aimIsHero = false;
         _aimIndex = 0;
+    }
+
+    /// <summary>Spoken name of the table card at a ping/aim position; "a card" when unresolvable.</summary>
+    internal static string CardNameAt(MatchManager mm, int tablePosition)
+    {
+        var table = mm != null ? mm.CardItemTable : null;
+        if (table != null && tablePosition >= 0 && tablePosition < table.Count
+            && table[tablePosition] != null && table[tablePosition].CardData != null)
+            return AccessibleMenuBase.StripRichText(table[tablePosition].CardData.CardName);
+        return "a card";
     }
 }
 
@@ -294,9 +294,7 @@ public class EmoteCardPingAnnouncePatch
         var hero = team != null && _heroIndex < team.Count ? team[_heroIndex] as Hero : null;
         bool local = hero != null && MpSpeech.LocalOwns(hero);
         string sender = local ? "You" : MpSpeech.OwnerNick(hero);
-        string card = table[_tablePosition].CardData != null
-            ? AccessibleMenuBase.StripRichText(table[_tablePosition].CardData.CardName)
-            : "a card";
+        string card = EmotePingManager.CardNameAt(__instance, _tablePosition);
         SpeechManager.SpeakQueued(__state
             ? sender + (local ? " clear" : " clears") + " the card ping."
             : sender + (local ? " ping" : " pings") + " the card " + card + ".");

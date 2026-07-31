@@ -11,7 +11,7 @@ namespace ObeliskAccess.Patches;
 /// Flow: choosing a reward (Left/Right) also accepts the corruption; confirming without choosing
 /// declines it. The accept box state is mirrored by <c>corruptionBoxX</c> being shown.
 /// </summary>
-public static class CorruptionAccessibility
+internal static class CorruptionAccessibility
 {
     /// <summary>In MP only the master answers the prompt: the game disables both reward buttons
     /// and the accept box on other clients (showing an "only the host" banner) — but the public

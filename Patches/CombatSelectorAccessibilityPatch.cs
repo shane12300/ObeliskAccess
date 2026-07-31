@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Text;
 using Cards;
 using HarmonyLib;
+using static ObeliskAccess.Patches.Nav;
 using UnityEngine;
 
 namespace ObeliskAccess.Patches;
@@ -19,7 +20,7 @@ namespace ObeliskAccess.Patches;
 /// or a multiplayer echo) funnels through <c>MatchManager.SelectCardToDiscard/SelectCardToAddcard</c>,
 /// whose postfixes announce the result.
 /// </summary>
-public static class CombatSelectorManager
+internal static class CombatSelectorManager
 {
     private enum Mode
     {
@@ -639,7 +640,6 @@ public static class CombatSelectorManager
         ExitDrill();
     }
 
-    private static int Clamp(int v, int lo, int hi) => v < lo ? lo : (v > hi ? hi : v);
 }
 
 // ======================= Harmony patches =======================

@@ -373,20 +373,24 @@ internal static class CharWindowScreenManager
     /// <summary>Route a tab change through the scene's own wrapper, exactly like the game's
     /// side buttons do (keeps sideCharacters state consistent everywhere the sheet exists).</summary>
     private static void ShowTab(string element)
+        => ShowTab(element, _isNpc ? _window.npcIndex : _heroIndex, !_isNpc);
+
+    /// <summary>The scene-appropriate ShowCharacterWindow wrapper (each scene manager keeps its
+    /// own extra state in sync), with a direct Show fallback for scene-less callers.</summary>
+    private static void ShowTab(string element, int index, bool isHero)
     {
         if (MatchManager.Instance != null)
-            MatchManager.Instance.ShowCharacterWindow(element, !_isNpc,
-                _isNpc ? _window.npcIndex : _heroIndex);
+            MatchManager.Instance.ShowCharacterWindow(element, isHero, index);
         else if (MapManager.Instance != null)
-            MapManager.Instance.ShowCharacterWindow(element, _heroIndex);
+            MapManager.Instance.ShowCharacterWindow(element, index);
         else if (TownManager.Instance != null)
-            TownManager.Instance.ShowCharacterWindow(element, _heroIndex);
+            TownManager.Instance.ShowCharacterWindow(element, index);
         else if (RewardsManager.Instance != null)
-            RewardsManager.Instance.ShowCharacterWindow(element, isHero: true, _heroIndex);
+            RewardsManager.Instance.ShowCharacterWindow(element, isHero, index);
         else if (LootManager.Instance != null)
-            LootManager.Instance.ShowCharacterWindow(element, isHero: true, _heroIndex);
+            LootManager.Instance.ShowCharacterWindow(element, isHero, index);
         else if (_window != null)
-            _window.Show(element, _heroIndex, !_isNpc);
+            _window.Show(element, index, isHero);
     }
 
     /// <summary>1–4: switch to that party member (same as the game's shoulder-cycle, which
@@ -416,19 +420,7 @@ internal static class CharWindowScreenManager
     }
 
     private static void ShowTabForHero(int slot)
-    {
-        string element = _isNpc ? "" : _element == "perks" ? "" : _element;
-        if (MatchManager.Instance != null)
-            MatchManager.Instance.ShowCharacterWindow(element, isHero: true, slot);
-        else if (MapManager.Instance != null)
-            MapManager.Instance.ShowCharacterWindow(element, slot);
-        else if (TownManager.Instance != null)
-            TownManager.Instance.ShowCharacterWindow(element, slot);
-        else if (RewardsManager.Instance != null)
-            RewardsManager.Instance.ShowCharacterWindow(element, isHero: true, slot);
-        else if (LootManager.Instance != null)
-            LootManager.Instance.ShowCharacterWindow(element, isHero: true, slot);
-    }
+        => ShowTab(_isNpc || _element == "perks" ? "" : _element, slot, isHero: true);
 
     // ------------------------------------------------------------------ announcements
 

@@ -26,7 +26,7 @@ public class EventHotkeyPoller : MonoBehaviour
         if (!InputRouter.IsActive(EventContext))
             return;
 
-        if (!(kb.leftAltKey.isPressed || kb.rightAltKey.isPressed))
+        if (!InputRouter.AltHeld)
             return;
 
         if (kb.tKey.wasPressedThisFrame) EventScreenManager.SpeakFocusedDetail();

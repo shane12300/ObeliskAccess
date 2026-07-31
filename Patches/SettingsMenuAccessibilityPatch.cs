@@ -44,7 +44,8 @@ internal static class SettingsMenuManager
     private static readonly List<Entry> _entries = new List<Entry>();
     private static int _tabIndex;
     private static int _index;
-    private static bool _active;
+    // Open/close edge latch for the toggle announcements only — liveness comes from the game.
+    private static bool _announced;
 
     // Dropdown sub-mode: Enter opens a dropdown, Up/Down preview options, Enter applies, Escape cancels.
     private static bool _dropdownOpen;
@@ -57,14 +58,18 @@ internal static class SettingsMenuManager
     // dropdown. We ignore that leaked Enter by dropping Confirm on the frame we opened.
     private static int _openedFrame = -1;
 
-    public static bool Active => _active;
+    /// <summary>Live game state — the context can't get stuck open if the game closes the
+    /// panel by a path the toggle patch misses.</summary>
+    public static bool Active
+        => SettingsManager.Instance != null && SettingsManager.Instance.IsActive();
+
     public static bool DropdownOpen => _dropdownOpen;
 
     public static void OnSettingsToggled(bool state)
     {
         if (state)
         {
-            _active = true;
+            _announced = true;
             _dropdownOpen = false;
             _openDropdown = null;
 
@@ -80,9 +85,9 @@ internal static class SettingsMenuManager
 
             SpeechManager.Speak("Settings, " + TabNames[_tabIndex] + " tab. " + CurrentAnnouncement());
         }
-        else if (_active)
+        else if (_announced)
         {
-            _active = false;
+            _announced = false;
             _dropdownOpen = false;
             _openDropdown = null;
             _openedFrame = -1;
@@ -129,8 +134,6 @@ internal static class SettingsMenuManager
     {
         if (_dropdownOpen)
             return;
-        if (_entries == null)
-            return;
 
         _tabIndex = (_tabIndex + (backwards ? TabNames.Length - 1 : 1)) % TabNames.Length;
         // The Accessibility tab is ours alone — the game only knows tabs 0-2, so don't SelectTab it.
@@ -147,7 +150,7 @@ internal static class SettingsMenuManager
     /// </summary>
     public static void SpeakTooltip()
     {
-        if (!_active || _index < 0 || _index >= _entries.Count)
+        if (!Active || _index < 0 || _index >= _entries.Count)
             return;
 
         var e = _entries[_index];

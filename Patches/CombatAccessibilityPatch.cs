@@ -8,6 +8,7 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
+using static ObeliskAccess.Patches.Nav;
 
 namespace ObeliskAccess.Patches;
 
@@ -19,7 +20,7 @@ namespace ObeliskAccess.Patches;
 /// <see cref="Input.CombatHotkeyPoller"/> delegate everything to this static navigator, which owns all
 /// state + speech; Harmony patches at the bottom of the file feed it game events.
 /// </summary>
-public static class CombatNavigator
+internal static class CombatNavigator
 {
     private enum DrillMode { None, CardLines, CharCategory }
 
@@ -1328,12 +1329,8 @@ public static class CombatNavigator
     }
 
     // Markup handling lives in the shared CardSpeech helper (also used by the town screens);
-    // these wrappers keep the many combat call sites unchanged.
+    // this wrapper keeps the many combat call sites unchanged.
     private static string CleanDesc(string raw) => CardSpeech.CleanDescription(raw);
-
-    private static List<string> SplitLines(string raw) => CardSpeech.SplitLines(raw);
-
-    private static int Clamp(int v, int lo, int hi) => v < lo ? lo : (v > hi ? hi : v);
 
     // ======================= Alt quick keys =======================
     // Per-character reads act on the focused character, else the active hero.

@@ -21,7 +21,7 @@ public class IntroHotkeyPoller : MonoBehaviour
         if (!InputRouter.IsActive(IntroContext))
             return;
 
-        if (!(kb.leftAltKey.isPressed || kb.rightAltKey.isPressed))
+        if (!InputRouter.AltHeld)
             return;
 
         if (kb.rKey.wasPressedThisFrame)

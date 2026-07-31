@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Text;
 using Cards;
 using HarmonyLib;
+using static ObeliskAccess.Patches.Nav;
 
 namespace ObeliskAccess.Patches;
 
@@ -234,19 +235,10 @@ internal static class LootScreenManager
 
     private static void PlayFocusSound(ItemKind kind)
     {
-        if (GameManager.Instance == null || AudioManager.Instance == null)
-            return;
         if (kind == ItemKind.Card)
-        {
-            if (GameManager.Instance.ConfigUseLegacySounds || AudioManager.Instance.soundCardHover == null)
-                GameManager.Instance.PlayLibraryAudio("card_play");
-            else
-                GameManager.Instance.PlayAudio(AudioManager.Instance.soundCardHover, 0.1f);
-        }
+            HeroSpeech.PlayCardFocusSound();
         else
-        {
-            GameManager.Instance.PlayAudio(AudioManager.Instance.soundButtonHover);
-        }
+            HeroSpeech.PlayButtonFocusSound();
     }
 
     // ======================= activation =======================
@@ -574,10 +566,10 @@ internal static class LootScreenManager
         var hero = HeroAt(lm, active);
         if (hero == null)
             return "";
-        string slotWord = SlotWord(cd.CardType);
+        string slotWord = CardSpeech.SlotWord(cd.CardType);
         if (slotWord == null)
             return "";
-        string equippedId = EquippedId(hero, cd.CardType);
+        string equippedId = CardSpeech.EquippedId(hero, cd.CardType);
         return ". " + HeroName(lm, active) + "'s current " + slotWord + ": "
             + (string.IsNullOrEmpty(equippedId) ? "none" : ItemName(equippedId));
     }
@@ -746,43 +738,10 @@ internal static class LootScreenManager
     }
 
     private static string ItemName(string lootOrCardId)
-    {
-        string cardId = lootOrCardId;
-        int cut = cardId != null ? cardId.LastIndexOf('_') : -1;
-        if (cut >= 0 && int.TryParse(cardId.Substring(cut + 1), out _))
-            cardId = cardId.Substring(0, cut);
-        var cd = Globals.Instance != null ? Globals.Instance.GetCardData(cardId, instantiate: false) : null;
-        return cd != null ? AccessibleMenuBase.StripRichText(cd.CardName) : cardId;
-    }
+        => CardSpeech.CardName(lootOrCardId);
 
     private static string EquippedName(string cardId)
         => string.IsNullOrEmpty(cardId) ? "none" : ItemName(cardId);
-
-    private static string SlotWord(Enums.CardType type)
-    {
-        switch (type)
-        {
-            case Enums.CardType.Weapon: return "weapon";
-            case Enums.CardType.Armor: return "armor";
-            case Enums.CardType.Jewelry: return "jewelry";
-            case Enums.CardType.Accesory: return "accessory";
-            case Enums.CardType.Pet: return "pet";
-            default: return null;
-        }
-    }
-
-    private static string EquippedId(Hero hero, Enums.CardType type)
-    {
-        switch (type)
-        {
-            case Enums.CardType.Weapon: return hero.Weapon;
-            case Enums.CardType.Armor: return hero.Armor;
-            case Enums.CardType.Jewelry: return hero.Jewelry;
-            case Enums.CardType.Accesory: return hero.Accesory;
-            case Enums.CardType.Pet: return hero.Pet;
-            default: return "";
-        }
-    }
 
     private static bool EnsureReady()
     {
@@ -796,9 +755,7 @@ internal static class LootScreenManager
         return true;
     }
 
-    private static int Wrap(int v, int count) => ((v % count) + count) % count;
 
-    private static int Clamp(int v, int min, int max) => v < min ? min : (v > max ? max : v);
 }
 
 // ======================= announcement patches =======================

@@ -3,6 +3,7 @@ using System.Text;
 using HarmonyLib;
 using TMPro;
 using UnityEngine;
+using static ObeliskAccess.Patches.Nav;
 
 namespace ObeliskAccess.Patches;
 
@@ -16,7 +17,7 @@ namespace ObeliskAccess.Patches;
 /// <c>AtOManager.gameNodeAssigned</c>. Only nodes that are actually drawn (active in the hierarchy)
 /// are ever surfaced, so a screen-reader player hears exactly the nodes a sighted player can see.
 /// </summary>
-public static class MapNavigator
+internal static class MapNavigator
 {
     public enum Region { Nodes, Party }
 
@@ -938,14 +939,6 @@ public static class MapNavigator
 
     private static int CompareByScreenX(Node a, Node b)
         => a.transform.position.x.CompareTo(b.transform.position.x);
-
-    private static int Wrap(int value, int count)
-    {
-        if (count <= 0)
-            return 0;
-        value %= count;
-        return value < 0 ? value + count : value;
-    }
 
     private static void Append(StringBuilder sb, string text)
     {

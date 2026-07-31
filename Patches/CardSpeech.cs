@@ -36,6 +36,56 @@ internal static class CardSpeech
     public static string CleanFlat(string raw)
         => AccessibleMenuBase.StripRichText(CleanDescription(raw));
 
+    /// <summary>
+    /// Spoken card name from a card id OR a loot id ("cardId_N" — the game splits loot ids on '_',
+    /// so plain card ids never contain one and the trim is a safe no-op for them). Falls back to
+    /// the id itself for unknown cards.
+    /// </summary>
+    public static string CardName(string idOrLootId)
+    {
+        string cardId = idOrLootId;
+        int cut = cardId != null ? cardId.LastIndexOf('_') : -1;
+        if (cut >= 0 && int.TryParse(cardId.Substring(cut + 1), out _))
+            cardId = cardId.Substring(0, cut);
+        var cd = Globals.Instance != null ? Globals.Instance.GetCardData(cardId, instantiate: false) : null;
+        return cd != null ? AccessibleMenuBase.StripRichText(cd.CardName) : cardId;
+    }
+
+    /// <summary>The five gear slots, in the armory's display order.</summary>
+    public static readonly Enums.CardType[] EquipSlots =
+    {
+        Enums.CardType.Weapon, Enums.CardType.Armor, Enums.CardType.Jewelry,
+        Enums.CardType.Accesory, Enums.CardType.Pet,
+    };
+
+    /// <summary>Spoken slot word for a gear card type; null for non-equipment types.</summary>
+    public static string SlotWord(Enums.CardType type)
+    {
+        switch (type)
+        {
+            case Enums.CardType.Weapon: return "weapon";
+            case Enums.CardType.Armor: return "armor";
+            case Enums.CardType.Jewelry: return "jewelry";
+            case Enums.CardType.Accesory: return "accessory";
+            case Enums.CardType.Pet: return "pet";
+            default: return null;
+        }
+    }
+
+    /// <summary>The card id currently equipped in the hero's slot of the given type ("" if none/not gear).</summary>
+    public static string EquippedId(Hero hero, Enums.CardType type)
+    {
+        switch (type)
+        {
+            case Enums.CardType.Weapon: return hero.Weapon;
+            case Enums.CardType.Armor: return hero.Armor;
+            case Enums.CardType.Jewelry: return hero.Jewelry;
+            case Enums.CardType.Accesory: return hero.Accesory;
+            case Enums.CardType.Pet: return hero.Pet;
+            default: return "";
+        }
+    }
+
     public static string UpgradeWord(Enums.CardUpgraded u)
     {
         switch (u)

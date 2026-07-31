@@ -1,5 +1,6 @@
 using System.Text;
 using HarmonyLib;
+using static ObeliskAccess.Patches.Nav;
 
 namespace ObeliskAccess.Patches;
 
@@ -349,7 +350,6 @@ internal static class TownUpgradeScreenManager
         return int.TryParse(first, out int q) ? q : 0;
     }
 
-    private static int Wrap(int v, int count) => ((v % count) + count) % count;
 }
 
 /// <summary>Speak a completed supply purchase. PlayerBuySupply validates internally and can bail

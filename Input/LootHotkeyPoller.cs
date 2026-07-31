@@ -26,7 +26,7 @@ public class LootHotkeyPoller : MonoBehaviour
         if (!InputRouter.IsActive(LootContext))
             return;
 
-        if (!(kb.leftAltKey.isPressed || kb.rightAltKey.isPressed))
+        if (!InputRouter.AltHeld)
             return;
 
         if (kb.tKey.wasPressedThisFrame) LootScreenManager.SpeakFocusedDetail();

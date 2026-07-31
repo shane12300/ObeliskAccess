@@ -27,7 +27,7 @@ public class FinishRunHotkeyPoller : MonoBehaviour
         if (!InputRouter.IsActive(FinishRunContext))
             return;
 
-        if (!(kb.leftAltKey.isPressed || kb.rightAltKey.isPressed))
+        if (!InputRouter.AltHeld)
             return;
 
         if (kb.iKey.wasPressedThisFrame)

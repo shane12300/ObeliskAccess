@@ -38,7 +38,7 @@ public class CombatHotkeyPoller : MonoBehaviour
         // Death popup: Alt+T reads the Death's Door curse, Alt+R repeats.
         if (InputRouter.IsActive(DeathContext))
         {
-            if (!(kb.leftAltKey.isPressed || kb.rightAltKey.isPressed))
+            if (!InputRouter.AltHeld)
                 return;
             if (kb.tKey.wasPressedThisFrame) DeathScreenPopupManager.SpeakDeathsDoorDetail();
             else if (kb.rKey.wasPressedThisFrame) SpeechManager.RepeatLast();
@@ -47,7 +47,7 @@ public class CombatHotkeyPoller : MonoBehaviour
 
         if (InputRouter.IsActive(SelectorContext))
         {
-            if (!(kb.leftAltKey.isPressed || kb.rightAltKey.isPressed))
+            if (!InputRouter.AltHeld)
                 return;
             if (kb.tKey.wasPressedThisFrame) CombatSelectorManager.SpeakFullDetail();
             else if (kb.rKey.wasPressedThisFrame) SpeechManager.RepeatLast();
@@ -57,7 +57,7 @@ public class CombatHotkeyPoller : MonoBehaviour
         if (!InputRouter.IsActive(CombatContext))
             return;
 
-        if (!(kb.leftAltKey.isPressed || kb.rightAltKey.isPressed))
+        if (!InputRouter.AltHeld)
             return;
 
         // Alt+C: open the character sheet for the focused character (else the active hero) —

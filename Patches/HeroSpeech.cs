@@ -34,6 +34,26 @@ internal static class HeroSpeech
             GameManager.Instance.PlayAudio(AudioManager.Instance.soundButtonHover);
     }
 
+    /// <summary>
+    /// Base stats + perk bonuses, mirroring CharPopup.Init's arithmetic (perks excluded in
+    /// Obelisk mode, matching the game).
+    /// </summary>
+    public static string StatLine(SubClassData scd, bool obelisk)
+    {
+        var pm = PlayerManager.Instance;
+        int hp = scd.Hp;
+        int energy = scd.Energy;
+        int speed = scd.Speed;
+        if (!obelisk && pm != null)
+        {
+            hp += pm.GetPerkMaxHealth(scd.Id);
+            energy += pm.GetPerkEnergyBegin(scd.Id);
+            speed += pm.GetPerkSpeed(scd.Id);
+        }
+        return "Health " + hp + ", energy " + energy + " plus " + scd.EnergyTurn
+            + " per turn, speed " + speed + ".";
+    }
+
     /// <summary>Card row focus — same clip choice the loot/rewards screens mirror.</summary>
     public static void PlayCardFocusSound()
     {
@@ -176,18 +196,7 @@ internal static class HeroSpeech
         if (strength != "")
             sb.Append(strength).Append(' ');
 
-        int hp = scd.Hp;
-        int energy = scd.Energy;
-        int speed = scd.Speed;
-        if (!obelisk)
-        {
-            hp += pm.GetPerkMaxHealth(id);
-            energy += pm.GetPerkEnergyBegin(id);
-            speed += pm.GetPerkSpeed(id);
-        }
-        sb.Append("Health ").Append(hp);
-        sb.Append(", energy ").Append(energy).Append(" plus ").Append(scd.EnergyTurn).Append(" per turn");
-        sb.Append(", speed ").Append(speed).Append(". ");
+        sb.Append(StatLine(scd, obelisk)).Append(' ');
 
         string resists = ResistLine(scd);
         sb.Append(resists).Append(' ');

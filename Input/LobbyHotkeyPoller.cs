@@ -27,7 +27,7 @@ public class LobbyHotkeyPoller : MonoBehaviour
         if (LobbyScreenManager.AnyEditing)
             return; // no hotkeys while typing in a room-name/password field
 
-        if (!(kb.leftAltKey.isPressed || kb.rightAltKey.isPressed))
+        if (!InputRouter.AltHeld)
             return;
 
         if (kb.rKey.wasPressedThisFrame)

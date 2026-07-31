@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Text;
 using HarmonyLib;
 using UnityEngine;
+using static ObeliskAccess.Patches.Nav;
 
 namespace ObeliskAccess.Patches;
 
@@ -218,19 +219,10 @@ internal static class RewardsScreenManager
     /// </summary>
     private static void PlayFocusSound(ColKind kind)
     {
-        if (GameManager.Instance == null || AudioManager.Instance == null)
-            return;
         if (kind == ColKind.Card)
-        {
-            if (GameManager.Instance.ConfigUseLegacySounds || AudioManager.Instance.soundCardHover == null)
-                GameManager.Instance.PlayLibraryAudio("card_play");
-            else
-                GameManager.Instance.PlayAudio(AudioManager.Instance.soundCardHover, 0.1f);
-        }
+            HeroSpeech.PlayCardFocusSound();
         else
-        {
-            GameManager.Instance.PlayAudio(AudioManager.Instance.soundButtonHover);
-        }
+            HeroSpeech.PlayButtonFocusSound();
     }
 
     // ======================= activation =======================
@@ -706,10 +698,7 @@ internal static class RewardsScreenManager
     }
 
     private static string CardName(string cardId)
-    {
-        var cd = Globals.Instance != null ? Globals.Instance.GetCardData(cardId, instantiate: false) : null;
-        return cd != null ? AccessibleMenuBase.StripRichText(cd.CardName) : cardId;
-    }
+        => CardSpeech.CardName(cardId);
 
     private static bool IsMine(CharacterReward cr)
         => cr != null && Traverse.Create(cr).Field<bool>("isMyReward").Value;
@@ -726,9 +715,7 @@ internal static class RewardsScreenManager
         return true;
     }
 
-    private static int Wrap(int v, int count) => ((v % count) + count) % count;
 
-    private static int Clamp(int v, int min, int max) => v < min ? min : (v > max ? max : v);
 }
 
 // ======================= announcement patches =======================

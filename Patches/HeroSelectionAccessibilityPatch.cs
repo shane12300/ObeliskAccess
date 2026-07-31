@@ -402,7 +402,12 @@ internal static class HeroSelectionScreenManager
         }
     }
 
-    /// <summary>Replica of the game's private GetHeroSelectionFilter.</summary>
+    /// <summary>
+    /// PINNED replica of the game's private HeroSelectionManager.GetHeroSelectionFilter
+    /// (decompiled :2349, verified identical 2026-07-31). Kept as a copy rather than a Traverse
+    /// invoke because BuildRoster runs it per hero on every arrow press — ~40 reflected delegate
+    /// calls per keypress is not worth the drift insurance. Re-verify after a game patch.
+    /// </summary>
     private static bool PassesFilter(HeroSelection hs, string key)
     {
         switch (key)
@@ -827,27 +832,39 @@ internal static class HeroSelectionScreenManager
         return false;
     }
 
-    private static void ActivateRosterHero()
+    /// <summary>
+    /// Shared assignability guards for the focused roster hero (Enter and 1-4 both need them):
+    /// focus present, not locked, not already picked — each refusal spoken. True = hs is usable.
+    /// </summary>
+    private static bool TryFocusedRosterHero(HeroSelectionManager hsm, out HeroSelection hs)
     {
-        var hsm = Mgr;
+        hs = null;
         BuildRoster(hsm);
         if (_rosterIndex < 0 || _rosterIndex >= _roster.Count)
         {
             SpeechManager.Speak("No hero focused. Up and down to browse.");
-            return;
+            return false;
         }
-        var hs = _roster[_rosterIndex];
+        hs = _roster[_rosterIndex];
         if (hs.blocked || hs.DlcBlocked)
         {
             SpeechManager.Speak(HeroSpeech.LockReason(hs));
-            return;
+            return false;
         }
         if (hs.HeroPicked)
         {
             SpeechManager.Speak(HeroSpeech.ScdOf(hs).CharacterName + " is already in the party — "
                 + HeroSpeech.PickedLine(hs) + ". Clear the slot first to move them.");
-            return;
+            return false;
         }
+        return true;
+    }
+
+    private static void ActivateRosterHero()
+    {
+        var hsm = Mgr;
+        if (!TryFocusedRosterHero(hsm, out var hs))
+            return;
         int slot = FirstEmptyOwnSlot(hsm);
         if (slot < 0)
         {
@@ -870,24 +887,8 @@ internal static class HeroSelectionScreenManager
         {
             if (SpeakBlockedAction())
                 return;
-            BuildRoster(hsm);
-            if (_rosterIndex < 0 || _rosterIndex >= _roster.Count)
-            {
-                SpeechManager.Speak("No hero focused. Up and down to browse.");
+            if (!TryFocusedRosterHero(hsm, out var hs))
                 return;
-            }
-            var hs = _roster[_rosterIndex];
-            if (hs.blocked || hs.DlcBlocked)
-            {
-                SpeechManager.Speak(HeroSpeech.LockReason(hs));
-                return;
-            }
-            if (hs.HeroPicked)
-            {
-                SpeechManager.Speak(HeroSpeech.ScdOf(hs).CharacterName + " is already in the party — "
-                    + HeroSpeech.PickedLine(hs) + ". Clear the slot first to move them.");
-                return;
-            }
             if (!SlotUsable(hsm, boxIndex, out string refusal))
             {
                 SpeechManager.Speak(refusal);

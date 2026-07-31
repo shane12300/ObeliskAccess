@@ -24,7 +24,7 @@ public class CharWindowHotkeyPoller : MonoBehaviour
         if (!InputRouter.IsActive(CharWindowContext))
             return;
 
-        if (!(kb.leftAltKey.isPressed || kb.rightAltKey.isPressed))
+        if (!InputRouter.AltHeld)
             return;
 
         if (kb.tKey.wasPressedThisFrame)

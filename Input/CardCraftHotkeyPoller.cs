@@ -25,7 +25,7 @@ public class CardCraftHotkeyPoller : MonoBehaviour
         if (!InputRouter.IsActive(CardCraftContext))
             return;
 
-        if (!(kb.leftAltKey.isPressed || kb.rightAltKey.isPressed))
+        if (!InputRouter.AltHeld)
             return;
 
         if (kb.tKey.wasPressedThisFrame) CardCraftScreenManager.SpeakFocusedDetail();

@@ -29,7 +29,7 @@ public class ChatHotkeyPoller : MonoBehaviour
         if (ChatSpeech.Typing)
             return; // no hotkeys while typing (Alt is never part of typing anyway — belt and braces)
 
-        if (!(kb.leftAltKey.isPressed || kb.rightAltKey.isPressed))
+        if (!InputRouter.AltHeld)
             return;
 
         if (kb.yKey.wasPressedThisFrame)

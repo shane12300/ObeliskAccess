@@ -27,7 +27,7 @@ public class AlertHotkeyPoller : MonoBehaviour
             && !(PlayersContext != null && InputRouter.IsActive(PlayersContext)))
             return;
 
-        if (!(kb.leftAltKey.isPressed || kb.rightAltKey.isPressed))
+        if (!InputRouter.AltHeld)
             return;
 
         if (kb.rKey.wasPressedThisFrame)

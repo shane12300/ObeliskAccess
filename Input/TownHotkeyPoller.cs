@@ -31,7 +31,7 @@ public class TownHotkeyPoller : MonoBehaviour
             return;
         }
 
-        if (!(kb.leftAltKey.isPressed || kb.rightAltKey.isPressed))
+        if (!InputRouter.AltHeld)
             return;
 
         if (InputRouter.IsActive(TownUpgradeContext))

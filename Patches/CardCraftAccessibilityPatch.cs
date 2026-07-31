@@ -4,6 +4,7 @@ using System.Text;
 using Cards;
 using HarmonyLib;
 using UnityEngine;
+using static ObeliskAccess.Patches.Nav;
 
 namespace ObeliskAccess.Patches;
 
@@ -864,7 +865,7 @@ internal static class CardCraftScreenManager
         sb.Append(CardSpeech.BriefLine(cd));
 
         if (m.craftType == 4 && cd != null)
-            sb.Append(", ").Append(SlotWord(cd.CardType));
+            sb.Append(", ").Append(CardSpeech.SlotWord(cd.CardType));
 
         string price = PriceText(m, item);
         if (price.Length > 0)
@@ -1011,7 +1012,7 @@ internal static class CardCraftScreenManager
         var hero = m.CurrentHero;
         if (cd != null && hero != null)
         {
-            string oldId = EquippedId(hero, cd.CardType);
+            string oldId = CardSpeech.EquippedId(hero, cd.CardType);
             if (!string.IsNullOrEmpty(oldId))
             {
                 var oldCd = Globals.Instance?.GetCardData(oldId, false);
@@ -1025,44 +1026,18 @@ internal static class CardCraftScreenManager
 
     // ---- Armory: equipped items region ----
 
-    private static readonly Enums.CardType[] _slotTypes =
-    {
-        Enums.CardType.Weapon, Enums.CardType.Armor, Enums.CardType.Jewelry,
-        Enums.CardType.Accesory, Enums.CardType.Pet,
-    };
-
-    private static string SlotWord(Enums.CardType t)
-    {
-        if (t == Enums.CardType.Accesory)
-            return "accessory";
-        return t.ToString().ToLowerInvariant();
-    }
-
-    private static string EquippedId(Hero h, Enums.CardType t)
-    {
-        switch (t)
-        {
-            case Enums.CardType.Weapon: return h.Weapon;
-            case Enums.CardType.Armor: return h.Armor;
-            case Enums.CardType.Jewelry: return h.Jewelry;
-            case Enums.CardType.Accesory: return h.Accesory;
-            case Enums.CardType.Pet: return h.Pet;
-            default: return "";
-        }
-    }
-
     private static void MoveEquipped(CardCraftManager m, int delta)
     {
-        _index = Wrap(_index + delta, _slotTypes.Length);
+        _index = Wrap(_index + delta, CardSpeech.EquipSlots.Length);
         SpeechManager.Speak(EquippedLine(m, _index));
     }
 
     private static string EquippedLine(CardCraftManager m, int slot)
     {
         var hero = m.CurrentHero;
-        var type = _slotTypes[slot];
-        string prefix = (slot + 1) + " of " + _slotTypes.Length + ". " + SlotWord(type) + ": ";
-        string id = hero != null ? EquippedId(hero, type) : "";
+        var type = CardSpeech.EquipSlots[slot];
+        string prefix = (slot + 1) + " of " + CardSpeech.EquipSlots.Length + ". " + CardSpeech.SlotWord(type) + ": ";
+        string id = hero != null ? CardSpeech.EquippedId(hero, type) : "";
         if (string.IsNullOrEmpty(id))
             return prefix + "empty";
         var cd = Globals.Instance?.GetCardData(id, false);
@@ -1072,11 +1047,11 @@ internal static class CardCraftScreenManager
     private static void ActivateEquipped(CardCraftManager m)
     {
         var hero = m.CurrentHero;
-        var type = _slotTypes[_index < _slotTypes.Length ? _index : 0];
-        string id = hero != null ? EquippedId(hero, type) : "";
+        var type = CardSpeech.EquipSlots[_index < CardSpeech.EquipSlots.Length ? _index : 0];
+        string id = hero != null ? CardSpeech.EquippedId(hero, type) : "";
         if (string.IsNullOrEmpty(id))
         {
-            SpeechManager.Speak(SlotWord(type) + " slot is empty");
+            SpeechManager.Speak(CardSpeech.SlotWord(type) + " slot is empty");
             return;
         }
         var cd = Globals.Instance?.GetCardData(id, false);
@@ -1464,7 +1439,7 @@ internal static class CardCraftScreenManager
                     detail.Append(". Costs ").Append(price);
                 if (m.craftType == 4 && cd != null && m.CurrentHero != null)
                 {
-                    string oldId = EquippedId(m.CurrentHero, cd.CardType);
+                    string oldId = CardSpeech.EquippedId(m.CurrentHero, cd.CardType);
                     var oldCd = string.IsNullOrEmpty(oldId) ? null : Globals.Instance?.GetCardData(oldId, false);
                     detail.Append(". Currently equipped: ")
                         .Append(oldCd != null ? AccessibleMenuBase.StripRichText(oldCd.CardName) : "nothing");
@@ -1841,7 +1816,6 @@ internal static class CardCraftScreenManager
         SpeechManager.SpeakQueued(sb.ToString());
     }
 
-    private static int Wrap(int v, int count) => ((v % count) + count) % count;
 }
 
 [HarmonyPatch(typeof(Hero), nameof(Hero.AddItem))]

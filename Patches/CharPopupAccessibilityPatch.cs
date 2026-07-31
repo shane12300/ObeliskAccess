@@ -437,20 +437,7 @@ internal static class CharPopupScreenManager
     }
 
     private static string StatLine(SubClassData scd, bool obelisk)
-    {
-        var pm = PlayerManager.Instance;
-        int hp = scd.Hp;
-        int energy = scd.Energy;
-        int speed = scd.Speed;
-        if (!obelisk)
-        {
-            hp += pm.GetPerkMaxHealth(scd.Id);
-            energy += pm.GetPerkEnergyBegin(scd.Id);
-            speed += pm.GetPerkSpeed(scd.Id);
-        }
-        return "Health " + hp + ", energy " + energy + " plus " + scd.EnergyTurn
-            + " per turn, speed " + speed + ".";
-    }
+        => HeroSpeech.StatLine(scd, obelisk);
 
     private static void AddTraitRow(TraitData trait, int requiredTier)
     {

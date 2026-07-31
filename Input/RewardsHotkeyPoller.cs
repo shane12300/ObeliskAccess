@@ -25,7 +25,7 @@ public class RewardsHotkeyPoller : MonoBehaviour
         if (!InputRouter.IsActive(RewardsContext))
             return;
 
-        if (!(kb.leftAltKey.isPressed || kb.rightAltKey.isPressed))
+        if (!InputRouter.AltHeld)
             return;
 
         if (kb.tKey.wasPressedThisFrame) RewardsScreenManager.SpeakFocusedDetail();

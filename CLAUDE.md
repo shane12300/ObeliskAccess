@@ -12,7 +12,7 @@ ObeliskAccess is a BepInEx 5 mod for "Across the Obelisk" that makes the game ac
 dotnet build
 ```
 
-The output DLL (`bin/Debug/net46/ObeliskAccess.dll`) must be copied to the game's BepInEx plugins folder to test. There are no automated tests.
+The build's `CopyToPlugins` target copies the output DLLs into the game's BepInEx plugins folder automatically (override the install location with `-p:GameDir=...`). There are no automated tests.
 
 ## todo.md maintenance
 
@@ -48,12 +48,13 @@ screen owns the keyboard and translates raw keys into semantic events; per-scree
    interrupts current speech (menus/navigation — last-write-wins); `SpeakQueued(string)` appends
    without interrupting so the screen reader's own queue serialises a burst (combat announcements);
    `RepeatLast()` / `Stop()` are also exposed. `Plugin.Awake` calls `SpeechManager.Initialize(Logger)`.
-   **Runtime requirement:** the 64-bit `UniversalSpeech.dll` must be placed in the game's root folder
-   (next to the executable). If absent, `Initialize` logs a warning and all speech becomes a silent
-   no-op — the mod still runs. The build copies `UnityAccessibilityLib.dll` into the plugin folder
-   alongside `ObeliskAccess.dll`.
+   **Runtime requirement:** the 64-bit `UniversalSpeech.dll` must be present in the game's root
+   folder (next to the executable). If absent, `Initialize` logs a warning and all speech becomes a
+   silent no-op — the mod still runs. The build copies `UnityAccessibilityLib.dll` into the plugin
+   folder alongside `ObeliskAccess.dll`, and copies `native/UniversalSpeech.dll` +
+   `native/nvdaControllerClient.dll` into the game root when they are not already there.
 4. **`Patches/` — per-screen state + announcement.** `AccessibleMenuBase` provides text helpers
-   (`StripRichText` is public; `GetMenuItemText`/`AnnounceItem`/`InvokeItemButton` are `protected`).
+   (`StripRichText`/`SplitLines`/`AnnounceItem` are public; `GetMenuItemText` is `protected`).
    Each screen's file holds its open/close/navigation announce patches and (for stateful screens) a
    static manager the context delegates to (e.g. `MapNavigator`, `TutorialPopupManager`).
    Multiplayer text goes through `Patches/MpSpeech.cs` (`IsMp`, `LocalNick`, `LocalOwns`,
