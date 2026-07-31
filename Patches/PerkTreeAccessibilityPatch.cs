@@ -28,6 +28,7 @@ internal static class PerkTreeScreenManager
         public PerkNode Node;        // the node SelectPerk needs (child node for choices)
         public PerkNodeData PND;     // the child's own data (Perk is always non-null)
         public bool IsChoice;
+        public string GroupId;       // choose-one parent's id — a grid row can hold several groups
         public int ChoiceIndex;      // 1-based within the group
         public int ChoiceCount;
     }
@@ -42,7 +43,6 @@ internal static class PerkTreeScreenManager
     private static Focus _focus;
     private static int _category;                 // 0-3
     private static readonly List<List<NodeEntry>> _grid = new List<List<NodeEntry>>();
-    private static readonly List<int> _rowNumbers = new List<int>();
     private static int _row;
     private static int _col;
     private static int _ctrlIndex = -1;
@@ -72,7 +72,6 @@ internal static class PerkTreeScreenManager
         _focus = Focus.Nodes;
         _category = 0;
         _grid.Clear();
-        _rowNumbers.Clear();
         _row = 0;
         _col = 0;
         _ctrlIndex = -1;
@@ -208,7 +207,6 @@ internal static class PerkTreeScreenManager
     private static void BuildGrid()
     {
         _grid.Clear();
-        _rowNumbers.Clear();
         var tree = Tree;
         if (tree == null)
             return;
@@ -263,6 +261,7 @@ internal static class PerkTreeScreenManager
                             Node = childNode,
                             PND = child,
                             IsChoice = true,
+                            GroupId = pnd.Id,
                             ChoiceIndex = i + 1,
                             ChoiceCount = connected.Length,
                         });
@@ -276,7 +275,6 @@ internal static class PerkTreeScreenManager
             if (entries.Count > 0)
             {
                 _grid.Add(entries);
-                _rowNumbers.Add(pair.Key);
             }
         }
     }
@@ -303,9 +301,17 @@ internal static class PerkTreeScreenManager
         string stack = StackNote(entry);
         if (stack != "")
             sb.Append(stack).Append(". ");
-        sb.Append(ShortEffect(entry.PND));
+        sb.Append(Sentence(ShortEffect(entry.PND)));
         sb.Append(" Costs ").Append(Cost(entry)).Append(Cost(entry) == 1 ? " point." : " points.");
         return sb.ToString();
+    }
+
+    /// <summary>Ensures a game-text fragment ends a sentence before more clauses follow.</summary>
+    private static string Sentence(string text)
+    {
+        text = text.TrimEnd();
+        return text.EndsWith(".") || text.EndsWith("!") || text.EndsWith("?")
+            ? text : text + ".";
     }
 
     private static int Cost(NodeEntry entry)
@@ -319,21 +325,40 @@ internal static class PerkTreeScreenManager
         var node = entry.Node;
         if (IsSelected(entry))
             return "Selected";
+        if (IsTownLocked(entry))
+            return "Locked in town";
         if (node != null && node.IsLocked())
         {
-            // Prerequisite lock vs row-threshold lock — mirror the game's tooltip wording.
-            if (entry.PND.PerkRequired != null && !PerkSelected(entry.PND.PerkRequired))
-                return "Locked — "
-                    + CardSpeech.CleanFlat(Texts.Instance.GetText("previousRequired"));
-            return "Locked — the row needs " + Tree.GetPointsNeeded(entry.PND.Row)
+            // The row threshold and a missing prerequisite can both apply — report every
+            // unmet gate, row first (the game's tooltip order).
+            bool rowLocked = UsedPoints() < Tree.GetPointsNeeded(entry.PND.Row);
+            bool prereqMissing = entry.PND.PerkRequired != null
+                && !PerkSelected(entry.PND.PerkRequired);
+            string rowClause = "the row needs " + Tree.GetPointsNeeded(entry.PND.Row)
                 + " points spent below";
+            string prereqClause = CardSpeech.CleanFlat(Texts.Instance.GetText("previousRequired"));
+            if (rowLocked && prereqMissing)
+                return "Locked — " + rowClause + ", and " + prereqClause;
+            if (prereqMissing)
+                return "Locked — " + prereqClause;
+            return "Locked — " + rowClause;
         }
+        // With a same-group choice already selected, Enter swaps — the game charges no
+        // points for a swap, so a low balance is no obstacle.
+        if (entry.IsChoice && SelectedSibling(entry) != "")
+            return "";
         int available = Tree.GetPointsAvailable();
         int cost = Cost(entry);
         if (available < cost)
             return "Not enough points — need " + (cost - available) + " more";
         return ""; // available — no prefix, the effect leads
     }
+
+    /// <summary>The per-node town lock (gold/shard perks in a tier-0 town): the game shows a
+    /// lock icon and <c>SelectPerk</c> refuses; row locks don't cover it.</summary>
+    private static bool IsTownLocked(NodeEntry entry)
+        => entry.Node != null && entry.Node.iconLock != null
+            && entry.Node.iconLock.gameObject.activeSelf;
 
     private static bool PerkSelected(PerkNodeData pnd)
     {
@@ -347,12 +372,15 @@ internal static class PerkTreeScreenManager
     {
         if (!entry.IsChoice)
             return "";
-        // Find a selected sibling in the same grid row's group.
+        // Find a selected sibling of the SAME choose-one group — a grid row can hold several
+        // independent groups (e.g. Physical row 7 has both the Leech and Rust triples), and a
+        // selection in one group says nothing about the other.
         if (_row < 0 || _row >= _grid.Count)
             return "";
         foreach (var other in _grid[_row])
         {
-            if (other != entry && other.IsChoice && IsSelected(other))
+            if (other != entry && other.IsChoice && other.GroupId == entry.GroupId
+                && IsSelected(other))
                 return ShortEffect(other.PND);
         }
         return "";
@@ -400,7 +428,11 @@ internal static class PerkTreeScreenManager
         else if (perk.EnergyBegin > 0)
             text = string.Format(Texts.Instance.GetText("itemInitialEnergy"), perk.IconTextValue);
         else if (perk.AuracurseBonus != null)
-            text = string.Format(Texts.Instance.GetText("perkAuraDescription"), perk.IconTextValue);
+            // The game's string ("Charges that you apply {0}") never names the aura — sighted
+            // players read it off the node's icon, so speech must supply it or every charge
+            // perk in the tree (68 of them) sounds identical.
+            text = CardSpeech.AuraName(perk.AuracurseBonus) + " — "
+                + string.Format(Texts.Instance.GetText("perkAuraDescription"), perk.IconTextValue);
         else if (perk.ResistModified == Enums.DamageType.All)
             text = string.Format(Texts.Instance.GetText("itemAllResistances"), perk.IconTextValue);
         else if (perk.DamageFlatBonus == Enums.DamageType.All)
@@ -415,12 +447,14 @@ internal static class PerkTreeScreenManager
         return clean == "" ? "Perk" : Functions.UppercaseFirst(clean);
     }
 
-    private static string RowIntro(int gridRow)
+    private static string RowIntro(int gridRow, NodeEntry focused)
     {
-        int rowValue = _rowNumbers[gridRow];
-        int needed = Tree.GetPointsNeeded(rowValue);
+        // Threshold from the focused entry's own data row, not the grid row's nominal one:
+        // the game locks each node by its data row, and one choose-one cluster (Stealth)
+        // carries children a row below the square they're drawn in.
+        int needed = Tree.GetPointsNeeded(focused.PND.Row);
         if (needed <= 0)
-            return "Row 1.";
+            return "Row " + (gridRow + 1) + ".";
         int used = UsedPoints();
         if (used >= needed)
             return "Row " + (gridRow + 1) + " — requires " + needed + " points spent, unlocked.";
@@ -448,7 +482,7 @@ internal static class PerkTreeScreenManager
         _row = Mathf.Clamp(_row + delta, 0, _grid.Count - 1);
         _col = Mathf.Clamp(_col, 0, _grid[_row].Count - 1);
         HeroSpeech.PlayPerkFocusSound();
-        SpeechManager.Speak(RowIntro(_row) + " " + NodeLine(_grid[_row][_col]));
+        SpeechManager.Speak(RowIntro(_row, _grid[_row][_col]) + " " + NodeLine(_grid[_row][_col]));
     }
 
     public static void MoveHorizontal(int delta)
@@ -499,7 +533,7 @@ internal static class PerkTreeScreenManager
         string spent = perCategory != null && next < perCategory.Length
             ? ", " + perCategory[next] + " points spent here" : "";
         string landing = _grid.Count > 0
-            ? " " + RowIntro(0) + " " + NodeLine(_grid[0][0])
+            ? " " + RowIntro(0, _grid[0][0]) + " " + NodeLine(_grid[0][0])
             : " No perks.";
         SpeechManager.Speak(CategoryName(next) + " category" + spent + "." + landing);
     }
@@ -533,21 +567,23 @@ internal static class PerkTreeScreenManager
             SpeechManager.Speak("Perks can't be changed right now.");
             return;
         }
+        if (IsTownLocked(entry))
+        {
+            SpeechManager.Speak("Locked in town — this perk can only be changed"
+                + " before starting a run.");
+            return;
+        }
         if (entry.Node != null && entry.Node.IsLocked())
         {
             SpeechManager.Speak(NodeState(entry) + ".");
-            return;
-        }
-        if (entry.Node != null && entry.Node.iconLock != null
-            && entry.Node.iconLock.gameObject.activeSelf)
-        {
-            SpeechManager.Speak("This perk is locked here.");
             return;
         }
 
         string perkId = entry.PND.Perk.Id.ToLower();
         var before = SelectedPerks();
         bool wasSelected = before != null && before.Contains(perkId);
+        // A take that displaces a same-group choice is a swap: announce what it replaced.
+        string replaced = !wasSelected ? SelectedSibling(entry) : "";
         tree.SelectPerk(entry.PND.Perk.Id, entry.Node);
         var after = SelectedPerks();
         bool isSelected = after != null && after.Contains(perkId);
@@ -558,7 +594,7 @@ internal static class PerkTreeScreenManager
             if (!wasSelected)
             {
                 int missing = Cost(entry) - tree.GetPointsAvailable();
-                SpeechManager.Speak(missing > 0
+                SpeechManager.Speak(missing > 0 && replaced == ""
                     ? "Not enough points — need " + missing + " more."
                     : "Could not take this perk.");
             }
@@ -569,10 +605,11 @@ internal static class PerkTreeScreenManager
             return;
         }
         if (isSelected)
-            SpeechManager.Speak("Took " + ShortEffect(entry.PND) + " "
-                + tree.GetPointsAvailable() + " points left.");
+            SpeechManager.Speak("Took " + Sentence(ShortEffect(entry.PND))
+                + (replaced != "" ? " Replaced " + Sentence(replaced) : "")
+                + " " + tree.GetPointsAvailable() + " points left.");
         else
-            SpeechManager.Speak("Removed " + ShortEffect(entry.PND) + " "
+            SpeechManager.Speak("Removed " + Sentence(ShortEffect(entry.PND)) + " "
                 + tree.GetPointsAvailable() + " points available.");
     }
 
@@ -646,7 +683,25 @@ internal static class PerkTreeScreenManager
         var entry = _grid[_row][_col];
         string text = entry.Node != null
             ? CardSpeech.CleanFlat(entry.Node.NewPerkDescription(entry.PND.Perk)) : "";
-        SpeechManager.Speak(text == "" ? NodeLine(entry) : text);
+        if (text == "")
+        {
+            SpeechManager.Speak(NodeLine(entry));
+            return;
+        }
+        var perk = entry.PND.Perk;
+        if (perk != null && perk.AuracurseBonus != null)
+        {
+            // The game's tooltip leans on the node icon plus a keynote side panel to say
+            // which aura the charges belong to — speech carries both: name up front,
+            // glossary line after.
+            string aura = CardSpeech.AuraName(perk.AuracurseBonus);
+            text = aura + " — " + text;
+            var kn = Globals.Instance.GetKeyNotesData(perk.AuracurseBonus.Id);
+            string glossary = kn != null ? CardSpeech.CleanFlat(kn.Description) : "";
+            if (glossary != "")
+                text = Sentence(text) + " " + aura + ": " + glossary;
+        }
+        SpeechManager.Speak(text);
     }
 
     // ------------------------------------------------------------------ controls region
@@ -690,6 +745,14 @@ internal static class PerkTreeScreenManager
                 Read = () => "Reset — deselect every perk. Press Enter.",
                 Activate = () =>
                 {
+                    // PerksReset is a no-op with nothing selected (private selectedPerks).
+                    var sel = Traverse.Create(tree)
+                        .Field<List<string>>("selectedPerks").Value;
+                    if (sel == null || sel.Count == 0)
+                    {
+                        SpeechManager.Speak("No perks selected — nothing to reset.");
+                        return;
+                    }
                     tree.PerksReset();
                     SpeechManager.Speak("All perks deselected. " + tree.GetPointsAvailable()
                         + " points available. Press Space or Confirm to save.");
