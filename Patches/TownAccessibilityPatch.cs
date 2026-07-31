@@ -35,7 +35,7 @@ internal static class TownScreenManager
     private static readonly List<Entry> _entries = new List<Entry>();
     private static Region _region = Region.Main;
     private static int _index;
-    private static int _partyIndex;
+    private static readonly PartyStrip _party = new PartyStrip();
     private static string _focusedKey; // identity of the last row announced to the user
 
     // ---- open/close lifecycle (no patch on scene init: ShowCardCraft-style timing issues) ----
@@ -66,7 +66,7 @@ internal static class TownScreenManager
             _openFrames = 0;
             _region = Region.Main;
             _index = -1; // sentinel: the first Down lands on the first hub item
-            _partyIndex = 0;
+            _party.Reset();
             _subScreenOpen = false;
             // Row keys are stable across towns ("ready", "building:*"), so a stale key from the
             // previous visit would let a blind first Enter relocate to — and fire — that row.
@@ -293,7 +293,7 @@ internal static class TownScreenManager
     {
         if (_region == Region.Party)
         {
-            MoveParty(delta);
+            _party.Move(delta);
             return;
         }
 
@@ -317,7 +317,7 @@ internal static class TownScreenManager
         {
             // Open the character sheet through the game's own portrait-click path; the
             // CharacterWindowUI.Show postfix announces the arrival.
-            if (!CharWindowScreenManager.OpenHeroSheet(_partyIndex))
+            if (!CharWindowScreenManager.OpenHeroSheet(_party.Slot))
                 SpeechManager.Speak("No character focused");
             return;
         }
@@ -357,7 +357,7 @@ internal static class TownScreenManager
         if (_region == Region.Main)
         {
             _region = Region.Party;
-            FocusFirstParty();
+            _party.FocusFirst();
         }
         else
         {
@@ -373,75 +373,12 @@ internal static class TownScreenManager
         }
     }
 
-    // ---------------------------------------------------------------- party strip (mirrors the map)
-
-    private static void FocusFirstParty()
-    {
-        var occ = OccupiedSlots();
-        if (occ.Count == 0)
-        {
-            SpeechManager.Speak("No characters");
-            return;
-        }
-        if (!occ.Contains(_partyIndex))
-            _partyIndex = occ[0];
-        AnnounceHero(_partyIndex);
-    }
-
-    private static void MoveParty(int delta)
-    {
-        var occ = OccupiedSlots();
-        if (occ.Count == 0)
-        {
-            SpeechManager.Speak("No characters");
-            return;
-        }
-        int pos = occ.IndexOf(_partyIndex);
-        pos = pos < 0 ? 0 : Wrap(pos + delta, occ.Count);
-        _partyIndex = occ[pos];
-        AnnounceHero(_partyIndex);
-    }
+    // ---------------------------------------------------------------- party strip (shared PartyStrip)
 
     public static void JumpToSlot(int slot)
     {
         _region = Region.Party;
-        var h = GetHero(slot);
-        if (h == null || h.HeroData == null)
-        {
-            SpeechManager.Speak("Slot " + (slot + 1) + " empty");
-            return;
-        }
-        _partyIndex = slot;
-        AnnounceHero(slot);
-    }
-
-    private static void AnnounceHero(int slot)
-    {
-        var h = GetHero(slot);
-        if (h == null || h.HeroData == null)
-        {
-            SpeechManager.Speak("Empty slot");
-            return;
-        }
-        SpeechManager.Speak(MapNavigator.BuildHeroLine(h));
-    }
-
-    private static List<int> OccupiedSlots()
-    {
-        var list = new List<int>();
-        for (int i = 0; i < 4; i++)
-        {
-            var h = GetHero(i);
-            if (h != null && h.HeroData != null)
-                list.Add(i);
-        }
-        return list;
-    }
-
-    private static Hero GetHero(int index)
-    {
-        var team = AtOManager.Instance?.team;
-        return team != null ? team.GetHero(index) : null;
+        _party.JumpTo(slot);
     }
 
     // ---------------------------------------------------------------- read-outs
@@ -450,7 +387,7 @@ internal static class TownScreenManager
     {
         if (_region == Region.Party)
         {
-            AnnounceHero(_partyIndex);
+            _party.Announce();
             return;
         }
         RebuildEntries();

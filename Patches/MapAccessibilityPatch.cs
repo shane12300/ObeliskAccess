@@ -35,7 +35,7 @@ internal static class MapNavigator
     private static readonly List<Node> _reachable = new List<Node>();
     private static int _reachIndex;
     private static readonly List<LookLevel> _look = new List<LookLevel>();
-    private static int _partyIndex;
+    private static readonly PartyStrip _party = new PartyStrip();
     private static string _cachedCurrentNode;
     private static readonly Dictionary<Node, Vector2Int> _coords = new Dictionary<Node, Vector2Int>();
 
@@ -52,7 +52,7 @@ internal static class MapNavigator
     {
         CurrentRegion = Region.Nodes;
         _reachIndex = 0;
-        _partyIndex = 0;
+        _party.Reset();
         _look.Clear();
         _cachedCurrentNode = AtOManager.Instance?.currentMapNode;
         ResetVoteState();
@@ -233,7 +233,7 @@ internal static class MapNavigator
         {
             // Open the character sheet through the game's own portrait-click path; the
             // CharacterWindowUI.Show postfix announces the arrival.
-            if (!CharWindowScreenManager.OpenHeroSheet(_partyIndex))
+            if (!CharWindowScreenManager.OpenHeroSheet(_party.Slot))
                 SpeechManager.Speak("No character focused");
             return;
         }
@@ -496,7 +496,7 @@ internal static class MapNavigator
         if (CurrentRegion == Region.Nodes)
         {
             CurrentRegion = Region.Party;
-            FocusFirstParty();
+            _party.FocusFirst();
         }
         else
         {
@@ -506,101 +506,12 @@ internal static class MapNavigator
         }
     }
 
-    private static void FocusFirstParty()
-    {
-        var occ = OccupiedSlots();
-        if (occ.Count == 0)
-        {
-            SpeechManager.Speak("No characters");
-            return;
-        }
-        if (!occ.Contains(_partyIndex))
-            _partyIndex = occ[0];
-        AnnounceHero(_partyIndex);
-    }
-
-    public static void MoveParty(int delta)
-    {
-        var occ = OccupiedSlots();
-        if (occ.Count == 0)
-        {
-            SpeechManager.Speak("No characters");
-            return;
-        }
-        int pos = occ.IndexOf(_partyIndex);
-        pos = pos < 0 ? 0 : Wrap(pos + delta, occ.Count);
-        _partyIndex = occ[pos];
-        AnnounceHero(_partyIndex);
-    }
+    public static void MoveParty(int delta) => _party.Move(delta);
 
     public static void JumpToSlot(int slot)
     {
         CurrentRegion = Region.Party;
-        var h = GetHero(slot);
-        if (h == null || h.HeroData == null)
-        {
-            SpeechManager.Speak("Slot " + (slot + 1) + " empty");
-            return;
-        }
-        _partyIndex = slot;
-        AnnounceHero(slot);
-    }
-
-    private static void AnnounceHero(int slot)
-    {
-        var h = GetHero(slot);
-        if (h == null || h.HeroData == null)
-        {
-            SpeechManager.Speak("Empty slot");
-            return;
-        }
-        SpeechManager.Speak(BuildHeroLine(h));
-    }
-
-    /// <summary>One spoken hero summary line; shared with the town party strip.</summary>
-    internal static string BuildHeroLine(Hero h)
-    {
-        var sb = new StringBuilder();
-        sb.Append(h.SourceName);
-        sb.Append(", ").Append(h.HpCurrent).Append(" of ").Append(h.Hp).Append(" health");
-        sb.Append(", level ").Append(h.Level);
-        if (h.Level < 5)
-            sb.Append(", experience ").Append(h.Experience);
-        CountCards(h, out int deck, out int injuries);
-        sb.Append(", ").Append(deck).Append(deck == 1 ? " card" : " cards");
-        if (injuries > 0)
-            sb.Append(", ").Append(injuries).Append(injuries == 1 ? " injury" : " injuries");
-        if (h.IsReadyForLevelUp())
-            sb.Append(", ready to level up");
-        return sb.ToString();
-    }
-
-    private static void CountCards(Hero h, out int deck, out int injuries)
-    {
-        deck = 0;
-        injuries = 0;
-        if (h.Cards == null)
-            return;
-        foreach (var id in h.Cards)
-        {
-            var cd = Globals.Instance?.GetCardData(id, false);
-            if (cd != null && cd.CardClass == Enums.CardClass.Injury)
-                injuries++;
-            else
-                deck++;
-        }
-    }
-
-    private static List<int> OccupiedSlots()
-    {
-        var list = new List<int>();
-        for (int i = 0; i < 4; i++)
-        {
-            var h = GetHero(i);
-            if (h != null && h.HeroData != null)
-                list.Add(i);
-        }
-        return list;
+        _party.JumpTo(slot);
     }
 
     // ---------------------------------------------------------------- read-outs
