@@ -14,16 +14,10 @@ namespace ObeliskAccess.Input.Contexts;
 /// </summary>
 public class PerkTreeInputContext : InputContextBase
 {
-    private static PerkTreeInputContext _instance;
-
-    public PerkTreeInputContext()
-    {
-        _instance = this;
-    }
-
-    public static bool IsCurrentlyActive => InputRouter.IsActive(_instance);
-
-    public override bool IsActive
+    /// <summary>Screen-open: the perk tree overlay is up and neither deferred panel (madness/
+    /// sandbox) has taken over. The tree is the topmost of its family, so this usually also
+    /// means it owns input — but like every context, this is raw screen state.</summary>
+    public static bool IsCurrentlyActive
     {
         get
         {
@@ -36,6 +30,8 @@ public class PerkTreeInputContext : InputContextBase
             return true;
         }
     }
+
+    public override bool IsActive => IsCurrentlyActive;
 
     public override bool OnMove(Vector2 direction)
     {

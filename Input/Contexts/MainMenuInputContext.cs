@@ -18,23 +18,20 @@ namespace ObeliskAccess.Input.Contexts;
 /// </summary>
 public class MainMenuInputContext : InputContextBase
 {
-    private static MainMenuInputContext _instance;
-
-    public MainMenuInputContext() => _instance = this;
-
     /// <summary>
-    /// True while this context owns keyboard input. Used by the router's DoKeyBinding prefix to
-    /// swallow the game's own Enter handling: with ConfigKeyboardShortcuts forced on, the game
-    /// maps Enter to <c>DoFirePerformed</c> itself, and letting both it and <see cref="OnConfirm"/>
-    /// fire pressed things twice — most visibly, the second fire's physics-raycast fallback hit
-    /// the freshly-activated mode-selection collider under the stale cursor right after Play was
+    /// The main-menu family screen is up (screen-open, like every other context — a modal above
+    /// may still outrank this context in the router). The router patches swallow the game's own
+    /// Enter handling while it is: with ConfigKeyboardShortcuts forced on, the game maps Enter to
+    /// <c>DoFirePerformed</c> itself, and letting both it and <see cref="OnConfirm"/> fire
+    /// pressed things twice — most visibly, the second fire's physics-raycast fallback hit the
+    /// freshly-activated mode-selection collider under the stale cursor right after Play was
     /// pressed, skipping the mode screen straight into the save-slot window.
     /// </summary>
-    public static bool IsCurrentlyActive => InputRouter.IsActive(_instance);
-
-    public override bool IsActive =>
+    public static bool IsCurrentlyActive =>
         MainMenuManager.Instance != null
         && MatchManager.Instance == null;
+
+    public override bool IsActive => IsCurrentlyActive;
 
     /// <summary>
     /// The DLC popup and the Paradox document popup open over the mode screen without

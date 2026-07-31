@@ -12,16 +12,9 @@ namespace ObeliskAccess.Input.Contexts;
 /// </summary>
 public class CharPopupInputContext : InputContextBase
 {
-    private static CharPopupInputContext _instance;
-
-    public CharPopupInputContext()
-    {
-        _instance = this;
-    }
-
-    public static bool IsCurrentlyActive => InputRouter.IsActive(_instance);
-
-    public override bool IsActive
+    /// <summary>Screen-open: the character window is up and neither deferred panel (madness/
+    /// sandbox) has taken over. Raw screen state — the perk tree above may still outrank it.</summary>
+    public static bool IsCurrentlyActive
     {
         get
         {
@@ -34,6 +27,8 @@ public class CharPopupInputContext : InputContextBase
             return true;
         }
     }
+
+    public override bool IsActive => IsCurrentlyActive;
 
     public override bool OnMove(Vector2 direction)
     {

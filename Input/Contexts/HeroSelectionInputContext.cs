@@ -13,19 +13,10 @@ namespace ObeliskAccess.Input.Contexts;
 /// </summary>
 public class HeroSelectionInputContext : InputContextBase
 {
-    private static HeroSelectionInputContext _instance;
-
-    public HeroSelectionInputContext()
-    {
-        _instance = this;
-    }
-
-    /// <summary>Priority-correct "owns input right now" — used by the router patches to swallow
-    /// the game's own Enter handling (which would double-fire as a synthetic cursor click) and
-    /// the bare-Alt right-click.</summary>
-    public static bool IsCurrentlyActive => InputRouter.IsActive(_instance);
-
-    public override bool IsActive
+    /// <summary>Screen-open: the hero-selection scene is up and neither deferred panel (madness/
+    /// sandbox) has taken over the game's own navigation. Like every context this is raw screen
+    /// state — the character window or perk tree above may still outrank it in the router.</summary>
+    public static bool IsCurrentlyActive
     {
         get
         {
@@ -38,6 +29,8 @@ public class HeroSelectionInputContext : InputContextBase
             return true;
         }
     }
+
+    public override bool IsActive => IsCurrentlyActive;
 
     public override bool OnMove(Vector2 direction)
     {

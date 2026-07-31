@@ -11,8 +11,11 @@ namespace ObeliskAccess.Input;
 /// </summary>
 public interface IInputContext
 {
-    /// <summary>Whether this context currently owns input. Queried live on every event, so it can
-    /// be derived from game state rather than tracked — a missed open/close never strands input.</summary>
+    /// <summary>Whether this context's screen is open. Queried live on every event, so it can
+    /// be derived from game state rather than tracked — a missed open/close never strands input.
+    /// IsActive / a context's static IsCurrentlyActive mean <b>screen open</b>, not "owns input";
+    /// a higher-priority context may sit above. For owns-input, use
+    /// <see cref="InputRouter.IsActive(IInputContext)"/>.</summary>
     bool IsActive { get; }
 
     /// <summary>Handle an arrow-key movement. Return true to consume (and swallow) the key.</summary>
