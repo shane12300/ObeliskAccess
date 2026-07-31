@@ -374,3 +374,14 @@
 - Free multiplayer divinations no longer double-announce (the waiting-for-players line is
   the single announcement).
 - Event-shop "uses left" is no longer appended from a hidden, stale label on unlimited shops.
+- Opening a hero's deck from the rewards screen no longer claims the window "is not
+  accessible" — the character sheet took over there some time ago and announces itself. The
+  loot screen likewise drops its stale "not accessible yet" warnings and instead confirms
+  "Back on loot" when the sheet closes.
+- Restarting the rewards or loot screen now works reliably for speech: the fresh screen
+  announces its arrival overview again, and stale picks/turn state from before the restart
+  no longer linger (previously the reloaded screen could stay silent because the old one was
+  mistaken for it).
+- The rewards Restart row now disappears from arrow navigation once every hero has chosen,
+  and a late Enter says "Restart is no longer available — everyone has chosen" instead of
+  firing a restart request at the host during the closing animation.

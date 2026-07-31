@@ -20,8 +20,8 @@ public class RewardsInputContext : InputContextBase
             var rm = RewardsManager.Instance;
             if (rm == null)
                 return false;
-            // Yield while the deck/character window is open so the game's own handling (Escape
-            // to close) works untouched; that window is not accessible yet.
+            // Yield while the character sheet is open — CharWindowInputContext (registered
+            // above us) owns it.
             if (rm.characterWindowUI != null && rm.characterWindowUI.IsActive())
                 return false;
             return true;

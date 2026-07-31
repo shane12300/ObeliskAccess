@@ -32,7 +32,12 @@ internal static class LootScreenManager
     // Display slots (0..3) that hold a living hero, in on-screen order.
     private static readonly List<int> _slots = new List<int>();
 
-    private static bool _wasOpen;
+    // Instance id of the LootManager the current state belongs to. A restart (RestartLoot →
+    // AtOManager.DoLoot) reloads the scene in one LoadScene step, so Instance never reads null
+    // between two Update frames — the id swap is the only observable reload signal
+    // (CardCraftScreenManager convention). Never cleared by ResetState: it must survive the
+    // reset so the swap is detected exactly once.
+    private static int _instanceId;
     private static bool _ready;
     private static bool _announcedArrival;
     private static bool _announcedFinish;
@@ -59,28 +64,39 @@ internal static class LootScreenManager
         var lm = LootManager.Instance;
         if (lm == null)
         {
-            if (_wasOpen)
+            if (_instanceId != 0)
+            {
+                _instanceId = 0;
                 ResetState();
+            }
             return;
         }
-        _wasOpen = true;
+        int id = lm.GetInstanceID();
+        if (id != _instanceId)
+        {
+            ResetState();
+            _instanceId = id;
+        }
 
-        // The deck/character window makes the context yield (it isn't accessible yet), so a
-        // silent open would strand the user with dead keys. Announce both edges — the window can
-        // still open via a real mouse click even now that the stale-cursor Enter click is
-        // suppressed.
+        // The character sheet (CharWindowInputContext, registered above us) owns input while
+        // it's open and announces its own open and close; we only add a re-orientation line
+        // when focus returns to the loot row.
         bool windowOpen = lm.characterWindowUI != null && lm.characterWindowUI.IsActive();
         if (windowOpen != _windowWasOpen)
         {
             _windowWasOpen = windowOpen;
-            if (windowOpen)
-                SpeechManager.Speak("Character window opened. Not accessible yet — press Escape to close.");
-            else
-                SpeechManager.Speak("Character window closed. Back on loot.");
+            if (!windowOpen)
+                SpeechManager.SpeakQueued("Back on loot.");
         }
 
         if (!_ready)
         {
+            // A restart keeps the dying screen alive for several frames before the reload;
+            // re-arming on it would leave stale picks/turn state marked as announced. The
+            // reloaded instance re-triggers detection.
+            if (Traverse.Create(lm).Field<bool>("reseting").Value)
+                return;
+
             // ActivateCharacter(0) runs only after the item-spawn coroutine finishes, so a valid
             // active slot doubles as the "all cards are on screen" signal.
             if (ActiveSlot(lm) < 0)
@@ -129,7 +145,6 @@ internal static class LootScreenManager
 
     private static void ResetState()
     {
-        _wasOpen = false;
         _ready = false;
         _announcedArrival = false;
         _announcedFinish = false;
@@ -274,9 +289,17 @@ internal static class LootScreenManager
             // Main player restarts outright; a multiplayer client's request raises a confirm
             // alert on the host, which the global alert announcements cover.
             if (GameManager.Instance.IsMainPlayer())
+            {
                 SpeechManager.Speak("Restarting loot.");
+                // Immediate cleanup (mirrors RewardsScreenManager.OnRestart); Tick's
+                // "reseting" guard keeps the dying screen from re-arming, and the reloaded
+                // manager's new instance id re-triggers detection from scratch.
+                ResetState();
+            }
             else
+            {
                 SpeechManager.Speak("Restart request sent to the host.");
+            }
             return;
         }
 

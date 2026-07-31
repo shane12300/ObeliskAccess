@@ -33,7 +33,12 @@ internal static class RewardsScreenManager
     private static int _row = -1; // -1 sentinel: no row focused yet
     private static int _col;
 
-    private static bool _wasOpen;
+    // Instance id of the RewardsManager the current state belongs to. Same-scene restarts
+    // (RelaunchRewards) destroy and re-Awake the manager inside one LoadScene step, so
+    // Instance never reads null between two Update frames — the id swap is the only
+    // observable reload signal (CardCraftScreenManager convention). Never cleared by
+    // ResetState: it must survive the reset so the swap is detected exactly once.
+    private static int _instanceId;
     private static bool _ready;
     private static bool _announcedArrival;
     private static bool _announcedClose;
@@ -59,13 +64,27 @@ internal static class RewardsScreenManager
         var rm = RewardsManager.Instance;
         if (rm == null)
         {
-            if (_wasOpen)
+            if (_instanceId != 0)
+            {
+                _instanceId = 0;
                 ResetState();
+            }
             return;
         }
-        _wasOpen = true;
+        int id = rm.GetInstanceID();
+        if (id != _instanceId)
+        {
+            ResetState();
+            _instanceId = id;
+        }
 
         if (_ready)
+            return;
+
+        // A restart keeps the dying screen alive for several frames (ChangeSceneCo yields
+        // before LoadScene); re-arming on it would speak the stale overview and mark the
+        // fresh screen as already announced. The new instance re-triggers detection.
+        if (Traverse.Create(rm).Field<bool>("reseting").Value)
             return;
 
         if (!AllRowsSettled(rm))
@@ -92,7 +111,6 @@ internal static class RewardsScreenManager
 
     private static void ResetState()
     {
-        _wasOpen = false;
         _ready = false;
         _announcedArrival = false;
         _announcedClose = false;
@@ -151,7 +169,10 @@ internal static class RewardsScreenManager
             return;
         ExitDrillSilently();
 
-        int rowCount = _rowHeroes.Count + (RestartVisible ? 1 : 0);
+        // Once every hero has chosen the game hides Restart and auto-closes in 0.4s (on the
+        // master; clients keep the button visible) — drop the pseudo-row on all clients so
+        // arrows can't land on a dead control during the close window.
+        int rowCount = _rowHeroes.Count + (RestartVisible && !_announcedClose ? 1 : 0);
         if (rowCount == 0)
             return;
 
@@ -236,6 +257,13 @@ internal static class RewardsScreenManager
         }
         if (IsRestartRow)
         {
+            // The game hides the button only on the master once all picks land; a non-master's
+            // late Enter would RPC a restart request at the host mid-teardown.
+            if (_announcedClose || !RestartVisible)
+            {
+                SpeechManager.Speak("Restart is no longer available — everyone has chosen.");
+                return;
+            }
             rm.RestartRewards();
             return;
         }
@@ -250,10 +278,9 @@ internal static class RewardsScreenManager
 
         if (entry.Kind == ColKind.Deck)
         {
-            // Future-proofed: opens the game's character window; once that window is made
-            // accessible this will light up with no further changes here.
+            // Opens the in-run character sheet; CharWindowInputContext (registered above us)
+            // takes over and its Show postfix announces the arrival.
             rm.ShowDeck(h);
-            SpeechManager.Speak("Deck window opened. Not yet accessible; press Escape to close.");
             return;
         }
 
@@ -436,8 +463,8 @@ internal static class RewardsScreenManager
             return;
         }
         SpeechManager.Speak("Restarting rewards.");
-        // The scene reloads with the same seed (state snapshot restored); re-detect from scratch
-        // so the overview re-announces on the fresh screen.
+        // Immediate cleanup; Tick's "reseting" guard keeps the dying screen from re-arming,
+        // and the reloaded manager's new instance id re-triggers detection from scratch.
         ResetState();
     }
 
