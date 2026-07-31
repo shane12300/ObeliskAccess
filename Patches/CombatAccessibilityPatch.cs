@@ -537,21 +537,38 @@ internal static class CombatNavigator
 
     // ======================= shared helpers =======================
 
-    /// <summary>Counts buffs vs curses on a character, excluding the internal "block" aura.</summary>
-    private static void CountStatuses(Character c, out int buffs, out int curses)
+    /// <summary>
+    /// The character's live, speakable statuses: skips null/expired entries and the internal
+    /// "block" aura — block has its own channels (damage "blocked N", expiry "-Block").
+    /// <paramref name="buffs"/> true → auras only, false → curses only, null → both.
+    /// Materialised so callers never enumerate a list the game may mutate.
+    /// </summary>
+    private static List<AuraCurse> LiveAuras(Character c, bool? buffs = null)
     {
-        buffs = 0;
-        curses = 0;
-        var list = c.AuraCurseList;
+        var result = new List<AuraCurse>();
+        var list = c != null ? c.AuraCurseList : null;
         if (list == null)
-            return;
-
+            return result;
         foreach (var a in list)
         {
             if (a == null || a.ACData == null || a.AuraCharges <= 0)
                 continue;
             if (string.Equals(a.ACData.Id, "block", System.StringComparison.OrdinalIgnoreCase))
                 continue;
+            if (buffs != null && a.ACData.IsAura != buffs.Value)
+                continue;
+            result.Add(a);
+        }
+        return result;
+    }
+
+    /// <summary>Counts buffs vs curses on a character, excluding the internal "block" aura.</summary>
+    private static void CountStatuses(Character c, out int buffs, out int curses)
+    {
+        buffs = 0;
+        curses = 0;
+        foreach (var a in LiveAuras(c))
+        {
             if (a.ACData.IsAura)
                 buffs++;
             else
@@ -874,19 +891,8 @@ internal static class CombatNavigator
             }
 
             var current = new Dictionary<string, AuraSnap>();
-            var list = c.AuraCurseList;
-            if (list != null)
-            {
-                foreach (var a in list)
-                {
-                    if (a == null || a.ACData == null || a.AuraCharges <= 0)
-                        continue;
-                    // Block losses have their own channels (damage "blocked N", expiry "-Block").
-                    if (string.Equals(a.ACData.Id, "block", System.StringComparison.OrdinalIgnoreCase))
-                        continue;
-                    current[a.ACData.Id] = new AuraSnap { Charges = a.AuraCharges, Name = AuraName(a) };
-                }
-            }
+            foreach (var a in LiveAuras(c))
+                current[a.ACData.Id] = new AuraSnap { Charges = a.AuraCharges, Name = AuraName(a) };
 
             if (announce && _auraWatch.TryGetValue(c, out var previous))
             {
@@ -1227,26 +1233,15 @@ internal static class CombatNavigator
     private static void AddAuraEntries(Character c, bool buffs, List<DrillEntry> into)
     {
         int added = 0;
-        var list = c.AuraCurseList;
-        if (list != null)
+        foreach (var a in LiveAuras(c, buffs))
         {
-            foreach (var a in list)
+            into.Add(new DrillEntry
             {
-                if (a == null || a.ACData == null || a.AuraCharges <= 0)
-                    continue;
-                if (string.Equals(a.ACData.Id, "block", System.StringComparison.OrdinalIgnoreCase))
-                    continue;
-                if (a.ACData.IsAura != buffs)
-                    continue;
-
-                into.Add(new DrillEntry
-                {
-                    Speech = (buffs ? "Buff, " : "Curse, ") + AuraName(a) + ", " + a.AuraCharges,
-                    AuraData = a.ACData,
-                    Charges = a.AuraCharges,
-                });
-                added++;
-            }
+                Speech = (buffs ? "Buff, " : "Curse, ") + AuraName(a) + ", " + a.AuraCharges,
+                AuraData = a.ACData,
+                Charges = a.AuraCharges,
+            });
+            added++;
         }
 
         if (added == 0)
@@ -1256,20 +1251,8 @@ internal static class CombatNavigator
     private static string BuildStatusLine(Character c, bool buffs)
     {
         var names = new List<string>();
-        var list = c.AuraCurseList;
-        if (list != null)
-        {
-            foreach (var a in list)
-            {
-                if (a == null || a.ACData == null || a.AuraCharges <= 0)
-                    continue;
-                if (string.Equals(a.ACData.Id, "block", System.StringComparison.OrdinalIgnoreCase))
-                    continue;
-                if (a.ACData.IsAura != buffs)
-                    continue;
-                names.Add(AuraName(a) + " " + a.AuraCharges);
-            }
-        }
+        foreach (var a in LiveAuras(c, buffs))
+            names.Add(AuraName(a) + " " + a.AuraCharges);
 
         string label = buffs ? "Buffs" : "Curses";
         return names.Count > 0

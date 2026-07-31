@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Reflection;
 using System.Text;
 using HarmonyLib;
 using static ObeliskAccess.Patches.Nav;
@@ -472,23 +473,18 @@ internal static class TownScreenManager
 
 }
 
-/// <summary>Confirmed treasure claims: speak what was gained (the "Confirmed" answer alone says nothing).</summary>
-[HarmonyPatch(typeof(TreasureRun), nameof(TreasureRun.Claim))]
+/// <summary>Confirmed treasure claims — both variants: speak what was gained (the "Confirmed"
+/// answer alone says nothing). One patch, two targets via TargetMethods; two class-level
+/// [HarmonyPatch] attributes would merge into one target, not multi-target.</summary>
+[HarmonyPatch]
 public class TreasureClaimPatch
 {
-    static void Postfix(TreasureRun __instance)
+    static IEnumerable<MethodBase> TargetMethods()
     {
-        if (TownManager.Instance == null || __instance.qText == null)
-            return;
-        var lines = CardSpeech.SplitLines(CardSpeech.CleanDescription(__instance.qText.text));
-        if (lines.Count > 0)
-            SpeechManager.SpeakQueued("Treasure claimed: " + string.Join(", ", lines.ToArray()));
+        yield return AccessTools.Method(typeof(TreasureRun), nameof(TreasureRun.Claim));
+        yield return AccessTools.Method(typeof(TreasureRun), nameof(TreasureRun.ClaimCommunity));
     }
-}
 
-[HarmonyPatch(typeof(TreasureRun), nameof(TreasureRun.ClaimCommunity))]
-public class TreasureClaimCommunityPatch
-{
     static void Postfix(TreasureRun __instance)
     {
         if (TownManager.Instance == null || __instance.qText == null)
