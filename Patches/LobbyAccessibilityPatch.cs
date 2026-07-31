@@ -449,7 +449,7 @@ internal static class LobbyScreenManager
             };
         string speech = isMaster
             ? "Launch adventure, unavailable — need at least 2 players"
-            : "Waiting for " + HostNick() + " to launch";
+            : "Waiting for " + MpSpeech.HostNick() + " to launch";
         return new Row { Speech = speech, Activate = () => SpeechManager.Speak(speech + ".") };
     }
 
@@ -798,15 +798,6 @@ internal static class LobbyScreenManager
 
     private static string StatusText(LobbyManager lm)
         => lm.statusTM != null ? CardSpeech.CleanFlat(lm.statusTM.text) : "";
-
-    private static string HostNick()
-    {
-        var nm = NetworkManager.Instance;
-        if (nm == null)
-            return "the host";
-        string raw = nm.GetPlayerNickPosition(0);
-        return string.IsNullOrEmpty(raw) ? "the host" : MpSpeech.DisplayNick(raw);
-    }
 
     private static bool AnySlotActive(LobbyManager lm)
     {

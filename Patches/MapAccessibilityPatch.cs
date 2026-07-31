@@ -266,7 +266,7 @@ public static class MapNavigator
             bool isMaster = NetworkManager.Instance != null && NetworkManager.Instance.IsMaster();
             if (following && !isMaster)
             {
-                SpeechManager.Speak("Following the leader. " + HostNick() + " chooses the destination.");
+                SpeechManager.Speak("Following the leader. " + MpSpeech.HostNick() + " chooses the destination.");
                 return;
             }
             _localVoteAnnounced = true;
@@ -288,17 +288,6 @@ public static class MapNavigator
 
     private static bool _localVoteAnnounced;
     private static readonly HashSet<string> _announcedVotes = new HashSet<string>();
-
-    /// <summary>Display nick of the room master, fallback "the host".</summary>
-    private static string HostNick()
-    {
-        var nm = NetworkManager.Instance;
-        if (nm == null)
-            return "the host";
-        // Position 0 is the master by the game's own convention (PlayerIsMaster).
-        string raw = nm.GetPlayerNickPosition(0);
-        return string.IsNullOrEmpty(raw) ? "the host" : MpSpeech.DisplayNick(raw);
-    }
 
     /// <summary>Proper node name for a vote announcement (navigation speech deliberately uses
     /// types + coordinates instead, but a partner's vote needs the name the tally shows).</summary>
@@ -358,7 +347,7 @@ public static class MapNavigator
                 bool follow = AtOManager.Instance != null && AtOManager.Instance.followingTheLeader
                     && NetworkManager.Instance != null && !NetworkManager.Instance.IsMaster();
                 SpeechManager.SpeakQueued(follow
-                    ? "Following " + HostNick() + " to " + lastName + "."
+                    ? "Following " + MpSpeech.HostNick() + " to " + lastName + "."
                     : "Your vote for " + lastName + " is in.");
                 _localVoteAnnounced = true;
             }
@@ -829,7 +818,7 @@ public static class MapNavigator
             bool isMaster = NetworkManager.Instance != null && NetworkManager.Instance.IsMaster();
             Append(sb, isMaster
                 ? "Follow the leader is on: your pick travels the party"
-                : "Follow the leader is on: " + HostNick() + " chooses the destination");
+                : "Follow the leader is on: " + MpSpeech.HostNick() + " chooses the destination");
         }
 
         SpeechManager.Speak(sb.Length > 0 ? sb.ToString() : "Map");

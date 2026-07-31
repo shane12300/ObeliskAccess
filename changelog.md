@@ -425,3 +425,9 @@
   dead afterwards.
 - Tutorial popups with an unlabelled button no longer risk failing to open their spoken
   dialogue.
+- Player names are now spoken consistently everywhere: styled or internal names are no
+  longer read raw (colour tags and platform prefixes are stripped), and a missing name says
+  "Another player" or "the host" instead of going silent or leaving a dangling phrase like
+  "waiting for" with nobody named.
+- Single player no longer misreports a hero as owned by another player after loading a save
+  that was created in multiplayer — level-up choices work normally again.

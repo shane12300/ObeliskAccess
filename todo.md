@@ -148,11 +148,6 @@ Priority = how often a player hits it in a normal run × how hard it blocks a bl
       likely covers it; verify). *Partially covered by MP phase 1 (2026-07-25): join/leave/
       host-left/desync/icon announcements now exist (`MpAmbientAccessibilityPatch`); what remains
       is verifying the alert-side dialogs (kicked, version mismatch, reconnect) read correctly.*
-- [ ] **MpSpeech consolidation** — fold the older per-screen MP nick helpers (Loot `OwnerNick`/
-      `OwnershipClause`, Rewards `OwnerNick`/`Nick`/`IsMine`, CharWindow `LocalOwns`) onto the
-      shared `Patches/MpSpeech.cs`; while doing so fix the CharWindow level-up refusals speaking
-      the raw `hero.Owner` nick instead of `GetPlayerNickReal`. Pure refactor — deferred so MP
-      phase 1 didn't churn play-tested screens.
 - [ ] **Profiles / credits / DLC popup** — `MainMenuManager` sub-panels not yet announced
       (profile list, credits, DLC info).
 
@@ -170,6 +165,13 @@ Priority = how often a player hits it in a normal run × how hard it blocks a bl
 Finished features, moved here from the priority sections above. Any follow-up work a completed
 feature still requires stays in its original priority section (with a note pointing back here).
 
+- [x] **MpSpeech consolidation** (was P3, 2026-07-31) — every per-screen MP nick helper folded
+      onto `Patches/MpSpeech.cs` (Loot `OwnerNick`/`OwnershipClause`, Rewards `OwnerNick`/`Nick`,
+      CharWindow `LocalOwns`, HeroSelection/HeroSpeech inline `GetPlayerNickReal` sites, the
+      Map/Lobby `HostNick` duplicates, DeathScreen's waiting line); `MpSpeech` gained `HostNick()`
+      and a fallback-text `DisplayNick` overload. Also fixed along the way: CharWindow level-up
+      refusals spoke the raw `hero.Owner` nick, and single player misread ownership on saves
+      created in multiplayer (stale `Owner` vs `DefaultNickName`).
 - [x] **Emotes / pings + remaining MP echoes** (was P3 "Emotes / pings"; MP plan phase 5,
       2026-07-25) — `Patches/EmoteAccessibilityPatch.cs` (`EmotePingManager`) +
       `Patches/MpEchoPatches.cs`; NO new context (the planned Alt+E wheel was dropped — the game

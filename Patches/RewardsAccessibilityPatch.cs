@@ -292,13 +292,13 @@ internal static class RewardsScreenManager
         }
         if (!IsMine(cr))
         {
-            SpeechManager.Speak(OwnerNick(rm, h) + " must choose this reward.");
+            SpeechManager.Speak(MpSpeech.OwnerNick(rm.theTeam[h]) + " must choose this reward.");
             return;
         }
 
         if (entry.Kind == ColKind.Dust)
         {
-            cr.DustSelected(Nick());
+            cr.DustSelected(MpSpeech.LocalNick());
             return;
         }
 
@@ -317,7 +317,7 @@ internal static class RewardsScreenManager
                 string.Format(Texts.Instance.GetText("cardWillOverwrite"), haveName));
             return;
         }
-        rm.SetCardReward(Nick(), card.gameObject.name);
+        rm.SetCardReward(MpSpeech.LocalNick(), card.gameObject.name);
     }
 
     private static void OnOverwriteAnswered()
@@ -327,7 +327,7 @@ internal static class RewardsScreenManager
         if (AlertManager.Instance.GetConfirmAnswer() && !string.IsNullOrEmpty(_pendingCardName)
             && RewardsManager.Instance != null)
         {
-            RewardsManager.Instance.SetCardReward(Nick(), _pendingCardName);
+            RewardsManager.Instance.SetCardReward(MpSpeech.LocalNick(), _pendingCardName);
         }
         _pendingCardName = null;
     }
@@ -529,7 +529,7 @@ internal static class RewardsScreenManager
         sb.Append(", row ").Append(_row + 1).Append(" of ").Append(_rowHeroes.Count).Append(". ");
 
         if (GameManager.Instance.IsMultiplayer() && !IsMine(cr))
-            sb.Append(OwnerNick(rm, h)).Append("'s reward. ");
+            sb.Append(MpSpeech.OwnerNick(rm.theTeam[h])).Append("'s reward. ");
 
         // Per-hero gold/XP is deliberately NOT read here — the overview already announces the
         // shared amounts, and repeating them on every row slows navigation down.
@@ -713,17 +713,6 @@ internal static class RewardsScreenManager
 
     private static bool IsMine(CharacterReward cr)
         => cr != null && Traverse.Create(cr).Field<bool>("isMyReward").Value;
-
-    private static string OwnerNick(RewardsManager rm, int h)
-    {
-        var hero = rm.theTeam[h];
-        if (hero == null || !GameManager.Instance.IsMultiplayer() || NetworkManager.Instance == null)
-            return "Another player";
-        return NetworkManager.Instance.GetPlayerNickReal(hero.Owner);
-    }
-
-    private static string Nick()
-        => GameManager.Instance.IsMultiplayer() ? NetworkManager.Instance.GetPlayerNick() : "";
 
     private static bool EnsureReady()
     {

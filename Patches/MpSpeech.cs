@@ -6,8 +6,6 @@ namespace ObeliskAccess.Patches;
 /// and the display name for any nick is <c>GetPlayerNickReal(nick)</c>. Every helper here is
 /// null-safe and collapses to the single-player answer when not in a multiplayer game, so callers
 /// can use them unconditionally.
-/// (The older per-screen copies in Loot/Rewards/CharWindow predate this class — new code uses
-/// MpSpeech; consolidating the old sites is a tracked todo item.)
 /// </summary>
 internal static class MpSpeech
 {
@@ -29,13 +27,29 @@ internal static class MpSpeech
 
     /// <summary>Display name for a raw owner nick, falling back to "Another player".</summary>
     internal static string DisplayNick(string rawNick)
+        => DisplayNick(rawNick, "Another player");
+
+    /// <summary>Display name for a raw owner nick with a caller-chosen fallback (e.g. a lowercase
+    /// "another player" for mid-sentence reading).</summary>
+    internal static string DisplayNick(string rawNick, string fallback)
     {
         if (string.IsNullOrEmpty(rawNick) || NetworkManager.Instance == null)
-            return "Another player";
+            return fallback;
         string real = NetworkManager.Instance.GetPlayerNickReal(rawNick);
         if (string.IsNullOrEmpty(real))
-            return "Another player";
+            return fallback;
         return AccessibleMenuBase.StripRichText(real);
+    }
+
+    /// <summary>Display nick of the room master, fallback "the host".</summary>
+    internal static string HostNick()
+    {
+        var nm = NetworkManager.Instance;
+        if (nm == null)
+            return "the host";
+        // Position 0 is the master by the game's own convention (PlayerIsMaster).
+        string raw = nm.GetPlayerNickPosition(0);
+        return string.IsNullOrEmpty(raw) ? "the host" : DisplayNick(raw);
     }
 
     /// <summary>Display name of the hero's owning player ("Another player" fallback).</summary>

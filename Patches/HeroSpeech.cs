@@ -142,11 +142,11 @@ internal static class HeroSpeech
         {
             if (hsm.GetBoxHeroFromIndex(i) != hs)
                 continue;
-            if (GameManager.Instance != null && GameManager.Instance.IsMultiplayer())
+            if (MpSpeech.IsMp)
             {
                 string owner = hsm.GetBoxOwnerFromIndex(i);
-                if (!string.IsNullOrEmpty(owner) && owner != NetworkManager.Instance.GetPlayerNick())
-                    return "In " + NetworkManager.Instance.GetPlayerNickReal(owner) + "'s party, slot " + (i + 1);
+                if (!string.IsNullOrEmpty(owner) && owner != MpSpeech.LocalNick())
+                    return "In " + MpSpeech.DisplayNick(owner) + "'s party, slot " + (i + 1);
             }
             return "In the party, slot " + (i + 1);
         }

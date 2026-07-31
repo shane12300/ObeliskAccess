@@ -56,9 +56,10 @@ screen owns the keyboard and translates raw keys into semantic events; per-scree
    (`StripRichText` is public; `GetMenuItemText`/`AnnounceItem`/`InvokeItemButton` are `protected`).
    Each screen's file holds its open/close/navigation announce patches and (for stateful screens) a
    static manager the context delegates to (e.g. `MapNavigator`, `TutorialPopupManager`).
-   Multiplayer text goes through `Patches/MpSpeech.cs` (`IsMp`, `LocalOwns`, `DisplayNick`,
-   `OwnerNick`, `OwnershipClause` — all null-safe, all collapse to the SP answer outside MP; the
-   older per-screen copies in Loot/Rewards/CharWindow predate it, consolidation is a todo).
+   Multiplayer text goes through `Patches/MpSpeech.cs` (`IsMp`, `LocalNick`, `LocalOwns`,
+   `DisplayNick` — with an optional fallback-text overload — `OwnerNick`, `OwnershipClause`,
+   `HostNick` — all null-safe, all collapse to the SP answer outside MP; every screen uses these,
+   never inline `GetPlayerNickReal`).
    Screen-less MP awareness (ready counts, desync reloads, room join/leave/host-left, alert
    icons, cinematic skip votes) lives in `Patches/MpAmbientAccessibilityPatch.cs`; partner
    turn/cast narration needs no extra patches — MP combat is lock-step simulated on every client,

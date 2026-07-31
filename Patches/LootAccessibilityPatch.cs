@@ -311,7 +311,7 @@ internal static class LootScreenManager
         }
         if (GameManager.Instance.IsMultiplayer() && !lm.IsMyLoot)
         {
-            SpeechManager.Speak(OwnerNick(lm, active) + " must make this pick.");
+            SpeechManager.Speak(MpSpeech.OwnerNick(HeroAt(lm, active)) + " must make this pick.");
             return;
         }
 
@@ -516,16 +516,9 @@ internal static class LootScreenManager
 
     /// <summary>In multiplayer, says whose pick this is; empty in single player.</summary>
     private static string OwnershipClause(LootManager lm, int slot)
-    {
-        if (!GameManager.Instance.IsMultiplayer())
-            return "";
-        var hero = HeroAt(lm, slot);
-        if (hero == null || NetworkManager.Instance == null)
-            return "";
-        return hero.Owner == NetworkManager.Instance.GetPlayerNick()
-            ? ", your pick"
-            : ", waiting for " + NetworkManager.Instance.GetPlayerNickReal(hero.Owner);
-    }
+        => MpSpeech.IsMp
+            ? MpSpeech.OwnershipClause(HeroAt(lm, slot), ", your pick", ", waiting for ")
+            : "";
 
     private static string DescribeItem(LootManager lm, List<ItemEntry> items, int index)
     {
@@ -601,7 +594,7 @@ internal static class LootScreenManager
         sb.Append(", hero ").Append(index + 1).Append(" of ").Append(_slots.Count).Append(". ");
 
         if (GameManager.Instance.IsMultiplayer() && NetworkManager.Instance != null)
-            sb.Append(NetworkManager.Instance.GetPlayerNickReal(hero.Owner)).Append("'s hero. ");
+            sb.Append(MpSpeech.OwnerNick(hero)).Append("'s hero. ");
 
         if (slot == ActiveSlot(lm))
             sb.Append("Currently choosing. ");
@@ -789,14 +782,6 @@ internal static class LootScreenManager
             case Enums.CardType.Pet: return hero.Pet;
             default: return "";
         }
-    }
-
-    private static string OwnerNick(LootManager lm, int slot)
-    {
-        var hero = HeroAt(lm, slot);
-        if (hero == null || !GameManager.Instance.IsMultiplayer() || NetworkManager.Instance == null)
-            return "Another player";
-        return NetworkManager.Instance.GetPlayerNickReal(hero.Owner);
     }
 
     private static bool EnsureReady()

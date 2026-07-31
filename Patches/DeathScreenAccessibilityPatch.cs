@@ -47,7 +47,7 @@ internal static class DeathScreenPopupManager
             + AccessibleMenuBase.StripRichText(hero.SourceName) + "'s deck.");
         _index = 0;
         _active = true;
-        _owner = string.IsNullOrEmpty(hero.Owner) ? "the host" : hero.Owner;
+        _owner = string.IsNullOrEmpty(hero.Owner) ? "the host" : MpSpeech.DisplayNick(hero.Owner);
 
         // Queued on purpose: the death lands mid combat narration (the killing blow, triggered
         // auras) and must not clobber it — the screen reader reaches this when the queue does.

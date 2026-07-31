@@ -285,11 +285,6 @@ internal static class CharWindowScreenManager
         return hero != null ? AccessibleMenuBase.StripRichText(hero.SourceName) : "Hero";
     }
 
-    private static bool LocalOwns(Hero hero)
-        => hero != null && (string.IsNullOrEmpty(hero.Owner)
-            || NetworkManager.Instance == null
-            || hero.Owner == NetworkManager.Instance.GetPlayerNick());
-
     // ------------------------------------------------------------------ tabs
 
     private static List<string> AvailableTabs()
@@ -821,9 +816,9 @@ internal static class CharWindowScreenManager
         sb.Append(' ').Append(hero.Experience).Append(" of ")
           .Append(Globals.Instance.GetExperienceByLevel(hero.Level)).Append(" experience.");
         if (hero.IsReadyForLevelUp())
-            sb.Append(LocalOwns(hero)
+            sb.Append(MpSpeech.LocalOwns(hero)
                 ? " Ready to level up — go to the level " + (hero.Level + 1) + " row."
-                : " Ready to level up — only " + hero.Owner + " can choose.");
+                : " Ready to level up — only " + MpSpeech.OwnerNick(hero) + " can choose.");
         return sb.ToString();
     }
 
@@ -856,11 +851,11 @@ internal static class CharWindowScreenManager
         {
             var a = Adjusted(TraitOption(scd, level, 0), hero);
             var b = Adjusted(TraitOption(scd, level, 1), hero);
-            if (LocalOwns(hero))
+            if (MpSpeech.LocalOwns(hero))
                 sb.Append(" — choose ").Append(TraitName(a)).Append(" or ").Append(TraitName(b))
                   .Append(". Left and right compare, Enter takes the focused choice.");
             else
-                sb.Append(" — level up pending, only ").Append(hero.Owner).Append(" can choose.");
+                sb.Append(" — level up pending, only ").Append(MpSpeech.OwnerNick(hero)).Append(" can choose.");
         }
         else if (level == hero.Level)
         {
@@ -896,7 +891,7 @@ internal static class CharWindowScreenManager
         var chosen = ChosenTrait(hero, level);
         if (chosen != null)
             sb.Append(chosen.Id == td.Id ? " Chosen." : " Not taken.");
-        else if (level == hero.Level && hero.IsReadyForLevelUp() && LocalOwns(hero))
+        else if (level == hero.Level && hero.IsReadyForLevelUp() && MpSpeech.LocalOwns(hero))
             sb.Append(" Press Enter to take this trait.");
         return sb.ToString();
     }
@@ -946,9 +941,9 @@ internal static class CharWindowScreenManager
                 + " more.");
             return;
         }
-        if (!LocalOwns(hero))
+        if (!MpSpeech.LocalOwns(hero))
         {
-            SpeechManager.Speak("Only " + hero.Owner + " can choose this trait.");
+            SpeechManager.Speak("Only " + MpSpeech.OwnerNick(hero) + " can choose this trait.");
             return;
         }
         // Same scene rule as the game's own TraitLevel click: map or town only.

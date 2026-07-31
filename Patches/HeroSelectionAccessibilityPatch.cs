@@ -128,7 +128,7 @@ internal static class HeroSelectionScreenManager
                 string owner = hsm.GetBoxOwnerFromIndex(i);
                 bool ready = !string.IsNullOrEmpty(owner) && NetworkManager.Instance.IsPlayerReady(owner);
                 if (_readyPrimed && ready != _lastReady[i] && !string.IsNullOrEmpty(owner))
-                    SpeechManager.SpeakQueued(NetworkManager.Instance.GetPlayerNickReal(owner)
+                    SpeechManager.SpeakQueued(MpSpeech.DisplayNick(owner)
                         + (ready ? " is ready." : " is no longer ready."));
                 _lastReady[i] = ready;
             }
@@ -570,7 +570,7 @@ internal static class HeroSelectionScreenManager
             string owner = hsm.GetBoxOwnerFromIndex(boxIndex);
             if (!string.IsNullOrEmpty(owner))
             {
-                sb.Append(", ").Append(NetworkManager.Instance.GetPlayerNickReal(owner));
+                sb.Append(", ").Append(MpSpeech.DisplayNick(owner));
                 sb.Append(NetworkManager.Instance.IsPlayerReady(owner) ? ", ready" : ", not ready");
                 if (!hsm.IsYourBox(hsm.boxGO[boxIndex].name))
                     sb.Append(", controlled by them");
@@ -938,8 +938,8 @@ internal static class HeroSelectionScreenManager
             && !hsm.IsYourBox(hsm.boxGO[boxIndex].name))
         {
             string owner = hsm.GetBoxOwnerFromIndex(boxIndex);
-            string nick = string.IsNullOrEmpty(owner) ? "another player"
-                : NetworkManager.Instance.GetPlayerNickReal(owner);
+            // Lowercase fallback: the name sits mid-sentence.
+            string nick = MpSpeech.DisplayNick(owner, "another player");
             refusal = "Slot " + (boxIndex + 1) + " is controlled by " + nick + ".";
             return false;
         }
@@ -1014,7 +1014,7 @@ internal static class HeroSelectionScreenManager
             return;
         }
         // Empty slot: roll the random-hero dice (single-player only, matching the game).
-        if (GameManager.Instance != null && GameManager.Instance.IsMultiplayer())
+        if (MpSpeech.IsMp)
         {
             SpeechManager.Speak("Random heroes aren't available in multiplayer.");
             return;
@@ -1106,9 +1106,8 @@ internal static class HeroSelectionScreenManager
             && hs != null && HeroSpeech.ScdOf(hs) != null)
             name = HeroSpeech.ScdOf(hs).CharacterName;
         string owner = hsm.GetBoxOwnerFromIndex(boxId);
-        string nick = string.IsNullOrEmpty(owner) ? "Another player"
-            : NetworkManager.Instance.GetPlayerNickReal(owner);
-        SpeechManager.SpeakQueued(nick + " chose " + name + " for slot " + (boxId + 1) + ".");
+        SpeechManager.SpeakQueued(MpSpeech.DisplayNick(owner)
+            + " chose " + name + " for slot " + (boxId + 1) + ".");
     }
 
     public static void OnRemoteBoxCleared(string heroName, int boxId)
@@ -1122,9 +1121,9 @@ internal static class HeroSelectionScreenManager
     {
         if (Mgr == null || !_arrivalAnnounced)
             return;
-        if (GameManager.Instance == null || !GameManager.Instance.IsMultiplayer())
+        if (!MpSpeech.IsMp)
             return;
-        SpeechManager.SpeakQueued(NetworkManager.Instance.GetPlayerNickReal(playerNick)
+        SpeechManager.SpeakQueued(MpSpeech.DisplayNick(playerNick)
             + " joined, slot " + (boxId + 1) + ".");
     }
 
