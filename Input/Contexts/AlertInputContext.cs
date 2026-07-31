@@ -24,6 +24,12 @@ public class AlertInputContext : InputContextBase
 
     public override bool IsActive => IsCurrentlyActive;
 
+    // Alt+R repeats the alert; the raycast behind a bare Alt/Ctrl ignores the alert's UI canvas
+    // entirely, so without these flags a press under an alert clicked whatever sat beneath.
+    public override bool UsesAltLetters => true;
+    public override bool SuppressesBareAlt => true;
+    public override bool UsesCtrlModifier => true;
+
     public override bool OnMove(Vector2 direction)
     {
         if (direction.y > 0f)

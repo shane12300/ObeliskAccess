@@ -32,6 +32,10 @@ public class HeroSelectionInputContext : InputContextBase
 
     public override bool IsActive => IsCurrentlyActive;
 
+    // Alt+T/C review keys: a bare Alt would right-click a roster portrait and pop the character
+    // window under the user's feet.
+    public override bool SuppressesBareAlt => true;
+
     public override bool OnMove(Vector2 direction)
     {
         if (direction.y > 0f)

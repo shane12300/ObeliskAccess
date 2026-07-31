@@ -58,6 +58,68 @@ public static class InputRouter
     /// (e.g. the game's Tab → NextField form navigation).</summary>
     public static bool HasActiveContext => ActiveContext() != null;
 
+    // ---- key-suppression flag mask ---------------------------------------------------------
+    // The router patches ask "does ANY OPEN context declare this flag?" (screen open, not just
+    // the input owner: an overlay like the tutorial or an alert over combat must not re-expose
+    // the game's emote letters / bare-Alt click of the screen beneath). All five bits are
+    // computed in one walk, reading each context's IsActive at most once, and memoised per
+    // frame — the old per-list OR-chains re-evaluated up to ~24 predicates per keypress.
+
+    private const int FlagEnter = 1, FlagSpace = 2, FlagAltLetters = 4, FlagBareAlt = 8, FlagCtrl = 16;
+    private const int AllFlags = FlagEnter | FlagSpace | FlagAltLetters | FlagBareAlt | FlagCtrl;
+    private static int _maskFrame = -1;
+    private static int _mask;
+    private static bool _flagsLogged;
+
+    public static bool AnySwallowsGameEnter => (OpenFlagsMask() & FlagEnter) != 0;
+    public static bool AnySwallowsGameSpace => (OpenFlagsMask() & FlagSpace) != 0;
+    public static bool AnyUsesAltLetters => (OpenFlagsMask() & FlagAltLetters) != 0;
+    public static bool AnySuppressesBareAlt => (OpenFlagsMask() & FlagBareAlt) != 0;
+    public static bool AnyUsesCtrlModifier => (OpenFlagsMask() & FlagCtrl) != 0;
+
+    private static int DeclaredFlags(IInputContext c) =>
+        (c.SwallowsGameEnter ? FlagEnter : 0)
+        | (c.SwallowsGameSpace ? FlagSpace : 0)
+        | (c.UsesAltLetters ? FlagAltLetters : 0)
+        | (c.SuppressesBareAlt ? FlagBareAlt : 0)
+        | (c.UsesCtrlModifier ? FlagCtrl : 0);
+
+    private static int OpenFlagsMask()
+    {
+        int frame = Time.frameCount;
+        if (frame == _maskFrame)
+            return _mask;
+
+        if (!_flagsLogged)
+        {
+            _flagsLogged = true;
+            int enterOptOuts = 0, space = 0, altLetters = 0, bareAlt = 0, ctrl = 0;
+            for (int i = 0; i < _contexts.Count; i++)
+            {
+                if (!_contexts[i].SwallowsGameEnter) enterOptOuts++;
+                if (_contexts[i].SwallowsGameSpace) space++;
+                if (_contexts[i].UsesAltLetters) altLetters++;
+                if (_contexts[i].SuppressesBareAlt) bareAlt++;
+                if (_contexts[i].UsesCtrlModifier) ctrl++;
+            }
+            Plugin.LogDebug($"Router flags: {_contexts.Count} contexts; Enter opt-outs {enterOptOuts}, "
+                + $"Space {space}, AltLetters {altLetters}, BareAlt {bareAlt}, Ctrl {ctrl}");
+        }
+
+        int mask = 0;
+        for (int i = 0; i < _contexts.Count && mask != AllFlags; i++)
+        {
+            int declared = DeclaredFlags(_contexts[i]);
+            if ((declared & ~mask) == 0)
+                continue; // this context can't add a new bit — skip its (game-state) IsActive read
+            if (_contexts[i].IsActive)
+                mask |= declared;
+        }
+        _maskFrame = frame;
+        _mask = mask;
+        return mask;
+    }
+
     // ---- raw-input helpers (shared by the patches so key detection lives in one place) ----
 
     /// <summary>True when the event came from the physical keyboard (leave gamepad to the game).</summary>

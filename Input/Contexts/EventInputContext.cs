@@ -27,6 +27,10 @@ public class EventInputContext : InputContextBase
 
     public override bool IsActive => IsCurrentlyActive;
 
+    // Ctrl has no mod meaning on the book, but the game's bare-Ctrl click could silently press a
+    // reply the auto-select suppressor then discards — inert.
+    public override bool UsesCtrlModifier => true;
+
     public override bool OnMove(Vector2 direction)
     {
         if (direction.y > 0f)

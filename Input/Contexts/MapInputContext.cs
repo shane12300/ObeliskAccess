@@ -49,6 +49,10 @@ public class MapInputContext : InputContextBase
 
     public override bool IsActive => IsCurrentlyActive;
 
+    // Ctrl is the look-ahead modifier (and Ctrl+G opens the give window) — the game's bare-Ctrl
+    // click must not press a node under the stale cursor.
+    public override bool UsesCtrlModifier => true;
+
     public override bool OnMove(Vector2 direction)
     {
         if (MapNavigator.CurrentRegion == MapNavigator.Region.Party)

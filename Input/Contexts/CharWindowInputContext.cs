@@ -21,6 +21,12 @@ public class CharWindowInputContext : InputContextBase
 
     public override bool IsActive => IsCurrentlyActive;
 
+    // Alt+T/I/R review keys (in combat they collide with the game's emote binds; a bare Alt
+    // would right-click under the stale cursor) and the Ctrl+Up/Down card drill.
+    public override bool UsesAltLetters => true;
+    public override bool SuppressesBareAlt => true;
+    public override bool UsesCtrlModifier => true;
+
     public override bool OnMove(Vector2 direction)
     {
         if (InputRouter.CtrlHeld)

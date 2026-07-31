@@ -15,6 +15,10 @@ public class PlayersPanelInputContext : InputContextBase
 
     public override bool IsActive => IsCurrentlyActive;
 
+    // Alt+R repeats the panel; the bare-Alt right-click raycast ignores the panel's canvas and
+    // would click whatever sits beneath it.
+    public override bool SuppressesBareAlt => true;
+
     public override bool OnMove(Vector2 direction)
     {
         if (direction.y > 0f)

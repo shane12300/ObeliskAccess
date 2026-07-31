@@ -89,24 +89,31 @@ screen owns the keyboard and translates raw keys into semantic events; per-scree
   postfix additionally sets the chat input's `navigation` to `None` so no selection-based path
   (game Tab or Unity arrow-key UI nav) can ever focus it — mouse clicks and Alt+Y still work. **The game DOES wire Enter**: with
   `ConfigKeyboardShortcuts` on (which `ForceKeyboardShortcutsPatch` forces), `DoKeyBinding` maps
-  Enter (and bare Ctrl) → `DoFirePerformed`, a synthetic click at the cursor — so any context whose
-  `OnConfirm` performs its own activation must be in the prefix's Enter-swallow list or every Enter
-  fires twice (this once skipped the mode-selection screen: the second fire's physics fallback hit
+  Enter (and bare Ctrl) → `DoFirePerformed`, a synthetic click at the cursor — so a context whose
+  `OnConfirm` performs its own activation needs the game's Enter swallowed or every Enter fires
+  twice (this once skipped the mode-selection screen: the second fire's physics fallback hit
   the just-activated mode collider under the stale cursor, and later made event Enter "always pick
-  option 1" — the stale click hit the first reply before the context's own select ran). As of the
-  2026-07-25 audit **every context is in the list except Combat**, which deliberately stays out:
-  in combat Enter maps to `BattleKeyboard.KeyboardEnter` (inert in plain combat, but the only
-  working Enter for the not-yet-covered energy-transfer selector `UIEnergySelector`), and the
-  combat context's Confirm rides the game's warped-cursor click path by design — EXCEPT for cards
-  in our own hand (`CardItemTable` members, own turn), which activate via `OnMouseUpController()`
-  directly: the raycast at a hand card's warp point can be eclipsed by unrelated colliders — in MP
-  the chat prefab's click-catcher ("Collider" under ChatGO) covers the bottom-left and ate Enter
-  (and hover noise) on the leftmost card of a full hand until a relayout moved it. Any new
-  self-activating context MUST be added to the list. A `DoFirePerformed` prefix likewise
-  suppresses the bare-Ctrl "click" on screens where Ctrl is a modifier (map look-ahead, detail
-  drills), and a `DoButtonNorth` prefix suppresses the bare-Alt synthetic right-click on screens
-  where Alt is the review modifier (combat and the hero-selection family — on HeroSelection a
-  bare Alt would right-click the portrait under the cursor and pop the character window).
+  option 1" — the stale click hit the first reply before the context's own select ran).
+  **Which screens need which suppression is declared per-context** via virtual flags on
+  `IInputContext`/`InputContextBase` — the prefixes ask `InputRouter.Any*` (a per-frame 5-bit
+  mask over every OPEN context — "any open", never just the input owner, because an overlay like
+  the tutorial or players panel over combat must not re-expose the emote letters / bare-Alt
+  click of the screen beneath): `SwallowsGameEnter` (default **true** — a new self-activating
+  context is safe by default; only Combat overrides false: in combat Enter maps to
+  `BattleKeyboard.KeyboardEnter`, inert in plain combat but the only working Enter for the
+  not-yet-covered energy-transfer selector `UIEnergySelector`, and the combat context's Confirm
+  rides the game's warped-cursor click path by design — EXCEPT for cards in our own hand
+  (`CardItemTable` members, own turn), which activate via `OnMouseUpController()` directly: the
+  raycast at a hand card's warp point can be eclipsed by unrelated colliders — in MP the chat
+  prefab's click-catcher ("Collider" under ChatGO) covers the bottom-left and ate Enter and hover
+  noise on the leftmost card of a full hand until a relayout moved it); `SwallowsGameSpace` (the
+  selector windows' confirm key vs the game's end-turn); `UsesAltLetters` (Alt review keys vs
+  the game's MP emote binds R/E/S/A/W/Q); `SuppressesBareAlt` (bare Alt → `DoButtonNorth`
+  synthetic right-click — on HeroSelection it would right-click the portrait under the cursor
+  and pop the character window); and `UsesCtrlModifier` (bare Ctrl → `DoFirePerformed` click, vs
+  map look-ahead, detail drills, and screens with live TMP fields the click could focus,
+  opening the on-screen keyboard). A new context declares what it repurposes and is otherwise
+  covered by the defaults — no router edits needed.
 - `Input/Contexts/*InputContext.cs` — one per screen (thin; delegates to a `Patches/` manager).
 - `Input/MapHotkeyPoller.cs`, `Input/CombatHotkeyPoller.cs`, `Input/EventHotkeyPoller.cs`,
   `Input/TownHotkeyPoller.cs`, `Input/CardCraftHotkeyPoller.cs`, `Input/AlertHotkeyPoller.cs`,

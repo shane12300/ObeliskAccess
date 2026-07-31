@@ -33,6 +33,11 @@ public class PerkTreeInputContext : InputContextBase
 
     public override bool IsActive => IsCurrentlyActive;
 
+    // Alt+T/I review keys — over combat (the tree opens mid-run from the sheet) they collide
+    // with the game's emote binds, and a bare Alt would right-click under the stale cursor.
+    public override bool UsesAltLetters => true;
+    public override bool SuppressesBareAlt => true;
+
     public override bool OnMove(Vector2 direction)
     {
         if (direction.y > 0f)

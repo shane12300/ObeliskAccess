@@ -30,6 +30,9 @@ public class CharPopupInputContext : InputContextBase
 
     public override bool IsActive => IsCurrentlyActive;
 
+    // Alt+T reads trait/card detail; a bare Alt would right-click a portrait beneath the window.
+    public override bool SuppressesBareAlt => true;
+
     public override bool OnMove(Vector2 direction)
     {
         if (direction.y > 0f)

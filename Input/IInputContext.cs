@@ -34,8 +34,39 @@ public interface IInputContext
     bool OnNumber(int n);
 
     /// <summary>Handle Space. Routed non-swallowing (like Enter/Tab); a context that repurposes
-    /// Space must also suppress the game's own handling in <see cref="RouterInputPatches"/>.</summary>
+    /// Space declares <see cref="SwallowsGameSpace"/> so the game's own handling is suppressed.</summary>
     bool OnSpace();
+
+    // ---- key-suppression flags -------------------------------------------------------------
+    // The router patches suppress the game's own handling of a key whenever ANY OPEN context
+    // (screen open — not just the input owner; overlays like the tutorial or an alert must not
+    // re-expose the screen beneath) declares the matching flag. Declaring a flag here replaces
+    // the old hand-maintained context lists in RouterInputPatches — a new context is safe by
+    // default and only opts in/out of what it actually repurposes.
+
+    /// <summary>The game's Enter (→ DoFirePerformed, a synthetic click at the stale cursor) is
+    /// swallowed while this screen is open. Default TRUE: every self-activating context needs it
+    /// or each Enter fires twice. Only a context whose Confirm deliberately rides the game's own
+    /// Enter path (combat) opts out.</summary>
+    bool SwallowsGameEnter { get; }
+
+    /// <summary>The game's Space (→ BattleKeyboard end-turn) is swallowed while this screen is
+    /// open, because the context repurposes Space (e.g. the selector's confirm).</summary>
+    bool SwallowsGameSpace { get; }
+
+    /// <summary>This screen uses Alt+R/E/S/A/W/Q review keys, which collide with the game's MP
+    /// emote binds in combat: suppress the game's letter handling while Alt is held.</summary>
+    bool UsesAltLetters { get; }
+
+    /// <summary>This screen uses Alt as a modifier, so the game's bare-Alt synthetic right-click
+    /// (DoButtonNorth) must be suppressed — it would right-click whatever sits under the stale
+    /// cursor (cards, portraits) and pop an inaccessible window.</summary>
+    bool SuppressesBareAlt { get; }
+
+    /// <summary>This screen uses Ctrl as a modifier (look-ahead, card drill, amount step) or
+    /// carries live input fields a synthetic click could focus: the game's bare-Ctrl click
+    /// (DoFirePerformed) is suppressed while Ctrl is held.</summary>
+    bool UsesCtrlModifier { get; }
 }
 
 /// <summary>No-op base so contexts only override the events they actually use.</summary>
@@ -48,4 +79,13 @@ public abstract class InputContextBase : IInputContext
     public virtual bool OnTab(bool backwards) => false;
     public virtual bool OnNumber(int n) => false;
     public virtual bool OnSpace() => false;
+
+    // Suppression-flag defaults (see IInputContext): Enter-swallow is opt-OUT — forgetting it on
+    // a new self-activating context was a repeat bug source (mode-screen skip, event "always
+    // option 1") — the rest are opt-in.
+    public virtual bool SwallowsGameEnter => true;
+    public virtual bool SwallowsGameSpace => false;
+    public virtual bool UsesAltLetters => false;
+    public virtual bool SuppressesBareAlt => false;
+    public virtual bool UsesCtrlModifier => false;
 }

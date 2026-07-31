@@ -37,6 +37,14 @@ public class CombatSelectorInputContext : InputContextBase
 
     public override bool IsActive => IsCurrentlyActive;
 
+    // Space is the window's confirm key (the game's Space would end the turn); the Alt review
+    // keys and Ctrl drill both stay live in the selector, and bare Alt must not right-click a
+    // container card under the stale cursor.
+    public override bool SwallowsGameSpace => true;
+    public override bool UsesAltLetters => true;
+    public override bool SuppressesBareAlt => true;
+    public override bool UsesCtrlModifier => true;
+
     public override bool OnMove(Vector2 direction)
     {
         if (InputRouter.CtrlHeld)

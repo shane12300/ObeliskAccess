@@ -58,25 +58,27 @@ public class RouterDoKeyBindingPatch
 {
     /// <summary>
     /// Suppressions of the game's own key handling (our postfix still routes the key either
-    /// way — Harmony runs postfixes even when a prefix skips the original):
+    /// way — Harmony runs postfixes even when a prefix skips the original). Which screens need
+    /// which suppression is declared per-context via the <see cref="IInputContext"/> flags and
+    /// aggregated by <see cref="InputRouter"/> over every OPEN context — an overlay (tutorial,
+    /// alert, players panel) over combat must not re-expose the screen beneath, so "any open",
+    /// never just the input owner:
     ///
-    /// Enter: outside combat the game maps Enter to <c>DoFirePerformed</c>, a synthetic click at
-    /// the current mouse-cursor position. The loot and rewards screens swallow all arrows and
-    /// never warp the cursor, so that click always lands on a stale position — it can take an
-    /// item, grab the gold, switch the loot picker, or open the (inaccessible) deck window under
-    /// our feet. Swallow the game's Enter while either screen owns input. In the combat card
-    /// selector windows the game instead maps Enter to "confirm the window"
-    /// (<c>BattleKeyboard.KeyboardEnter</c>); the mod repurposes Enter as select-focused-card, so
-    /// swallow it there too. Real mouse clicks and gamepad A don't go through this path.
+    /// Enter (<see cref="IInputContext.SwallowsGameEnter"/>, default ON — only Combat opts out):
+    /// outside combat the game maps Enter to <c>DoFirePerformed</c>, a synthetic click at the
+    /// stale cursor position, so every self-activating context needs it swallowed or each Enter
+    /// fires twice (historically: the mode-screen skip, and the event book's "always option 1").
+    /// In combat, Enter maps to <c>BattleKeyboard.KeyboardEnter</c> — inert in plain combat but
+    /// the only working Enter for the (not yet mod-covered) energy-transfer selector — and the
+    /// combat context's Confirm deliberately rides the game's click path.
     ///
-    /// Space: the game maps it to end-turn (<c>BattleKeyboard.KeyboardSpace</c>). While a combat
-    /// card selector window is up the mod repurposes Space as the confirm key, so swallow the
-    /// game's handling — the postfix routes it to the context.
+    /// Space (<see cref="IInputContext.SwallowsGameSpace"/>): the game maps it to end-turn
+    /// (<c>BattleKeyboard.KeyboardSpace</c>); the selector windows repurpose it as confirm.
     ///
-    /// Letters: in combat the game binds R/E/S/A/W/Q to multiplayer emote pings. Those letters
-    /// double as the mod's Alt review hotkeys (Alt+R repeat, Alt+E energy, Alt+S statuses), so
-    /// while combat or a selector window owns input and Alt is held, skip the game's handling —
-    /// the poller still sees the key.
+    /// Letters (<see cref="IInputContext.UsesAltLetters"/>): in combat the game binds
+    /// R/E/S/A/W/Q to multiplayer emote pings, which collide with the mod's Alt review hotkeys —
+    /// including over the in-combat modals (alert, death screen, sheet, tree), whose flag keeps
+    /// Alt+R from broadcasting a heart emote to the whole party.
     /// </summary>
     static bool Prefix(InputAction.CallbackContext _context)
     {
@@ -90,7 +92,6 @@ public class RouterDoKeyBindingPatch
             return true;
 
         InputControl control = _context.control;
-        bool selectorActive = ObeliskAccess.Input.Contexts.CombatSelectorInputContext.IsCurrentlyActive;
 
         // Tab: the game maps Tab (unconditionally, before its keyboard-shortcuts gate) to
         // NextField(), which takes the EventSystem's current selection, finds the Selectable
@@ -103,92 +104,15 @@ public class RouterDoKeyBindingPatch
         if (InputRouter.IsTab(control) && InputRouter.HasActiveContext)
             return false;
 
-        // The alert dialogue repurposes Enter as activate-focused-row; the game's Enter would
-        // synthetically click whatever the (possibly warped) cursor rests on — an alert button.
-        if (InputRouter.IsEnter(control)
-            && (selectorActive
-                || ObeliskAccess.Input.Contexts.LootInputContext.IsCurrentlyActive
-                || ObeliskAccess.Input.Contexts.RewardsInputContext.IsCurrentlyActive
-                || ObeliskAccess.Input.Contexts.AlertInputContext.IsCurrentlyActive
-                // The game's own Enter (BattleKeyboard.KeyboardEnter) also dismisses the death
-                // screen — swallow it so the dismissal goes through our context alone.
-                || ObeliskAccess.Input.Contexts.DeathScreenInputContext.IsCurrentlyActive
-                // On the main-menu screens the game's Enter → DoFirePerformed would fire alongside
-                // OnConfirm's, pressing things twice — the second fire's physics fallback could hit
-                // a just-activated mode-selection collider and skip straight to the save window.
-                // OnConfirm reproduces the single click itself.
-                || ObeliskAccess.Input.Contexts.MainMenuInputContext.IsCurrentlyActive
-                // The hero-selection family self-activates in OnConfirm too; the stale-cursor
-                // click could pick up or drop a portrait, press a perk node, or re-press a
-                // just-closed window's button.
-                || ObeliskAccess.Input.Contexts.HeroSelectionInputContext.IsCurrentlyActive
-                || ObeliskAccess.Input.Contexts.CharPopupInputContext.IsCurrentlyActive
-                || ObeliskAccess.Input.Contexts.PerkTreeInputContext.IsCurrentlyActive
-                // The in-run character sheet self-activates too (level-up trait picks); the
-                // stale-cursor click could press a gold trait box or a side portrait. In combat
-                // the game already blocks its own Enter while the sheet is open, but on the
-                // map/town/rewards/loot screens DoFirePerformed would still fire.
-                || ObeliskAccess.Input.Contexts.CharWindowInputContext.IsCurrentlyActive
-                // The act-transition screen self-activates Continue in OnConfirm; the game's
-                // synthetic click would press it a second time (or whatever the cursor drifted
-                // onto if the mouse moved).
-                || ObeliskAccess.Input.Contexts.IntroInputContext.IsCurrentlyActive
-                // The event book, map and town hub all self-activate too (SelectThisOption /
-                // PlayerSelectedNode / building Clicked). They escaped this list only because the
-                // cursor used to rest wherever the physical mouse sat; now that several screens
-                // warp it (game controller nav on the intro/combat screens, our main-menu walk),
-                // the stale-position click lands on real colliders — on the event book it hit the
-                // first reply before our Activate ran, so Enter "always chose option 1" (the
-                // optionSelected guard then discarded the focused pick).
-                || ObeliskAccess.Input.Contexts.EventInputContext.IsCurrentlyActive
-                || ObeliskAccess.Input.Contexts.MapInputContext.IsCurrentlyActive
-                || ObeliskAccess.Input.Contexts.TownInputContext.IsCurrentlyActive
-                // The rest of the self-activating contexts, audited 2026-07-25: tutorial popups
-                // (Clicked), settings (HandleEnter), the corruption prompt (CorruptionContinue —
-                // a stale click on a reward collider would silently ACCEPT corruption), the craft
-                // services (single-press buy — a stale click could buy the wrong item), the town
-                // upgrades window, and the end-of-run screen (its Activate does its own
-                // warp-then-click, independent of DoKeyBinding). Combat is deliberately NOT here:
-                // in combat Enter maps to BattleKeyboard.KeyboardEnter, which is inert in plain
-                // combat but is the only working Enter for the (not yet mod-covered) energy
-                // transfer selector, and the combat context's own Confirm rides the game's
-                // warped-cursor click path by design.
-                || ObeliskAccess.Input.Contexts.TutorialInputContext.IsCurrentlyActive
-                || ObeliskAccess.Input.Contexts.SettingsInputContext.IsCurrentlyActive
-                || ObeliskAccess.Input.Contexts.CorruptionInputContext.IsCurrentlyActive
-                || ObeliskAccess.Input.Contexts.CardCraftInputContext.IsCurrentlyActive
-                || ObeliskAccess.Input.Contexts.TownUpgradeInputContext.IsCurrentlyActive
-                || ObeliskAccess.Input.Contexts.FinishRunInputContext.IsCurrentlyActive
-                // The MP conflict chooser self-activates via ConflictSelection; a stale-cursor
-                // click could press a rule button or a side portrait.
-                || ObeliskAccess.Input.Contexts.ConflictInputContext.IsCurrentlyActive
-                // The MP lobby self-activates everything (row Activate + edit sessions); a
-                // stale-cursor click could join a room or press Launch.
-                || ObeliskAccess.Input.Contexts.LobbyInputContext.IsCurrentlyActive
-                // The MP players panel (Enter mutes) and give window (Enter sends) self-activate;
-                // a stale-cursor click could mute the wrong player or press a give button.
-                || ObeliskAccess.Input.Contexts.PlayersPanelInputContext.IsCurrentlyActive
-                || ObeliskAccess.Input.Contexts.GiveInputContext.IsCurrentlyActive))
+        if (InputRouter.IsEnter(control) && InputRouter.AnySwallowsGameEnter)
             return false;
 
-        // Space is only the selector's repurposed key: outside combat the game's own Space
-        // handling is a null-conditional no-op (MatchManager?.Keyboard), so the perk tree's
-        // Space-to-confirm needs no suppression here.
-        if (selectorActive && InputRouter.IsSpace(control))
+        if (InputRouter.IsSpace(control) && InputRouter.AnySwallowsGameSpace)
             return false;
 
         if (!InputRouter.AltHeld)
             return true;
-        // Alt review keys must also stay quiet over the in-combat modals that sit above the combat
-        // context (an alert such as the retry dialog), or Alt+R would fire an emote ping. The
-        // character sheet and perk tree open over combat too, and the game's KeyboardEmote checks
-        // neither (only KeyboardNum/Enter/Space respect the sheet) — without them Alt+R over the
-        // sheet in MP broadcast a heart emote to the whole party.
-        if (!ObeliskAccess.Input.Contexts.CombatInputContext.IsCurrentlyActive && !selectorActive
-            && !ObeliskAccess.Input.Contexts.AlertInputContext.IsCurrentlyActive
-            && !ObeliskAccess.Input.Contexts.DeathScreenInputContext.IsCurrentlyActive
-            && !ObeliskAccess.Input.Contexts.CharWindowInputContext.IsCurrentlyActive
-            && !ObeliskAccess.Input.Contexts.PerkTreeInputContext.IsCurrentlyActive)
+        if (!InputRouter.AnyUsesAltLetters)
             return true;
 
         return !(control == kb[Key.R] || control == kb[Key.E] || control == kb[Key.S]
@@ -229,9 +153,10 @@ public class RouterDoKeyBindingPatch
 /// <summary>
 /// The game maps a bare Alt press to <c>DoButtonNorth</c>, which right-clicks whatever is under the
 /// cursor — in combat that pops the card-inspection window, and on the hero-selection screen it
-/// right-clicks a roster portrait, opening the character window. Both screen families use Alt as
-/// the mod's review modifier, so suppress the synthetic right-click while any of them owns input.
-/// The multiplayer chat keyboard's Alt-as-delete is left working.
+/// right-clicks a roster portrait, opening the character window. Screens that use Alt as the mod's
+/// review modifier declare <see cref="IInputContext.SuppressesBareAlt"/>; the synthetic right-click
+/// is suppressed while any of them is open. The multiplayer chat keyboard's Alt-as-delete is left
+/// working (the OSK check precedes the flag query).
 /// </summary>
 [HarmonyPatch(typeof(InputController), "DoButtonNorth")]
 public class RouterDoButtonNorthPatch
@@ -240,59 +165,24 @@ public class RouterDoButtonNorthPatch
     {
         if (RouterGuards.OskActive)
             return true;
-        return !(ObeliskAccess.Input.Contexts.CombatInputContext.IsCurrentlyActive
-              || ObeliskAccess.Input.Contexts.CombatSelectorInputContext.IsCurrentlyActive
-              || ObeliskAccess.Input.Contexts.HeroSelectionInputContext.IsCurrentlyActive
-              || ObeliskAccess.Input.Contexts.CharPopupInputContext.IsCurrentlyActive
-              || ObeliskAccess.Input.Contexts.PerkTreeInputContext.IsCurrentlyActive
-              // The in-run character sheet uses Alt+T/I/R as review keys; a bare Alt would
-              // right-click whatever sits under the stale cursor (in combat that reopens the
-              // card-inspection window or another character's sheet).
-              || ObeliskAccess.Input.Contexts.CharWindowInputContext.IsCurrentlyActive
-              // Alerts and the MP players panel also document Alt+R; the raycast ignores their
-              // UI canvas entirely, so a bare Alt under an alert (e.g. an MP disconnect dialog
-              // over hero selection) right-clicked whatever sat beneath — opening a surprise
-              // window the first post-alert Escape then lands in.
-              || ObeliskAccess.Input.Contexts.AlertInputContext.IsCurrentlyActive
-              || ObeliskAccess.Input.Contexts.PlayersPanelInputContext.IsCurrentlyActive);
+        return !InputRouter.AnySuppressesBareAlt;
     }
 }
 
 /// <summary>
-/// The game maps a bare Ctrl press to a "click" (<c>DoFirePerformed</c>). The map context
-/// repurposes Ctrl as its look-ahead modifier, so this prefix suppresses that click while the map
-/// owns input and Ctrl is held — otherwise Ctrl+arrow would also click whatever node the cursor
-/// happens to rest on. Gamepad A (no Ctrl held) and mouse clicks are unaffected.
+/// The game maps a bare Ctrl press to a "click" (<c>DoFirePerformed</c>). Screens that repurpose
+/// Ctrl as a modifier (map look-ahead, card drills, give amount steps) or that carry live TMP
+/// input fields a synthetic click could focus (craft search bar, lobby fields — opening the
+/// on-screen keyboard over the mod screen) declare <see cref="IInputContext.UsesCtrlModifier"/>;
+/// the click is suppressed while one of them is open and Ctrl is held. Gamepad A (no Ctrl held)
+/// and mouse clicks are unaffected.
 /// </summary>
 [HarmonyPatch(typeof(InputController), "DoFirePerformed")]
 public class RouterDoFirePerformedPatch
 {
     static bool Prefix()
     {
-        // The map, combat, rewards and loot screens repurpose Ctrl as a look-ahead / drill-in
-        // modifier, so suppress the bare-Ctrl click while one of them owns input and Ctrl is held.
-        bool ctrlModifierScreen =
-            ObeliskAccess.Input.Contexts.MapInputContext.IsCurrentlyActive
-            || ObeliskAccess.Input.Contexts.CombatInputContext.IsCurrentlyActive
-            || ObeliskAccess.Input.Contexts.CombatSelectorInputContext.IsCurrentlyActive
-            || ObeliskAccess.Input.Contexts.RewardsInputContext.IsCurrentlyActive
-            || ObeliskAccess.Input.Contexts.LootInputContext.IsCurrentlyActive
-            || ObeliskAccess.Input.Contexts.AlertInputContext.IsCurrentlyActive
-            // The in-run character sheet uses Ctrl+Up/Down as its card drill.
-            || ObeliskAccess.Input.Contexts.CharWindowInputContext.IsCurrentlyActive
-            // Town: the Ctrl of the mod's Ctrl+G give-window opener must not synthetically
-            // click a hub building under the stale cursor. Give: Ctrl scales the amount step.
-            || ObeliskAccess.Input.Contexts.TownInputContext.IsCurrentlyActive
-            || ObeliskAccess.Input.Contexts.GiveInputContext.IsCurrentlyActive
-            // The craft screens and lobby carry live TMP input fields (Forge search bar, room
-            // name/password); a bare-Ctrl click landing on one opens the game's on-screen
-            // keyboard over the mod screen. On the event book the click could silently press a
-            // reply the auto-select suppressor then discards. Ctrl has no mod meaning on these
-            // screens — make it inert.
-            || ObeliskAccess.Input.Contexts.CardCraftInputContext.IsCurrentlyActive
-            || ObeliskAccess.Input.Contexts.LobbyInputContext.IsCurrentlyActive
-            || ObeliskAccess.Input.Contexts.EventInputContext.IsCurrentlyActive;
-        return !(ctrlModifierScreen && InputRouter.CtrlHeld);
+        return !(InputRouter.CtrlHeld && InputRouter.AnyUsesCtrlModifier);
     }
 }
 

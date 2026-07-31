@@ -30,6 +30,9 @@ public class LootInputContext : InputContextBase
 
     public override bool IsActive => IsCurrentlyActive;
 
+    // Ctrl+Up/Down is the item drill — the bare-Ctrl click could take an item under the cursor.
+    public override bool UsesCtrlModifier => true;
+
     public override bool OnMove(Vector2 direction)
     {
         if (InputRouter.CtrlHeld)

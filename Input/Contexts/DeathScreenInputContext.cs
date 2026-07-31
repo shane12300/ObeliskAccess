@@ -18,6 +18,9 @@ public class DeathScreenInputContext : InputContextBase
 
     public override bool IsActive => IsCurrentlyActive;
 
+    // Alt+T reads the Death's Door card, Alt+R repeats — the game's emote letters must stay quiet.
+    public override bool UsesAltLetters => true;
+
     public override bool OnMove(Vector2 direction)
     {
         if (direction.y > 0f)

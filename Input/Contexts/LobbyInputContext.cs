@@ -15,6 +15,10 @@ public class LobbyInputContext : InputContextBase
 
     public override bool IsActive => IsCurrentlyActive;
 
+    // Room name/password are live TMP fields: a bare-Ctrl synthetic click landing on one opens
+    // the game's on-screen keyboard over the lobby. Ctrl has no mod meaning here — inert.
+    public override bool UsesCtrlModifier => true;
+
     public override bool OnMove(Vector2 direction)
     {
         if (direction.y > 0f)

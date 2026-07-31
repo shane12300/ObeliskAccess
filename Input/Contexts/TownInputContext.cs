@@ -31,6 +31,9 @@ public class TownInputContext : InputContextBase
 
     public override bool IsActive => IsCurrentlyActive;
 
+    // Ctrl+G opens the give window — the Ctrl press must not synthetically click a hub building.
+    public override bool UsesCtrlModifier => true;
+
     public override bool OnMove(Vector2 direction)
     {
         if (direction.y > 0f)

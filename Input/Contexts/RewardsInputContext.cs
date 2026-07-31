@@ -30,6 +30,9 @@ public class RewardsInputContext : InputContextBase
 
     public override bool IsActive => IsCurrentlyActive;
 
+    // Ctrl+Up/Down is the card drill — the bare-Ctrl click could take a reward under the cursor.
+    public override bool UsesCtrlModifier => true;
+
     public override bool OnMove(Vector2 direction)
     {
         if (InputRouter.CtrlHeld)
