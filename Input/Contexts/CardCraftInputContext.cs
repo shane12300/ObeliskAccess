@@ -30,6 +30,11 @@ public class CardCraftInputContext : InputContextBase
             var mapWindow = MapManager.Instance != null ? MapManager.Instance.characterWindow : null;
             if (mapWindow != null && mapWindow.IsActive())
                 return false;
+            // The give window opens over the Forge via the game's own gold button; it is modal
+            // but registered below this context, so yield explicitly.
+            var give = GiveManager.Instance;
+            if (give != null && give.IsActive())
+                return false;
             return true;
         }
     }

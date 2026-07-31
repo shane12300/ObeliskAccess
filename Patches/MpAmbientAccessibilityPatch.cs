@@ -128,15 +128,63 @@ internal static class MpDoorIconAnnouncePatch
     }
 }
 
-/// <summary>A player joined the current Photon room (fires on every client already in it).</summary>
+/// <summary>
+/// A player joined the current Photon room. OnPlayerEnteredRoom fires exactly once per join on
+/// every client already in the room, but at that moment only the internal Photon nick exists —
+/// the display name lands later, in SetPlayerPosition on the master (the joiner's RPC targets
+/// the master only) and in NET_SharePlayerNickReal on everyone else. So the enter callback just
+/// marks the join pending and the two dict-arrival hooks speak it with the real name.
+/// </summary>
 [HarmonyPatch(typeof(NetworkManager), nameof(NetworkManager.OnPlayerEnteredRoom))]
 internal static class MpPlayerJoinedAnnouncePatch
 {
+    internal static readonly HashSet<string> Pending = new HashSet<string>();
+
     static void Postfix(Player other)
     {
-        if (other != null)
-            SpeechManager.SpeakQueued(MpSpeech.DisplayNick(other.NickName) + " joined the room.");
+        if (other != null && !string.IsNullOrEmpty(other.NickName))
+            Pending.Add(other.NickName);
     }
+
+    /// <summary>Speak any pending join whose display name is now resolvable.</summary>
+    internal static void FlushResolved()
+    {
+        if (Pending.Count == 0 || NetworkManager.Instance == null)
+            return;
+        var spoken = new List<string>();
+        foreach (string nick in Pending)
+        {
+            string real = NetworkManager.Instance.GetPlayerNickReal(nick);
+            if (string.IsNullOrEmpty(real) || real == nick)
+                continue; // dict entry not here yet — a later share will flush it
+            SpeechManager.SpeakQueued(AccessibleMenuBase.StripRichText(real) + " joined the room.");
+            spoken.Add(nick);
+        }
+        foreach (string nick in spoken)
+            Pending.Remove(nick);
+    }
+}
+
+/// <summary>Master side: the joiner's SetPlayerPosition RPC just filled the nick dict.</summary>
+[HarmonyPatch(typeof(NetworkManager), nameof(NetworkManager.SetPlayerPosition))]
+internal static class MpPlayerJoinedMasterResolvePatch
+{
+    static void Postfix() => MpPlayerJoinedAnnouncePatch.FlushResolved();
+}
+
+/// <summary>Everyone else: the master's dict share just arrived.</summary>
+[HarmonyPatch(typeof(NetworkManager), nameof(NetworkManager.NET_SharePlayerNickReal))]
+internal static class MpPlayerJoinedShareResolvePatch
+{
+    static void Postfix() => MpPlayerJoinedAnnouncePatch.FlushResolved();
+}
+
+/// <summary>Entering a new room must drop stale pending joins from the previous one — the new
+/// room's first dict share would otherwise "resolve" them into phantom join announcements.</summary>
+[HarmonyPatch(typeof(NetworkManager), nameof(NetworkManager.OnJoinedRoom))]
+internal static class MpPlayerJoinedRoomResetPatch
+{
+    static void Postfix() => MpPlayerJoinedAnnouncePatch.Pending.Clear();
 }
 
 /// <summary>
@@ -178,6 +226,9 @@ internal static class MpPlayerLeftAnnouncePatch
 
     static void Prefix(NetworkManager __instance, Player other, out Snap __state)
     {
+        // A joiner who leaves before their name resolved must not announce later.
+        if (other != null && !string.IsNullOrEmpty(other.NickName))
+            MpPlayerJoinedAnnouncePatch.Pending.Remove(other.NickName);
         __state = new Snap
         {
             Nick = MpSpeech.DisplayNick(other != null ? other.NickName : null),

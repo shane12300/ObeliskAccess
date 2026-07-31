@@ -51,7 +51,7 @@ internal static class LobbyScreenManager
     // Two-step kick.
     private static int _kickArmedSlot = -1;
     private static float _kickArmedTime;
-    private static string _kickArmedNick; // occupant at arm time — slots compact when players leave
+    private static string _kickArmedNick; // occupant at arm time — rendered order re-packs on any change
 
     // Edge trackers.
     private static string _lastStatusSpoken = "";
@@ -120,6 +120,10 @@ internal static class LobbyScreenManager
             _joinRegion = JoinRegion.Rooms;
             _ddOpen = null;
             _kickArmedSlot = -1;
+            // A panel switch mid-edit (mouse Back, auto re-route) must not let the session's
+            // Tick later fire OnEnded and speak "Room name set to…" over the new panel.
+            _editName.Abort();
+            _editPwd.Abort();
             _panelAnnounced = false;
             _panelWaitFrames = 0;
             _launchWasActive = false;
@@ -154,10 +158,10 @@ internal static class LobbyScreenManager
         {
             bool launch = lm.buttonLaunch != null && lm.buttonLaunch.gameObject.activeSelf;
             if (launch && !_launchWasActive)
-                SpeechManager.SpeakQueued("Launch available — " + Occupants(lm) + " players in room.");
+                SpeechManager.SpeakQueued("Launch available — " + Occupants() + " players in room.");
             _launchWasActive = launch;
 
-            int occ = Occupants(lm);
+            int occ = Occupants();
             if (_lastOccupants >= 0 && occ != _lastOccupants)
                 SpeechManager.SpeakQueued("Now " + occ + " of " + MaxPlayers() + " players.");
             _lastOccupants = occ;
@@ -602,19 +606,43 @@ internal static class LobbyScreenManager
         _ddApply = null;
         if (dd == null)
             return;
-        dd.value = _ddPending;
+        dd.SetValueWithoutNotify(_ddPending); // apply() below is the sole action — never onValueChanged
         dd.RefreshShownValue();
         apply?.Invoke();
     }
 
     // ---------------------------------------------------------------- kick (two-step)
 
+    /// <summary>The nick actually rendered on slot <paramref name="idx"/> — and the one the
+    /// game's KickPlayer(idx) will hit. DrawLobbyNames and KickPlayer both walk the non-inactive
+    /// Photon player list by index; NetworkManager's PlayerPositionList is a DIFFERENT ordering
+    /// (leaves blank a hole, joins fill the first hole), so after a leave-then-join the two
+    /// disagree and position-based nicks would name the wrong player.</summary>
+    private static string NickAtRenderedSlot(int idx)
+    {
+        var list = Photon.Pun.PhotonNetwork.InRoom
+            ? Photon.Pun.PhotonNetwork.PlayerList
+            : NetworkManager.Instance?.PlayerList;
+        if (list == null)
+            return "";
+        int n = 0;
+        foreach (var p in list)
+        {
+            if (p == null || p.IsInactive)
+                continue;
+            if (n == idx)
+                return p.NickName ?? "";
+            n++;
+        }
+        return "";
+    }
+
     private static void DoKickStep(int slot)
     {
         var lm = LobbyManager.Instance;
         if (lm == null || NetworkManager.Instance == null)
             return;
-        string rawNick = NetworkManager.Instance.GetPlayerNickPosition(slot);
+        string rawNick = NickAtRenderedSlot(slot);
         string nick = MpSpeech.DisplayNick(rawNick);
         if (_kickArmedSlot != slot)
         {
@@ -625,8 +653,9 @@ internal static class LobbyScreenManager
             SpeechManager.Speak("Press Enter again to kick " + nick + ".");
             return;
         }
-        // Slots COMPACT when someone leaves on their own: if the armed player left, the next
-        // player shifted into this slot index — a stale second Enter must not kick them.
+        // Slots do NOT compact in the position list, but the rendered order re-packs on every
+        // change: if the players changed, this slot index may hold someone else — a stale
+        // second Enter must not kick them.
         if (rawNick != _kickArmedNick)
         {
             _kickArmedNick = rawNick;
@@ -665,7 +694,7 @@ internal static class LobbyScreenManager
                 return "Game room setup. " + rows.Count + " rows: room name, player count, password,"
                     + " looking-for-more, create, back. Up and Down to review, Enter to activate.";
             case Panel.Room:
-                return "In room. " + RoomHeader() + " " + Occupants(lm) + " of " + MaxPlayers()
+                return "In room. " + RoomHeader() + " " + Occupants() + " of " + MaxPlayers()
                     + " players. Up and Down review the room, Enter activates; Escape leaves the room.";
             default:
                 return "Multiplayer lobby.";
@@ -677,6 +706,10 @@ internal static class LobbyScreenManager
         var nm = NetworkManager.Instance;
         if (nm == null)
             return "Room.";
+        // Being kicked leaves RoomT visible until the async OnLeftRoom; the description/password
+        // getters deref CurrentRoom without a null check (unlike GetRoomName).
+        if (Photon.Pun.PhotonNetwork.CurrentRoom == null)
+            return "Leaving the room.";
         var sb = new StringBuilder();
         string desc = nm.GetRoomDescription();
         if (!string.IsNullOrEmpty(desc))
@@ -696,7 +729,8 @@ internal static class LobbyScreenManager
         var sb = new StringBuilder();
         sb.Append("Slot ").Append(idx + 1).Append(": ").Append(text);
         var nm = NetworkManager.Instance;
-        if (nm != null && nm.GetPlayerNickPosition(idx) == nm.GetPlayerNick())
+        string rendered = NickAtRenderedSlot(idx);
+        if (nm != null && rendered.Length > 0 && rendered == nm.GetPlayerNick())
             sb.Append(", that's you");
         if (kickable)
             sb.Append(". Press Enter to kick");
@@ -792,10 +826,9 @@ internal static class LobbyScreenManager
         return room != null ? room.MaxPlayers : 0;
     }
 
-    private static int Occupants(LobbyManager lm)
+    private static int Occupants()
     {
-        // Occupied = an active slot whose text isn't the grey "open slot" placeholder; the
-        // NetworkManager position list is the authority when available.
+        // NetworkManager's player count is the authority.
         return NetworkManager.Instance != null ? NetworkManager.Instance.GetNumPlayers() : 0;
     }
 

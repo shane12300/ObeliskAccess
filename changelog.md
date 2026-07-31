@@ -269,3 +269,26 @@
 - Debug mode (Accessibility tab) now records more detail for troubleshooting: what each
   combat Enter press actually lands on, and any speech call slow enough to hitch the game —
   useful evidence to attach when reporting multiplayer slowdowns or dead keys.
+- Fixed: in a multiplayer room where someone had left and someone else joined, the two-step
+  kick could announce the wrong player's name (and mark "that's you" on the wrong slot). The
+  kick itself always removed the player shown on the slot — but the spoken name could
+  disagree with it. Kick announcements now always name exactly the player rendered on that
+  slot.
+- Fixed: after a player left mid-run, the players panel (Alt+P) could read a stale row for
+  the departed player while making a later player unreachable. The panel now lists exactly
+  the players still present, and mute/unmute always lands on the player you hear.
+- The give window is safer around disconnects: switching currency with Tab now closes the
+  window with an announcement when no other players remain (previously this could freeze the
+  game), sending refuses cleanly if the chosen seat has been vacated, and Ctrl+G no longer
+  opens the window after the connection has dropped.
+- Fixed: reviewing the room panel while being removed from a room could throw errors and eat
+  a keypress; it now says "Leaving the room." instead.
+- Fixed: a joining player was sometimes announced by their internal network name; the join is
+  now spoken with their real display name as soon as it arrives.
+- Fixed: switching lobby panels while typing a room name or password no longer speaks a
+  leftover "Room name set to…" over the new panel's announcement.
+- Hardened the multiplayer vote-conflict narration so an unexpected speech error can never
+  interrupt the game's card-flip sequence mid-round.
+- Fixed: opening the give window from the Forge's gold button now correctly takes over the
+  keyboard — previously Enter kept buying shop items behind the give window, and on a
+  travelling shop Escape could cast a ready-vote instead of closing it.

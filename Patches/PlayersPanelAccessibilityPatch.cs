@@ -75,12 +75,14 @@ internal static class PlayersPanelManager
         var nm = NetworkManager.Instance;
         if (am == null || nm == null || am.playerList == null)
             return;
-        int count = ActiveRowCount();
+        var positions = Positions();
+        int count = positions.Count;
         if (count == 0)
             return;
         _index = Mathf.Clamp(_index, 0, count - 1);
+        int pos = positions[_index];
 
-        string nick = nm.GetPlayerNickPosition(_index);
+        string nick = nm.GetPlayerNickPosition(pos);
         if (string.IsNullOrEmpty(nick))
             return;
         if (nick == nm.GetPlayerNick())
@@ -88,10 +90,10 @@ internal static class PlayersPanelManager
             SpeechManager.Speak("That's you.");
             return;
         }
-        var row = _index < am.playerList.Count ? am.playerList[_index] : null;
+        var row = pos < am.playerList.Count ? am.playerList[pos] : null;
         if (row == null)
             return;
-        if (nm.IsPlayerMutedBySlot(_index))
+        if (nm.IsPlayerMutedBySlot(pos))
         {
             row.DoUnmute();
             SpeechManager.Speak(MpSpeech.DisplayNick(nick) + " unmuted.");
@@ -116,11 +118,23 @@ internal static class PlayersPanelManager
 
     // ---------------------------------------------------------------- rows
 
-    private static int ActiveRowCount()
+    /// <summary>Row → position mapping. A mid-run leave blanks a PlayerPositionList entry without
+    /// compacting (normalization only happens at launch), and the game's SetPlayers renders per
+    /// POSITION — hole rows are deactivated with stale text. Walking only the occupied positions
+    /// keeps every player reachable and never reads a hidden row.</summary>
+    private static System.Collections.Generic.List<int> Positions()
     {
+        var list = new System.Collections.Generic.List<int>();
         var nm = NetworkManager.Instance;
-        return nm != null ? nm.GetNumPlayers() : 0;
+        var arr = nm != null ? nm.PlayerPositionListArray() : null;
+        if (arr != null)
+            for (int i = 0; i < arr.Length; i++)
+                if (!string.IsNullOrEmpty(arr[i]))
+                    list.Add(i);
+        return list;
     }
+
+    private static int ActiveRowCount() => Positions().Count;
 
     private static string RowSpeech(int i)
     {
@@ -128,8 +142,12 @@ internal static class PlayersPanelManager
         var nm = NetworkManager.Instance;
         if (am == null || nm == null)
             return "";
-        string nick = nm.GetPlayerNickPosition(i);
-        var row = am.playerList != null && i < am.playerList.Count ? am.playerList[i] : null;
+        var positions = Positions();
+        if (i < 0 || i >= positions.Count)
+            return "";
+        int pos = positions[i];
+        string nick = nm.GetPlayerNickPosition(pos);
+        var row = am.playerList != null && pos < am.playerList.Count ? am.playerList[pos] : null;
 
         var sb = new StringBuilder();
         // The game's own rendered line already carries the display nick + "(master)".
@@ -147,7 +165,7 @@ internal static class PlayersPanelManager
             if (nm.PlayerManualReady != null
                 && nm.PlayerManualReady.TryGetValue(nick, out bool ready) && ready)
                 sb.Append(", ready");
-            if (nm.IsPlayerMutedBySlot(i))
+            if (nm.IsPlayerMutedBySlot(pos))
                 sb.Append(", muted");
             AppendHeroes(sb, nick);
         }

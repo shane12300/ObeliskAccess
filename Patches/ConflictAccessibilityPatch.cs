@@ -277,31 +277,11 @@ internal static class ConflictScreenManager
 // Conflicts only ever exist in multiplayer (NET_DoConflict is the sole spawner), so no IsMp gates
 // are needed; the manager's null/_openAnnounced guards make every hook safe anyway.
 
-/// <summary>Show runs on every client (broadcast via NET_DoConflict).</summary>
-[HarmonyPatch(typeof(ConflictManager), nameof(ConflictManager.Show))]
-public class ConflictShowAnnouncePatch
-{
-    static void Postfix() => ConflictScreenManager.OnShow();
-}
-
-/// <summary>Runs on all clients: on the master from ShowCo, on others from NET_ShareConflictOrderCo.</summary>
-[HarmonyPatch(typeof(ConflictManager), "EnableButtonsForPlayerChoosing")]
-public class ConflictChooserAnnouncePatch
-{
-    static void Postfix() => ConflictScreenManager.OnChooserKnown();
-}
-
-/// <summary>Local click/keyboard path (also covers our own ConflictSelection call).</summary>
-[HarmonyPatch(typeof(ConflictManager), nameof(ConflictManager.SelectOption))]
-public class ConflictRuleSelectedAnnouncePatch
-{
-    static void Postfix(int option) => ConflictScreenManager.OnRuleChosen(option);
-}
-
-/// <summary>All of the announce postfixes below execute INSIDE the game's deterministic roll
-/// coroutines, which run in lock-step on every client — an uncaught exception would kill the
-/// local roll loop and desync a screen that has no cancel. Speech is never worth that: swallow
-/// and log instead.</summary>
+/// <summary>All of the announce postfixes in this file execute INSIDE the game's lock-step
+/// network machinery — Show/EnableButtonsForPlayerChoosing inside the sync coroutines, the rest
+/// inside the deterministic roll coroutines that run on every client. An uncaught exception
+/// would kill the local loop and desync a screen that has no cancel. Speech is never worth
+/// that: swallow and log instead.</summary>
 internal static class ConflictSafe
 {
     internal static void Run(System.Action body)
@@ -315,6 +295,27 @@ internal static class ConflictSafe
             Plugin.Logger.LogWarning("Conflict announce failed: " + e.Message);
         }
     }
+}
+
+/// <summary>Show runs on every client (broadcast via NET_DoConflict).</summary>
+[HarmonyPatch(typeof(ConflictManager), nameof(ConflictManager.Show))]
+public class ConflictShowAnnouncePatch
+{
+    static void Postfix() => ConflictSafe.Run(ConflictScreenManager.OnShow);
+}
+
+/// <summary>Runs on all clients: on the master from ShowCo, on others from NET_ShareConflictOrderCo.</summary>
+[HarmonyPatch(typeof(ConflictManager), "EnableButtonsForPlayerChoosing")]
+public class ConflictChooserAnnouncePatch
+{
+    static void Postfix() => ConflictSafe.Run(ConflictScreenManager.OnChooserKnown);
+}
+
+/// <summary>Local click/keyboard path (also covers our own ConflictSelection call).</summary>
+[HarmonyPatch(typeof(ConflictManager), nameof(ConflictManager.SelectOption))]
+public class ConflictRuleSelectedAnnouncePatch
+{
+    static void Postfix(int option) => ConflictSafe.Run(() => ConflictScreenManager.OnRuleChosen(option));
 }
 
 /// <summary>Network echo path — the master's NET_SelectConflictOption lands here on other clients.

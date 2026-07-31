@@ -95,6 +95,11 @@ internal static class GiveScreenManager
             gm.NextTarget();
         else
             gm.PrevTarget();
+        if (TargetIsEmptySeat(gm))
+        {
+            SpeechManager.Speak("Empty seat — press Left or Right again.");
+            return;
+        }
         SpeechManager.Speak("To " + TargetText());
     }
 
@@ -103,6 +108,12 @@ internal static class GiveScreenManager
         var gm = GiveManager.Instance;
         if (gm == null)
             return;
+        if (!HasOtherPlayers)
+        {
+            SpeechManager.Speak("No other players left. Closing the give window.");
+            Close();
+            return;
+        }
         var next = GoldMode ? Enums.CurrencyType.DUST : Enums.CurrencyType.GOLD;
         gm.ShowGive(true, next); // the game resets quantity and target on this call
         SpeechManager.Speak("Switched to " + Word + ". Quantity reset to 0. To " + TargetText());
@@ -119,6 +130,11 @@ internal static class GiveScreenManager
             Close();
             return;
         }
+        if (TargetIsEmptySeat(gm))
+        {
+            SpeechManager.Speak("That seat is empty — Left and Right choose another player.");
+            return;
+        }
         if (gm.quantity <= 0)
         {
             SpeechManager.Speak("Set a quantity first — Up and Down adjust it.");
@@ -127,6 +143,12 @@ internal static class GiveScreenManager
         SpeechManager.Speak("Sending " + gm.quantity + " " + Word + " to " + TargetText() + ".");
         gm.GiveAction(); // closes the window itself
     }
+
+    /// <summary>A mid-run leave blanks the player's PlayerPositionList entry without compacting;
+    /// the game's target cycling can land on the hole and GiveAction would send to nick "".</summary>
+    private static bool TargetIsEmptySeat(GiveManager gm)
+        => NetworkManager.Instance == null
+            || string.IsNullOrEmpty(NetworkManager.Instance.GetPlayerNickPosition(gm.playerTarget));
 
     public static void Close()
     {
@@ -139,6 +161,8 @@ internal static class GiveScreenManager
         var gm = GiveManager.Instance;
         if (!MpSpeech.IsMp || gm == null || gm.IsActive())
             return;
+        if (!Photon.Pun.PhotonNetwork.InRoom)
+            return; // connection already dropped — the panel would open over a dead team
         if (!HasOtherPlayers)
         {
             SpeechManager.Speak("No other players to give to.");
