@@ -52,6 +52,16 @@ internal static class CardCraftScreenManager
     private static float _blockedSince = -1f;
     private static bool _divWaitingAnnounced;
 
+    // Free (cost-0) removals/upgrades/crafts never reach the Hero.OnCard* hooks — the game only
+    // calls those when something was charged — so the receipt would be silent (free prices are
+    // real: singularity tier 0, several town upgrades, and the shop-discount clamp). Armed on
+    // each mod-issued buy; Tick speaks the receipt on the blocked falling edge if the pending
+    // card is still unclaimed. A few-tick disarm covers CanBuy refusals (blocked never rises),
+    // and the 6s watchdog force-clear disarms too — that edge is a recovery, not a completion.
+    private static bool _awaitingReceipt;
+    private static bool _sawBlockedForReceipt;
+    private static int _awaitingReceiptTicks;
+
     private static CardCraftManager Mgr => CardCraftManager.Instance;
 
     /// <summary>True for the five screens this layer owns (5–7 are challenge/corruption flows).</summary>
@@ -69,17 +79,34 @@ internal static class CardCraftScreenManager
         {
             if (m.blocked)
             {
+                if (_awaitingReceipt)
+                    _sawBlockedForReceipt = true;
                 if (_blockedSince < 0f)
                     _blockedSince = Time.unscaledTime;
                 else if (Time.unscaledTime - _blockedSince > 6f)
                 {
                     m.blocked = false; // game's own 5s ceiling has passed — its watchdog is dead
                     _blockedSince = -1f;
+                    _awaitingReceipt = false; // recovery edge, not a completed purchase
                 }
             }
             else
             {
                 _blockedSince = -1f;
+                if (_awaitingReceipt)
+                {
+                    if (_sawBlockedForReceipt)
+                    {
+                        _awaitingReceipt = false;
+                        // Paid purchases cleared _pendingActionCard via the Hero.OnCard* postfix;
+                        // if it survived the coroutine, nothing was charged — a free transaction.
+                        if (_pendingActionCard.Length > 0 && Owned(m))
+                            OnPurchaseCompleted(m.craftType == 0 ? "Upgraded to"
+                                : m.craftType == 1 ? "Removed" : "Crafted");
+                    }
+                    else if (++_awaitingReceiptTicks > 10)
+                        _awaitingReceipt = false; // blocked never rose: CanBuy refused silently
+                }
                 if (_retryExitWhenUnblocked)
                 {
                     _retryExitWhenUnblocked = false;
@@ -93,6 +120,7 @@ internal static class CardCraftScreenManager
         {
             _retryExitWhenUnblocked = false;
             _blockedSince = -1f;
+            _awaitingReceipt = false;
         }
 
         if (!Owned(m) || !m.gameObject.activeSelf)
@@ -134,6 +162,7 @@ internal static class CardCraftScreenManager
         _pendingPageAnnounce = false;
         _pendingActionCard = "";
         _pendingReplacedItem = "";
+        _awaitingReceipt = false;
         _divWaitingAnnounced = false; // a waiting-state arrival is announced by the next Tick
         SpeechManager.Speak(BuildOverview(m));
     }
@@ -219,6 +248,34 @@ internal static class CardCraftScreenManager
     }
 
     // ---------------------------------------------------------------- shared guards
+
+    /// <summary>The CanBuy gates that fail silently on the keyboard path (uses exhausted,
+    /// partner-owned hero), diagnosed before any select or buy call — the pre-SelectRow placement
+    /// also stops SelectCard's remainingUses==0 early-return from leaving a stale selection for
+    /// the preview to announce. remainingUses is private; a Traverse miss would read 0 (= refuse
+    /// everything), so 0 is only trusted while the game shows its uses label (usesLeftT is active
+    /// exactly when the shop is use-limited).</summary>
+    private static string RefusalReason(CardCraftManager m)
+    {
+        if (Traverse.Create(m).Field<int>("remainingUses").Value == 0
+            && m.usesLeftT != null && m.usesLeftT.gameObject.activeSelf)
+            return "No uses left at this shop.";
+        if (MpSpeech.IsMp && m.CurrentHero != null && NetworkManager.Instance != null
+            && m.CurrentHero.Owner != NetworkManager.Instance.GetPlayerNick())
+            return MpSpeech.DisplayNick(m.CurrentHero.Owner) + " owns this hero — only they can buy for it.";
+        return null;
+    }
+
+    /// <summary>Speak the refusal and drop any pending phase. True when refused.</summary>
+    private static bool RefuseIfCannotBuy(CardCraftManager m)
+    {
+        string reason = RefusalReason(m);
+        if (reason == null)
+            return false;
+        _phase = Phase.Browse;
+        SpeechManager.Speak(reason);
+        return true;
+    }
 
     /// <summary>Purchase coroutines hold <c>blocked</c> for up to ~5 s; keys are inert meanwhile.</summary>
     private static bool BlockedGuard()
@@ -412,7 +469,13 @@ internal static class CardCraftScreenManager
             return true;
         }
 
-        m.ExitCardCraft(); // no-ops while blocked, mirroring the mouse path
+        if (m.blocked)
+        {
+            // ExitCardCraft would silently no-op; say why Escape appeared to do nothing.
+            SpeechManager.Speak("Please wait, finishing the purchase.");
+            return true;
+        }
+        m.ExitCardCraft();
         return true;
     }
 
@@ -455,8 +518,11 @@ internal static class CardCraftScreenManager
                     SpeechManager.Speak(DivinationLine(tiers[_index]));
                 break;
             case 4:
-                _region = _region == Region.List ? Region.Equipped
-                    : _region == Region.Equipped ? Region.Controls : Region.List;
+                _region = backwards
+                    ? (_region == Region.List ? Region.Controls
+                        : _region == Region.Controls ? Region.Equipped : Region.List)
+                    : (_region == Region.List ? Region.Equipped
+                        : _region == Region.Equipped ? Region.Controls : Region.List);
                 _index = 0;
                 if (_region == Region.Equipped)
                     SpeechManager.Speak("Equipped items. " + EquippedLine(m, 0));
@@ -567,32 +633,37 @@ internal static class CardCraftScreenManager
         return sb.ToString();
     }
 
-    /// <summary>Why this card can't be removed, or null if it can. Mirrors the game's min-deck rule:
-    /// injuries and boons are always removable, other cards only while more than 15 remain.</summary>
+    /// <summary>Why this card can't be removed, or null if it can. Mirrors the game's
+    /// ShowElements("Remove") gates exactly: NG+9 town injuries are permanent (the sandbox
+    /// min-deck override does NOT lift that block); injuries and boons need the TOTAL deck above
+    /// 15; anything else needs more than 15 cards besides injuries and boons — both counted by
+    /// Hero.GetTotalCardsInDeck, the game's own counter. RemoveCard() itself re-checks none of
+    /// this (CanBuy is uses/owner/price only), so this gate is what stands between the keyboard
+    /// and an illegal removal.</summary>
     private static string RemoveBlockedReason(CardCraftManager m, CardRealtimeData cd)
     {
-        if (cd.CardClass == Enums.CardClass.Injury || cd.CardClass == Enums.CardClass.Boon)
-            return null;
-        if (SandboxManager.Instance != null && SandboxManager.Instance.NoMinimumDecksize)
-            return null;
-
         var hero = m.CurrentHero;
-        if (hero?.Cards == null)
+        if (hero == null)
             return null;
-        int countable = 0;
-        foreach (var id in hero.Cards)
-        {
-            var c = Globals.Instance?.GetCardData(id, false);
-            if (c != null && c.CardClass != Enums.CardClass.Injury && c.CardClass != Enums.CardClass.Boon)
-                countable++;
-        }
-        return countable <= 15 ? "cannot remove, deck at the minimum of 15 cards" : null;
+        bool injury = cd.CardClass == Enums.CardClass.Injury;
+        bool boon = cd.CardClass == Enums.CardClass.Boon;
+        if (injury && AtOManager.Instance != null && AtOManager.Instance.GetNgPlus() >= 9
+            && AtOManager.Instance.CharInTown())
+            return "cannot remove, injuries are permanent at this New Game Plus level";
+        bool aboveMinimum = injury || boon
+            ? hero.GetTotalCardsInDeck() > 15
+            : hero.GetTotalCardsInDeck(excludeInjuriesAndBoons: true) > 15;
+        if (aboveMinimum || (SandboxManager.Instance != null && SandboxManager.Instance.NoMinimumDecksize))
+            return null;
+        return "cannot remove, deck at the minimum of 15 cards";
     }
 
     // ---- Altar: preview + buy ----
 
     private static void BeginUpgradePreview(CardCraftManager m)
     {
+        if (RefuseIfCannotBuy(m)) // before SelectRow — its remainingUses==0 no-op leaves a stale selection
+            return;
         var rows = DeckRows(m);
         if (!RowInRange(rows))
             return;
@@ -640,8 +711,10 @@ internal static class CardCraftScreenManager
             return;
         }
 
-        string targetId = _previewVariant == "A" ? cd.UpgradesTo1 : cd.UpgradesTo2;
-        var target = string.IsNullOrEmpty(targetId) ? null : Globals.Instance?.GetCardData(targetId, false);
+        // The game's resolver: UpgradesTo1/2 for base cards, UpgradedFrom+"A"/"B" for upgraded
+        // ones (whose own UpgradesTo* are empty — reading them spoke "unknown card" on every
+        // transmute).
+        var target = Functions.GetCardDataFromCardData(cd, _previewVariant);
         int cost = Traverse.Create(m).Field<int>(_previewVariant == "A" ? "costA" : "costB").Value;
 
         var sb = new StringBuilder();
@@ -659,6 +732,8 @@ internal static class CardCraftScreenManager
 
     private static void BuyPreviewedUpgrade(CardCraftManager m)
     {
+        if (RefuseIfCannotBuy(m))
+            return;
         var cd = SelectedCard(m);
         if (cd == null)
             return;
@@ -670,19 +745,21 @@ internal static class CardCraftScreenManager
             SpeechManager.Speak("Not enough dust. Costs " + cost + ", you have " + dust);
             return;
         }
-        string targetId = _previewVariant == "A" ? cd.UpgradesTo1 : cd.UpgradesTo2;
-        var target = string.IsNullOrEmpty(targetId) ? null : Globals.Instance?.GetCardData(targetId, false);
+        var target = Functions.GetCardDataFromCardData(cd, _previewVariant);
         _pendingActionCard = target != null ? AccessibleMenuBase.StripRichText(target.CardName) : "card";
         _phase = Phase.Browse;
+        ArmFreeReceipt();
         m.BuyUpgrade(_previewVariant);
-        // Success is announced by the Hero.OnCardUpgraded postfix; failure paths (CanBuy) leave
-        // the game silent, so give a fallback cue if nothing was charged.
+        // Success is announced by the Hero.OnCardUpgraded postfix (paid) or the Tick receipt
+        // fallback (free); a CanBuy failure disarms after a few ticks.
     }
 
     // ---- Church: confirm + remove ----
 
     private static void BeginRemoveConfirm(CardCraftManager m)
     {
+        if (RefuseIfCannotBuy(m)) // before SelectRow — its remainingUses==0 no-op leaves a stale selection
+            return;
         var rows = DeckRows(m);
         if (!RowInRange(rows))
             return;
@@ -710,6 +787,8 @@ internal static class CardCraftScreenManager
 
     private static void ConfirmRemove(CardCraftManager m)
     {
+        if (RefuseIfCannotBuy(m))
+            return;
         var cd = SelectedCard(m);
         int cost = Traverse.Create(m).Field<int>("costRemove").Value;
         int gold = AtOManager.Instance?.CurrencyManager?.GetPlayerGold() ?? 0;
@@ -718,10 +797,23 @@ internal static class CardCraftScreenManager
             SpeechManager.Speak("Not enough gold. Costs " + cost + ", you have " + gold);
             return;
         }
+        // Authoritative re-check: SelectRow ran the game's own ShowElements gates, which disable
+        // the remove button for rules RemoveCard() itself never re-checks. If the game said no,
+        // do not call RemoveCard.
+        var removeBg = m.buttonRemove != null ? m.buttonRemove.GetComponent<BotonGeneric>() : null;
+        if (removeBg != null && (!m.buttonRemove.gameObject.activeSelf || !removeBg.IsEnabled()))
+        {
+            _phase = Phase.Browse;
+            SpeechManager.Speak(cd != null
+                ? RemoveBlockedReason(m, cd) ?? "This card can't be removed right now."
+                : "This card can't be removed right now.");
+            return;
+        }
         _pendingActionCard = cd != null ? AccessibleMenuBase.StripRichText(cd.CardName) : "card";
         _phase = Phase.Browse;
+        ArmFreeReceipt();
         m.RemoveCard();
-        // Announced by the Hero.OnCardRemoved postfix.
+        // Announced by the Hero.OnCardRemoved postfix (paid) or the Tick receipt fallback (free).
     }
 
     // ---------------------------------------------------------------- shop grids (Forge/Armory)
@@ -869,6 +961,8 @@ internal static class CardCraftScreenManager
 
     private static void BuyFocusedCraft(CardCraftManager m)
     {
+        if (RefuseIfCannotBuy(m))
+            return;
         var entries = GridEntries(m);
         if (entries.Count == 0 || _index >= entries.Count)
             return;
@@ -886,12 +980,15 @@ internal static class CardCraftScreenManager
             return;
         }
         _pendingActionCard = cd != null ? AccessibleMenuBase.StripRichText(cd.CardName) : "card";
+        ArmFreeReceipt();
         m.BuyCraft(item.cardId);
-        // Announced by the Hero.OnCardCrafted postfix.
+        // Announced by the Hero.OnCardCrafted postfix (paid) or the Tick receipt fallback (free).
     }
 
     private static void BuyFocusedItem(CardCraftManager m)
     {
+        if (RefuseIfCannotBuy(m))
+            return;
         var entries = GridEntries(m);
         if (entries.Count == 0 || _index >= entries.Count)
             return;
@@ -1013,9 +1110,11 @@ internal static class CardCraftScreenManager
         if (m.rerollButton != null && m.rerollButton.gameObject.activeSelf)
         {
             int cost = Globals.Instance != null ? Globals.Instance.GetCostReroll() : 0;
+            bool rerollLeft = AtOManager.Instance == null || AtOManager.Instance.IsTownRerollAvailable();
             list.Add(new ControlEntry
             {
-                Label = "Reroll shop stock, costs " + cost + " gold",
+                Label = "Reroll shop stock, costs " + cost + " gold"
+                    + (rerollLeft ? "" : ", unavailable — no rerolls left in this town"),
                 Act = () => { Reroll(m, cost); },
             });
         }
@@ -1026,10 +1125,39 @@ internal static class CardCraftScreenManager
                 list.Add(new ControlEntry
                 {
                     Label = "Shady deal: " + CardSpeech.CleanFlat(bg.GetText()),
-                    Act = () => bg.Clicked(),
+                    Act = () => ShadyDeal(bg),
                 });
         }
         return list;
+    }
+
+    /// <summary>Clicked() has no enabled gate (only the mouse path checks it) and BuyShadyDeal has
+    /// no Hero hook, so a disabled button would click-and-no-op silently and a success would say
+    /// nothing — refuse up front and announce from a balance snapshot instead. BuyShadyDeal is
+    /// synchronous: dust is paid on the spot; gold arrives immediately in SP but via the master
+    /// in MP, so the gold clause only appears when it actually changed.</summary>
+    private static void ShadyDeal(BotonGeneric bg)
+    {
+        if (!bg.IsEnabled())
+        {
+            SpeechManager.Speak("Shady deal unavailable — not enough dust or no uses left.");
+            return;
+        }
+        var cm = AtOManager.Instance?.CurrencyManager;
+        int dustBefore = cm?.GetPlayerDust() ?? 0;
+        int goldBefore = cm?.GetPlayerGold() ?? 0;
+        bg.Clicked();
+        int dustAfter = cm?.GetPlayerDust() ?? dustBefore;
+        int goldAfter = cm?.GetPlayerGold() ?? goldBefore;
+        if (dustAfter < dustBefore)
+        {
+            string line = "Traded " + (dustBefore - dustAfter) + " dust";
+            if (goldAfter > goldBefore)
+                line += " for " + (goldAfter - goldBefore) + " gold";
+            SpeechManager.Speak(line + ".");
+        }
+        else
+            SpeechManager.Speak("Shady deal did nothing.");
     }
 
     private static void SwitchShop(CardCraftManager m, bool pets)
@@ -1048,6 +1176,15 @@ internal static class CardCraftScreenManager
 
     private static void Reroll(CardCraftManager m, int cost)
     {
+        if (RefuseIfCannotBuy(m))
+            return;
+        // CanBuy("Reroll") checks the town allowance before gold — "Rerolled" was a lie when
+        // NG+ reroll limits had already been spent.
+        if (AtOManager.Instance != null && !AtOManager.Instance.IsTownRerollAvailable())
+        {
+            SpeechManager.Speak("No rerolls left in this town.");
+            return;
+        }
         var cm = AtOManager.Instance?.CurrencyManager;
         int gold = cm?.GetPlayerGold() ?? 0;
         if (gold < cost)
@@ -1178,13 +1315,34 @@ internal static class CardCraftScreenManager
         m.BuyDivination(e.Tier);
 
         int goldAfter = cm?.GetPlayerGold() ?? goldBefore;
-        if (goldAfter < goldBefore || e.Cost == 0)
+        // MP charges nothing at buy time, so for a free tier the waiting-state announcement is
+        // the whole story — a "purchased" line there would just double-speak.
+        if (goldAfter < goldBefore || (e.Cost == 0 && !MpSpeech.IsMp))
             SpeechManager.SpeakQueued("Divination purchased. " + goldAfter + " gold remaining");
         // The game then opens its reward screen (handled by RewardsScreenManager) or, in
         // multiplayer, waits for the other players.
     }
 
     // ---------------------------------------------------------------- selection plumbing
+
+    /// <summary>Arm the free-transaction receipt watcher for a buy the mod is about to issue
+    /// (Altar/Church/Forge — the craftTypes whose completion hooks are cost-gated).</summary>
+    private static void ArmFreeReceipt()
+    {
+        _awaitingReceipt = true;
+        _sawBlockedForReceipt = false;
+        _awaitingReceiptTicks = 0;
+    }
+
+    /// <summary>A denied MP purchase leaves the pending strings set (nothing game-side ever
+    /// completes); cleared from the NET_BuyItemResult denial echo so a partner's later buy
+    /// arriving through Hero.AddItem can't claim them as a phantom local purchase.</summary>
+    internal static void ClearPendingPurchase()
+    {
+        _pendingActionCard = "";
+        _pendingReplacedItem = "";
+        _awaitingReceipt = false;
+    }
 
     /// <summary>Select a deck row exactly as a click would: pass its private "id_index" key.</summary>
     private static void SelectRow(CardCraftManager m, CardVertical row)
@@ -1619,10 +1777,12 @@ internal static class CardCraftScreenManager
         sb.Append(" ").Append(n).Append(n == 1 ? " card." : " cards.");
     }
 
-    /// <summary>Map-event shops are often use-limited; the label only exists when that applies.</summary>
+    /// <summary>Map-event shops are often use-limited; the label only exists when that applies.
+    /// The game toggles the PARENT usesLeftT — the child text keeps activeSelf true with stale
+    /// content, so it must not be trusted alone.</summary>
     private static void AppendUsesLeft(StringBuilder sb, CardCraftManager m)
     {
-        if (m.usesLeftText != null && m.usesLeftText.gameObject.activeSelf)
+        if (m.usesLeftT != null && m.usesLeftT.gameObject.activeSelf && m.usesLeftText != null)
         {
             string uses = AccessibleMenuBase.StripRichText(m.usesLeftText.text);
             if (uses.Length > 0)
@@ -1642,6 +1802,7 @@ internal static class CardCraftScreenManager
         // remaining" on top of the MP echo. The echo patch (MpEchoPatches) speaks those.
         if (MpCraftEcho.ReceivingRemote)
             return;
+        _awaitingReceipt = false; // paid path completed; the free-receipt fallback stands down
         var cm = AtOManager.Instance?.CurrencyManager;
         var sb = new StringBuilder(what);
         if (_pendingActionCard.Length > 0)
@@ -1666,6 +1827,10 @@ internal static class CardCraftScreenManager
         var m = Mgr;
         if (!Owned(m) || m.craftType != 4 || _pendingActionCard.Length == 0)
             return;
+        // A partner's approved buy lands here too (NET_AddItemToHero → Hero.AddItem on every
+        // client) — with stale pending strings that would speak a phantom local purchase.
+        if (MpItemEcho.ReceivingRemote)
+            return;
         var cm = AtOManager.Instance?.CurrencyManager;
         var sb = new StringBuilder("Bought and equipped ").Append(_pendingActionCard);
         if (_pendingReplacedItem.Length > 0)
@@ -1686,6 +1851,23 @@ public class HeroAddItemPatch
     {
         CardCraftScreenManager.OnItemPurchaseCompleted();
     }
+}
+
+/// <summary>A partner's approved armory buy reaches every other client as NET_AddItemToHero →
+/// Hero.AddItem — the same method the local announcer patches. Mirror of the MpCraftEcho
+/// pattern (finalizer-cleared so an exception can't strand the flag) so OnItemPurchaseCompleted
+/// can tell the receive apart from a local purchase.</summary>
+[HarmonyPatch(typeof(AtOManager), nameof(AtOManager.NET_AddItemToHero))]
+public class MpItemAddReceivePatch
+{
+    static void Prefix() => MpItemEcho.ReceivingRemote = true;
+    static void Finalizer() => MpItemEcho.ReceivingRemote = false;
+}
+
+internal static class MpItemEcho
+{
+    /// <summary>True while a NET_AddItemToHero receive is executing (synchronous chain).</summary>
+    internal static bool ReceivingRemote;
 }
 
 /// <summary>MP map (event) shops close by ready-vote: when every player is ready the master's

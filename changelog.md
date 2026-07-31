@@ -350,3 +350,27 @@
   spoken in the game's language instead of their internal English names.
 - When follow-the-leader auto-picks a story-event choice for you, it is announced as
   "Following the host: …" instead of "Selected: …" as if you had chosen it.
+- The Church now follows the game's real removal rules: injuries and boons can no longer be
+  removed from a 15-card deck the game's own button would refuse, injuries are correctly
+  reported as permanent in town at New Game Plus 9 and above, and every refusal explains
+  itself instead of silently doing nothing.
+- Altar transmutes (re-pathing an already-upgraded card) now announce the real target card
+  instead of "unknown card", in both the preview and the purchase confirmation.
+- Free crafts, removals and upgrades (discounts, certain town upgrades, Singularity) are now
+  announced when they complete instead of finishing silently.
+- Shops now explain refusals the game keeps silent: "No uses left at this shop" on exhausted
+  event shops, and "X owns this hero — only they can buy for it" when serving a partner's
+  hero in multiplayer. These are spoken before anything is selected, so the Altar preview can
+  no longer describe a stale, previously-selected card.
+- The Armory reroll button now says "No rerolls left in this town" when the town allowance
+  is spent, instead of falsely announcing "Rerolled"; its row label also reports the state.
+- A denied multiplayer purchase no longer causes a later partner's buy to be mis-announced
+  as your own ("Bought and equipped X, replacing Y").
+- The shady deal now refuses when unavailable, and announces what was actually traded
+  ("Traded 40 dust for 100 gold") instead of completing silently.
+- Escape during a purchase animation now says "Please wait, finishing the purchase" instead
+  of doing nothing silently.
+- Shift+Tab in the Armory now cycles regions backwards, matching other screens.
+- Free multiplayer divinations no longer double-announce (the waiting-for-players line is
+  the single announcement).
+- Event-shop "uses left" is no longer appended from a hidden, stale label on unlimited shops.

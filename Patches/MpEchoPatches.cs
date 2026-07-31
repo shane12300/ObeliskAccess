@@ -42,6 +42,9 @@ public class MpBuyDeniedAnnouncePatch
     {
         if (!MpSpeech.IsMp || approved)
             return;
+        // The denied buy never completes, so the craft screen's pending purchase strings would
+        // stay armed and claim a partner's later item as a phantom local purchase.
+        CardCraftScreenManager.ClearPendingPurchase();
         var cd = Globals.Instance != null ? Globals.Instance.GetCardData(cardId) : null;
         string name = cd != null ? AccessibleMenuBase.StripRichText(cd.CardName ?? "") : "";
         SpeechManager.Speak("Purchase failed" + (name.Length > 0 ? ": " + name : "")
