@@ -15,12 +15,31 @@ namespace ObeliskAccess.Input;
 /// to NextField() (an EventSystem walk that can focus input fields — see the Prefix docs), so the
 /// prefix swallows both on screens the mod drives.
 /// </summary>
+/// <summary>
+/// Shared guards for the router patches below.
+/// </summary>
+internal static class RouterGuards
+{
+    /// <summary>
+    /// The game's on-screen virtual keyboard is up (opened by a synthetic click landing on an
+    /// input field, or gamepad Y in MP). While it shows, the game must own every key — arrows
+    /// drive <c>KeyboardManager.ControllerMovement</c>, Enter clicks the highlighted OSK key —
+    /// or the hidden mod screen beneath would act on keys the user aims at the keyboard.
+    /// </summary>
+    internal static bool OskActive =>
+        KeyboardManager.Instance != null && KeyboardManager.Instance.IsActive();
+}
+
 [HarmonyPatch(typeof(InputController), "DoMovement")]
 public class RouterDoMovementPatch
 {
     static bool Prefix(InputController __instance, InputAction.CallbackContext _context)
     {
         if (!InputRouter.IsKeyboard(_context))
+            return true;
+
+        // On-screen keyboard: the game's arrow dispatch must reach it (see RouterGuards).
+        if (RouterGuards.OskActive)
             return true;
 
         // While the MP chat input is focused the arrows belong to the text caret: swallow the
@@ -63,6 +82,11 @@ public class RouterDoKeyBindingPatch
     {
         var kb = Keyboard.current;
         if (kb == null)
+            return true;
+
+        // On-screen keyboard: Enter must reach DoFirePerformed (it clicks the highlighted OSK
+        // key), and Tab/letters must not be eaten either (see RouterGuards).
+        if (RouterGuards.OskActive)
             return true;
 
         InputControl control = _context.control;
@@ -182,6 +206,10 @@ public class RouterDoKeyBindingPatch
         if (ObeliskAccess.Patches.ChatSpeech.Typing)
             return;
 
+        // On-screen keyboard: keys belong to it, not to the context beneath (see RouterGuards).
+        if (RouterGuards.OskActive)
+            return;
+
         InputRouter.Controller = __instance;
         InputControl control = _context.control;
 
@@ -210,7 +238,7 @@ public class RouterDoButtonNorthPatch
 {
     static bool Prefix()
     {
-        if (KeyboardManager.Instance != null && KeyboardManager.Instance.IsActive())
+        if (RouterGuards.OskActive)
             return true;
         return !(ObeliskAccess.Input.Contexts.CombatInputContext.IsCurrentlyActive
               || ObeliskAccess.Input.Contexts.CombatSelectorInputContext.IsCurrentlyActive
@@ -255,7 +283,15 @@ public class RouterDoFirePerformedPatch
             // Town: the Ctrl of the mod's Ctrl+G give-window opener must not synthetically
             // click a hub building under the stale cursor. Give: Ctrl scales the amount step.
             || ObeliskAccess.Input.Contexts.TownInputContext.IsCurrentlyActive
-            || ObeliskAccess.Input.Contexts.GiveInputContext.IsCurrentlyActive;
+            || ObeliskAccess.Input.Contexts.GiveInputContext.IsCurrentlyActive
+            // The craft screens and lobby carry live TMP input fields (Forge search bar, room
+            // name/password); a bare-Ctrl click landing on one opens the game's on-screen
+            // keyboard over the mod screen. On the event book the click could silently press a
+            // reply the auto-select suppressor then discards. Ctrl has no mod meaning on these
+            // screens — make it inert.
+            || ObeliskAccess.Input.Contexts.CardCraftInputContext.IsCurrentlyActive
+            || ObeliskAccess.Input.Contexts.LobbyInputContext.IsCurrentlyActive
+            || ObeliskAccess.Input.Contexts.EventInputContext.IsCurrentlyActive;
         return !(ctrlModifierScreen && InputRouter.CtrlHeld);
     }
 }
@@ -273,11 +309,10 @@ public class RouterDoEscapePatch
             return false;
         }
 
-        // The game's on-screen virtual keyboard (opened by a synthetic click landing on an input
-        // field, or gamepad Y in MP) can only be closed by the game's own Escape — if a context
+        // The on-screen keyboard can only be closed by the game's own Escape — if a context
         // swallowed Escape here, the overlay would be stuck until a scene change. Let the game
         // handle it (EscapeFunction's first check closes the keyboard).
-        if (KeyboardManager.Instance != null && KeyboardManager.Instance.IsActive())
+        if (RouterGuards.OskActive)
             return true;
 
         InputRouter.Controller = __instance;

@@ -301,3 +301,9 @@
   is on screen.
 - Fixed: submitting text in a dialog no longer announces "Alert closed." ahead of the
   "Submitted…" confirmation — the submit is now the only line spoken, in the right order.
+- Fixed: pressing Ctrl on a shop or service screen, in the multiplayer lobby, or on a story
+  event no longer triggers a hidden click — previously it could open the game's on-screen
+  keyboard over the shop search bar or silently press an event reply.
+- If the game's on-screen keyboard does open (for example from a controller), the arrow keys
+  and Enter now drive the keyboard itself instead of secretly acting on the screen beneath
+  it; Escape closes it as before.
