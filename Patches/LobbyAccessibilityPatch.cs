@@ -857,12 +857,16 @@ public class LobbyStatusAnnouncePatch
 /// <summary>A wrong room password fails with NO feedback at all in the game (GetRoomPassword
 /// simply does nothing on mismatch — no alert, no retry): the player hears the input alert
 /// close and lands back on the Join panel unexplained. On a match the method clears the private
-/// roomPassword field before joining, so a non-empty field after the call means mismatch.</summary>
+/// roomPassword field before joining, so a non-empty field after the call means mismatch.
+/// Cancelling the prompt fires this same delegate WITHOUT a submit (the CloseAlert path),
+/// which also mismatches — only speak for an actual submit.</summary>
 [HarmonyPatch(typeof(LobbyManager), "GetRoomPassword")]
 public class LobbyWrongPasswordAnnouncePatch
 {
     static void Postfix(LobbyManager __instance)
     {
+        if (!AlertDialogueManager.InputSubmittedThisFrame)
+            return;
         string pwd = Traverse.Create(__instance).Field<string>("roomPassword").Value;
         if (!string.IsNullOrEmpty(pwd))
             SpeechManager.Speak("Wrong password. Press Enter on the room to try again.");

@@ -292,3 +292,12 @@
 - Fixed: opening the give window from the Forge's gold button now correctly takes over the
   keyboard — previously Enter kept buying shop items behind the give window, and on a
   travelling shop Escape could cast a ready-vote instead of closing it.
+- Fixed: cancelling the room-password prompt with Escape no longer announces "Wrong
+  password" — that is only spoken when a password was actually submitted and rejected.
+- Fixed: after submitting text in a dialog (run seed, room password, perk import), the next
+  dialog answered by mouse or controller could close silently; answers are spoken again.
+- Fixed: pressing Escape on a text-entry dialog could speak a leftover button label from an
+  earlier dialog (for example "Keep deck"); it now says "Cancelled." when no cancel button
+  is on screen.
+- Fixed: submitting text in a dialog no longer announces "Alert closed." ahead of the
+  "Submitted…" confirmation — the submit is now the only line spoken, in the right order.

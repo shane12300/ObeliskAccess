@@ -26,6 +26,8 @@ internal static class AlertDialogueManager
         public string Speech;
         public Action Activate; // null = plain text row
         public bool IsEdit;     // the text-field row: Enter starts editing, not an answer
+        public bool IsSubmit;   // the input-accept row: AlertInputSuccess announces itself and
+                                // never goes through SetConfirmAnswer — skip answer bookkeeping
     }
 
     private static Kind _kind = Kind.None;
@@ -40,7 +42,9 @@ internal static class AlertDialogueManager
     //    previous alert's delegate) queues instead of clobbering the answer announcement.
     //  - _suppressAnswerSpeech: our own Confirm() already spoke the chosen label.
     //  - _inputSuccessFrame: AlertInputSuccess ran this frame (TMP's own submit wiring may fire it
-    //    on Enter before our Confirm sees the key) — dedupes a double submit.
+    //    on Enter before our Confirm sees the key) — dedupes a double submit. Stamped in a PREFIX:
+    //    AlertInputSuccess calls HideAlert inside itself, so a postfix stamp would come too late
+    //    for OnHidden's silence check.
     private static int _answeredFrame = -1;
     private static bool _suppressAnswerSpeech;
     private static int _inputSuccessFrame = -1;
@@ -136,10 +140,17 @@ internal static class AlertDialogueManager
         var am = AlertManager.Instance;
         if (am == null || !_active)
             return;
+        // HideAlert hides the button parents but never clears their .text, so a label read from
+        // a hidden button is whatever the *previous* dialog wrote — only trust visible buttons.
         bool singleVisible = am.alertTextSingleButton.transform.parent.gameObject.activeSelf;
-        _labelAccept = AccessibleMenuBase.StripRichText(
-            singleVisible ? am.alertTextSingleButton.text : am.alertTextRightButton.text);
-        _labelCancel = AccessibleMenuBase.StripRichText(am.alertTextLeftButton.text);
+        bool rightVisible = am.alertTextRightButton.transform.parent.gameObject.activeSelf;
+        bool leftVisible = am.alertTextLeftButton.transform.parent.gameObject.activeSelf;
+        _labelAccept = singleVisible ? AccessibleMenuBase.StripRichText(am.alertTextSingleButton.text)
+            : rightVisible ? AccessibleMenuBase.StripRichText(am.alertTextRightButton.text)
+            : "Accepted.";
+        _labelCancel = leftVisible
+            ? AccessibleMenuBase.StripRichText(am.alertTextLeftButton.text)
+            : "Cancelled.";
         _answeredFrame = Time.frameCount;
     }
 
@@ -154,8 +165,25 @@ internal static class AlertDialogueManager
             SpeechManager.Speak(status ? _labelAccept : _labelCancel);
     }
 
+    /// <summary>AlertInputSuccess prefix: it calls HideAlert inside itself, so the frames must be
+    /// stamped before the original runs or OnHidden speaks "Alert closed." ahead of the submit
+    /// announcement. Also lets delegate postfixes (e.g. the lobby's wrong-password check) tell a
+    /// real submit from a cancel that merely fired the same delegate.</summary>
+    public static void OnInputSubmitStarting()
+    {
+        _inputSuccessFrame = Time.frameCount;
+        _answeredFrame = Time.frameCount;
+    }
+
+    /// <summary>True only in the frame the input alert's text was actually submitted — a
+    /// cancel/Escape fires the alert's delegate without any submit.</summary>
+    public static bool InputSubmittedThisFrame => Time.frameCount == _inputSuccessFrame;
+
     public static void OnInputSubmitted()
     {
+        // AlertInputSuccess never goes through SetConfirmAnswer, so a suppress flag armed for it
+        // would survive and eat the NEXT alert's answer announcement.
+        _suppressAnswerSpeech = false;
         _inputSuccessFrame = Time.frameCount;
         _answeredFrame = Time.frameCount;
         var am = AlertManager.Instance;
@@ -316,6 +344,15 @@ internal static class AlertDialogueManager
             return;
         }
 
+        // The input-accept row announces itself ("Submitted X" from the AlertInputSuccess
+        // patch) and never reaches SetConfirmAnswer — arming the suppress flag here would
+        // leave it set for the next alert's answer.
+        if (row.IsSubmit)
+        {
+            row.Activate();
+            return;
+        }
+
         _suppressAnswerSpeech = true;
         _answeredFrame = Time.frameCount;
         SpeechManager.Speak(row.Speech);
@@ -424,7 +461,7 @@ internal static class AlertDialogueManager
         if (_kind == Kind.Input && am.alertInputButtonText.transform.parent.gameObject.activeSelf)
         {
             string label = AccessibleMenuBase.StripRichText(am.alertInputButtonText.text);
-            rows.Add(new Row { Speech = label + ", button", Activate = am.AlertInputSuccess });
+            rows.Add(new Row { Speech = label + ", button", Activate = am.AlertInputSuccess, IsSubmit = true });
         }
 
         return rows;
@@ -471,6 +508,9 @@ public class AlertAnswerPatch
 [HarmonyPatch(typeof(AlertManager), nameof(AlertManager.AlertInputSuccess))]
 public class AlertInputSuccessPatch
 {
+    // Prefix, not postfix: the original calls HideAlert inside itself, and the frame stamps
+    // must be in place before that postfix decides whether to speak "Alert closed."
+    static void Prefix() => AlertDialogueManager.OnInputSubmitStarting();
     static void Postfix() => AlertDialogueManager.OnInputSubmitted();
 }
 
