@@ -385,3 +385,29 @@
 - The rewards Restart row now disappears from arrow navigation once every hero has chosen,
   and a late Enter says "Restart is no longer available — everyone has chosen" instead of
   firing a restart request at the host during the closing animation.
+- The hero-selection character window's Card Backs tab no longer double-counts its items on
+  a second visit (rows were being read from buttons the game was in the middle of replacing);
+  the tab now announces once its list has settled.
+- Closing the card-backs panel with the mouse is now detected: arrows return to the tab
+  actually on screen instead of walking an invisible list, and Enter refuses to equip a card
+  back sight-unseen while the panel is closed.
+- Equipping a skin no longer silently dumps you back to the hero list — the game closes the
+  whole character window as a side effect, and the mod now reopens it on the Skins tab and
+  confirms "equipped" with the list ready to browse.
+- Clicking the portrait of the hero whose window is already open (or re-opening the same
+  tab) no longer restarts the full window announcement or loses your reading position — on
+  the in-run character sheet too, which now keeps your place through the game's silent
+  refreshes.
+- Character-sheet stats no longer report phantom negative "charge bonuses" that the game's
+  own stats window never shows (purely negative aura modifiers now merge exactly the way
+  the game merges them).
+- Deck and pile card lists number their entries correctly when a card fails to resolve —
+  "3 of 7" positions no longer skip.
+- Closing the mid-run upgraded-cards popup now says "Upgraded cards closed" instead of
+  "Character sheet closed".
+- The perk tree's Reset row now says "No perks selected — nothing to reset" instead of
+  falsely promising a save, and perk text ending in "!" or "?" no longer gains a stray
+  period in speech.
+- The character window explains the real reason Perks, Rank and Card Backs are unavailable
+  during a weekly challenge (previously it blamed a "locked hero"), and a full party in
+  multiplayer now gives the correct replace-your-own-slot hint.

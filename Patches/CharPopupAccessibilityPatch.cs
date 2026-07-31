@@ -37,6 +37,9 @@ internal static class CharPopupScreenManager
     private static int _openedFrame = -1;
     private static int _cardbackCategory;
     private static bool _selfTabSwitch;
+    private static string _heroId;
+    private static bool _reequipping;       // skin equip closes+reopens the window under us
+    private static int _cardbackBuildTicks; // >0: card-backs rows rebuild deferred (see Tick)
 
     private static readonly Tab[] TabOrder =
         { Tab.Stats, Tab.Perks, Tab.Rank, Tab.Skins, Tab.CardBacks, Tab.Singularity };
@@ -50,11 +53,47 @@ internal static class CharPopupScreenManager
 
     // ------------------------------------------------------------------ lifecycle
 
-    /// <summary>Per-frame tick from the poller: drops state when the window went away by mouse.</summary>
+    /// <summary>Per-frame tick from the poller: drops state when the window went away by mouse,
+    /// lands deferred card-backs rebuilds, and resyncs when the card-backs panel is closed by
+    /// mouse (its close button is a raw SetActive — there is no method to patch).</summary>
     public static void Tick()
     {
         if (_open && (Popup == null || !Popup.IsOpened()))
-            ResetState();
+        {
+            if (!_reequipping)
+                ResetState();
+            return;
+        }
+        if (_cardbackBuildTicks > 0)
+        {
+            if (!IsOpen || _tab != Tab.CardBacks)
+            {
+                _cardbackBuildTicks = 0; // tab/window went away before the build landed
+            }
+            else if (--_cardbackBuildTicks == 0)
+            {
+                _cardbackCategory = 0;
+                var panel = CardbackPanel();
+                if (panel != null && panel.cardStartingPositions != null
+                    && panel.cardStartingPositions.Length > 0)
+                    panel.EnableTab(0);
+                _rowIndex = -1;
+                BuildRows();
+                SpeechManager.Speak(TabName(Tab.CardBacks) + " tab. " + RowCountHint());
+            }
+            return;
+        }
+        if (IsOpen && _tab == Tab.CardBacks
+            && (Mgr == null || Mgr.CardBacksPopUp == null || !Mgr.CardBacksPopUp.activeSelf))
+        {
+            // Panel closed behind our back (mouse on its close button).
+            _tab = ResolveVisibleTab(Popup);
+            _rowIndex = -1;
+            _cardbackCategory = 0;
+            BuildRows();
+            SpeechManager.Speak("Card backs panel closed. " + TabName(_tab) + " tab. "
+                + RowCountHint());
+        }
     }
 
     private static void ResetState()
@@ -64,6 +103,8 @@ internal static class CharPopupScreenManager
         _rows.Clear();
         _openedFrame = -1;
         _cardbackCategory = 0;
+        _heroId = null;
+        _cardbackBuildTicks = 0;
     }
 
     /// <summary>CharPopup.Show landed (keyboard or mouse right-click).</summary>
@@ -72,7 +113,26 @@ internal static class CharPopupScreenManager
         var popup = Popup;
         if (popup == null || !popup.IsOpened())
             return;
+        if (_reequipping)
+            return; // skin equip re-open — ActivateSkin restores state and speaks
+        string id = popup.GetActive();
+        if (_open && id == _heroId)
+        {
+            // No-op Show: the game's tab buttons run ShowXxx then Show unconditionally
+            // (DoCharPopMenu), and several paths re-Show the open window. Resync the tab
+            // silently and keep the reading position — the full arrival would stomp the
+            // tab announcement the ShowXxx resync patch just spoke.
+            var t = ResolveVisibleTab(popup);
+            if (t != _tab && !(_tab == Tab.Perks && t == Tab.Stats))
+            {
+                _tab = t;
+                _rowIndex = -1;
+                BuildRows();
+            }
+            return;
+        }
         _open = true;
+        _heroId = id;
         _openedFrame = Time.frameCount;
         _tab = ResolveVisibleTab(popup);
         _rowIndex = -1;
@@ -92,6 +152,8 @@ internal static class CharPopupScreenManager
     {
         if (!_open)
             return;
+        if (_reequipping)
+            return; // side-effect close during a skin equip — ActivateSkin handles it
         ResetState();
         SpeechManager.Speak("Character window closed.");
     }
@@ -103,6 +165,13 @@ internal static class CharPopupScreenManager
             return;
         _tab = tab;
         _rowIndex = -1;
+        if (tab == Tab.CardBacks)
+        {
+            // Deferred past DoCardbacks' end-of-frame destroys — see SwitchToTab.
+            _rows.Clear();
+            _cardbackBuildTicks = 2;
+            return;
+        }
         BuildRows();
         SpeechManager.Speak(TabName(tab) + " tab. " + RowCountHint());
     }
@@ -176,6 +245,10 @@ internal static class CharPopupScreenManager
 
     private static string UnavailableNote()
     {
+        // Weekly first: the game blocks EVERY portrait in the weekly challenge, so the
+        // locked-hero wording would misattribute the reason.
+        if (GameManager.Instance != null && GameManager.Instance.IsWeeklyChallenge())
+            return "Perks, Rank and Card Backs are not available in the weekly challenge";
         if (GameManager.Instance != null && GameManager.Instance.IsObeliskChallenge())
             return "Perks and Rank are not available in Obelisk challenges";
         if (HeroBlocked())
@@ -245,13 +318,14 @@ internal static class CharPopupScreenManager
         HeroSpeech.PlayButtonFocusSound();
         if (tab == Tab.CardBacks)
         {
-            // Pin the panel to the first category so page flips target the container our
-            // rows were built from.
-            _cardbackCategory = 0;
-            var panel = CardbackPanel();
-            if (panel != null && panel.cardStartingPositions != null
-                && panel.cardStartingPositions.Length > 0)
-                panel.EnableTab(0);
+            // ShowCardbacks → DoCardbacks destroys and recreates every page, but the
+            // destroys are deferred to end of frame — building rows now would double-count
+            // doomed buttons (the game itself waits, via Task.Delay, before touching the
+            // pages). Defer the build + announce to Tick; it also pins category 0 so page
+            // flips target the container the rows were built from.
+            _rows.Clear();
+            _cardbackBuildTicks = 2;
+            return;
         }
         BuildRows();
         SpeechManager.Speak(TabName(tab) + " tab. " + RowCountHint());
@@ -562,10 +636,41 @@ internal static class CharPopupScreenManager
         }
         string name = boton.skinName != null
             ? AccessibleMenuBase.StripRichText(boton.skinName.text) : "Skin";
-        boton.OnMouseUp(); // guarded internally; rebuilds the skin list (DoSkins)
-        _rowIndex = -1;    // rows were rebuilt under us
-        BuildRows();
-        SpeechManager.Speak(name + " equipped.");
+        var popup = Popup;
+        // Equipping runs BotonSkin.OnMouseUp → CharPopupMini.SetSubClassData, which ends in
+        // charPopup.Close() — the whole window closes as a side effect. Suppress our
+        // open/close speech and re-open on the Skins tab (SCD/activeId survive Close) so
+        // the user stays where they were.
+        _reequipping = true;
+        _selfTabSwitch = true;
+        try
+        {
+            boton.OnMouseUp();
+            if (popup != null && !popup.IsOpened())
+            {
+                popup.Show();
+                popup.ShowSkins();
+            }
+        }
+        finally
+        {
+            _reequipping = false;
+            _selfTabSwitch = false;
+        }
+        if (popup != null && popup.IsOpened())
+        {
+            _open = true;
+            _tab = Tab.Skins;
+            _rowIndex = -1;
+            BuildRows();
+            SpeechManager.Speak(name + " equipped. " + RowCountHint());
+        }
+        else
+        {
+            // Re-open didn't take — accept the close, but say where the user landed.
+            ResetState();
+            SpeechManager.Speak(name + " equipped — character window closed.");
+        }
     }
 
     private static void BuildCardbackRows()
@@ -625,6 +730,13 @@ internal static class CharPopupScreenManager
 
     private static void ActivateCardback(BotonCardback boton)
     {
+        // BotonCardback.OnMouseUp has no visibility guard — refuse if the panel was closed
+        // behind us (Tick resyncs the tab a frame later).
+        if (Mgr == null || Mgr.CardBacksPopUp == null || !Mgr.CardBacksPopUp.activeSelf)
+        {
+            SpeechManager.Speak("The card backs panel is closed.");
+            return;
+        }
         bool unlocked = Traverse.Create(boton).Field<bool>("unlocked").Value;
         if (!unlocked)
         {
@@ -724,7 +836,8 @@ internal static class CharPopupScreenManager
 
     private static void BuildRowsIfEmpty()
     {
-        if (_rows.Count == 0)
+        // Never build while a card-backs rebuild is pending — the pages are mid-destroy.
+        if (_rows.Count == 0 && _cardbackBuildTicks == 0)
             BuildRows();
     }
 

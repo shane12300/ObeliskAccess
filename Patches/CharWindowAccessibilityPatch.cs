@@ -129,6 +129,7 @@ internal static class CharWindowScreenManager
             || (isHero && _heroIndex != window.heroIndex)
             || (!isHero && _heroIndex != window.npcIndex);
         bool tabChanged = _element != element;
+        int keepRow = _rowIndex;
 
         _open = true;
         _popupMode = false;
@@ -153,15 +154,21 @@ internal static class CharWindowScreenManager
         {
             SpeechManager.Speak(TabName(_element) + " tab. " + RowCountHint());
         }
-        // Same hero, same tab: a silent refresh (the game re-shows on several paths).
+        else if (keepRow >= 0 && _rows.Count > 0)
+        {
+            // Same hero, same tab: a silent refresh (the game re-shows on several paths,
+            // e.g. clicking the already-open hero's portrait) — keep the reading position.
+            _rowIndex = Math.Min(keepRow, _rows.Count - 1);
+        }
     }
 
     public static void OnHidden()
     {
         if (!_open)
             return;
+        bool popup = _popupMode; // ResetState clears it
         ResetState();
-        SpeechManager.Speak("Character sheet closed.");
+        SpeechManager.Speak(popup ? "Upgraded cards closed." : "Character sheet closed.");
     }
 
     /// <summary>The mid-run "cards upgraded" popup (random-upgrade events). FinishRun's
@@ -656,15 +663,20 @@ internal static class CharWindowScreenManager
 
     private static void AddCardRows(List<string> ids, Hero hero)
     {
-        int total = ids.Count;
-        for (int i = 0; i < ids.Count; i++)
+        // Resolve first so ids that fail to resolve don't leave gaps in the "N of M" numbering.
+        var resolved = new List<KeyValuePair<CardRealtimeData, int?>>();
+        foreach (var id in ids)
         {
-            var cd = ResolveCard(ids[i], hero, out int? liveCost);
-            if (cd == null)
-                continue;
+            var cd = ResolveCard(id, hero, out int? liveCost);
+            if (cd != null)
+                resolved.Add(new KeyValuePair<CardRealtimeData, int?>(cd, liveCost));
+        }
+        int total = resolved.Count;
+        for (int i = 0; i < resolved.Count; i++)
+        {
+            var captured = resolved[i].Key;
+            var capturedCost = resolved[i].Value;
             int position = i + 1;
-            var captured = cd;
-            var capturedCost = liveCost;
             _rows.Add(new Row
             {
                 Read = () => CardSpeech.BriefLine(captured, capturedCost)
@@ -1224,14 +1236,19 @@ internal static class CharWindowScreenManager
     private static string ChargeModifierText(Character character)
     {
         var merged = new Dictionary<string, int>();
-        MergeCharges(merged, character.GetItemAuraCurseModifiers(), positiveOnly: false);
-        MergeCharges(merged, character.GetTraitAuraCurseModifiers(), positiveOnly: true);
+        MergeCharges(merged, character.GetItemAuraCurseModifiers(),
+            accumulateNegatives: true, createNegatives: true);
+        MergeCharges(merged, character.GetTraitAuraCurseModifiers(),
+            accumulateNegatives: false, createNegatives: false);
         Dictionary<string, int> baseDict = character.HeroData != null
             && character.HeroData.HeroSubClass != null
             ? Perk.GetAuraCurseBonusDict(character.HeroData.HeroSubClass.Id)
             : character.AuraCurseModification;
-        MergeCharges(merged, baseDict, positiveOnly: true);
-        MergeCharges(merged, character.GetAurasAuraCurseModifiers(), positiveOnly: false);
+        MergeCharges(merged, baseDict, accumulateNegatives: false, createNegatives: false);
+        // Auras accumulate onto existing keys regardless of sign, but the game never creates
+        // a key from a purely negative aura modifier (StatsWindowUI.DoStats).
+        MergeCharges(merged, character.GetAurasAuraCurseModifiers(),
+            accumulateNegatives: true, createNegatives: false);
 
         var parts = new List<string>();
         foreach (var pair in merged)
@@ -1247,7 +1264,7 @@ internal static class CharWindowScreenManager
     }
 
     private static void MergeCharges(Dictionary<string, int> into,
-        Dictionary<string, int> from, bool positiveOnly)
+        Dictionary<string, int> from, bool accumulateNegatives, bool createNegatives)
     {
         if (from == null)
             return;
@@ -1257,10 +1274,10 @@ internal static class CharWindowScreenManager
                 continue;
             if (into.ContainsKey(pair.Key))
             {
-                if (!positiveOnly || pair.Value > 0)
+                if (accumulateNegatives || pair.Value > 0)
                     into[pair.Key] += pair.Value;
             }
-            else if (!positiveOnly || pair.Value > 0)
+            else if (createNegatives || pair.Value > 0)
             {
                 into.Add(pair.Key, pair.Value);
             }

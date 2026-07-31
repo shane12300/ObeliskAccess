@@ -851,7 +851,10 @@ internal static class HeroSelectionScreenManager
         int slot = FirstEmptyOwnSlot(hsm);
         if (slot < 0)
         {
-            SpeechManager.Speak("Party is full — press 1 through 4 to replace a slot.");
+            // In MP only the player's own box can be replaced — 1-4 would refuse on the rest.
+            SpeechManager.Speak(MpSpeech.IsMp
+                ? "Your slot is already filled — press its number to replace that hero, or clear it first."
+                : "Party is full — press 1 through 4 to replace a slot.");
             return;
         }
         AssignHero(hsm, hs, slot);
