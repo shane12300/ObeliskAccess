@@ -128,7 +128,7 @@ internal static class TownScreenManager
                 Detail = () => tm.joinDivinationText != null
                     ? CardSpeech.CleanFlat(tm.joinDivinationText.text)
                     : "",
-                Activate = () => AtOManager.Instance?.JoinCardDivination(),
+                Activate = () => { var a = AtOManager.Instance; if (a != null) a.JoinCardDivination(); },
             });
         }
 
@@ -285,7 +285,9 @@ internal static class TownScreenManager
     {
         // Same alert the game shows for a mouse click on the wrong building; the global
         // alert dialogue speaks and drives it.
-        AlertManager.Instance?.AlertConfirm(Texts.Instance.GetText("tutorialTownNeedComplete"));
+        var am = AlertManager.Instance;
+        if (am != null)
+            am.AlertConfirm(Texts.Instance.GetText("tutorialTownNeedComplete"));
     }
 
     // ---------------------------------------------------------------- navigation
@@ -303,6 +305,15 @@ internal static class TownScreenManager
         {
             SpeechManager.Speak("Nothing here");
             return;
+        }
+        // Re-anchor on the row last HEARD before stepping, the same way Activate does: the MP
+        // divination invite inserts itself at index 0 (and a claimed treasure drops out), so a raw
+        // index would silently re-read one row or skip one when the list shifts under us.
+        if (_index >= 0 && _focusedKey != null && _entries[_index].Key != _focusedKey)
+        {
+            int relocated = _entries.FindIndex(e => e.Key == _focusedKey);
+            if (relocated >= 0)
+                _index = relocated;
         }
         if (_index < 0)
             _index = delta > 0 ? 0 : _entries.Count - 1;
@@ -403,7 +414,8 @@ internal static class TownScreenManager
 
     public static void SpeakCurrencies()
     {
-        var cm = AtOManager.Instance?.CurrencyManager;
+        var ato = AtOManager.Instance;
+        var cm = ato != null ? ato.CurrencyManager : null;
         int gold = cm != null ? cm.GetPlayerGold() : 0;
         int dust = cm != null ? cm.GetPlayerDust() : 0;
         int supply = PlayerManager.Instance != null ? PlayerManager.Instance.SupplyActual : 0;
@@ -462,7 +474,8 @@ internal static class TownScreenManager
         string name = "";
         if (Texts.Instance != null)
         {
-            var zds = Globals.Instance?.ZoneDataSource;
+            var globals = Globals.Instance;
+            var zds = globals != null ? globals.ZoneDataSource : null;
             string id = zoneId.ToLower();
             name = zds != null && zds.ContainsKey(id) && zds[id] != null
                 ? Texts.Instance.GetText(zds[id].ZoneName)

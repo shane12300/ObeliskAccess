@@ -16,8 +16,10 @@ namespace ObeliskAccess.Input.Contexts;
 /// </summary>
 public class MapInputContext : InputContextBase
 {
-    /// <summary>The map's activation test, exposed statically so the <c>DoFirePerformed</c> prefix
-    /// (which has no context instance) can gate its Ctrl-click suppression on it.</summary>
+    /// <summary>The map's activation test, exposed statically for <c>MapNavigator.TickArrival</c>,
+    /// which has no context instance and must not narrate a map the player cannot touch yet. The
+    /// router's key suppressions are declared via the <see cref="IInputContext"/> flags, not
+    /// this property.</summary>
     public static bool IsCurrentlyActive
     {
         get

@@ -30,10 +30,11 @@ public class CombatHotkeyPoller : MonoBehaviour
             return;
 
         // Flush any buffered combat events regardless of focus/modal state.
-        CombatNavigator.TickFlush();
+        // Each tick is isolated so one throwing cannot starve the others (see SafeTick).
+        InputRouter.SafeTick(CombatNavigator.TickFlush, "combat-flush");
 
         // Selector-window lifecycle tick (cheap no-op when no window is up).
-        CombatSelectorManager.Tick();
+        InputRouter.SafeTick(CombatSelectorManager.Tick, "combat-selector");
 
         // Death popup: Alt+T reads the Death's Door curse, Alt+R repeats.
         if (InputRouter.IsActive(DeathContext))

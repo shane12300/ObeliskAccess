@@ -22,7 +22,15 @@ internal static class TutorialPopupManager
     private static bool _active;
     private static BotonGeneric _continueButton;
 
-    public static bool Active => _active;
+    /// <summary>
+    /// Screen-open test, paired with live game state like every other manager. The flag alone is
+    /// not enough: this context sits at priority 3, above Settings/Combat/Map/everything but the
+    /// alert layer, so a flag left stuck (a popup torn down by a path that skips
+    /// HideTutorialPopup) would swallow every arrow and Enter on every screen beneath — an
+    /// unrecoverable lockout. IsTutorialActive() is the game's own popTutorialGO test.
+    /// </summary>
+    public static bool Active => _active
+        && GameManager.Instance != null && GameManager.Instance.IsTutorialActive();
 
     public static void OnOpened(PopTutorialManager pop)
     {
@@ -74,7 +82,7 @@ internal static class TutorialPopupManager
         _index = 0;
         _active = true;
 
-        // Single clipboard write (last-write-wins), so build one utterance:
+        // Single interrupting Speak (last-write-wins), so build one utterance:
         // name + first body line. When the body is a single line, that line IS the whole body.
         string announcement = title;
         if (lines.Count > 1)
@@ -118,8 +126,8 @@ internal static class TutorialPopupManager
         var button = _entries[_index].Button;
         if (button != null)
             button.Clicked();
-        else
-            _continueButton?.Clicked();
+        else if (_continueButton != null) // NOT ?. — that bypasses Unity's destroyed-object ==
+            _continueButton.Clicked();
     }
 
 }

@@ -5,8 +5,9 @@ namespace ObeliskAccess.Input.Contexts;
 
 /// <summary>
 /// The five town service screens (Altar / Church / Forge / Divination / Armory), all one game
-/// prefab (<c>CardCraftManager</c>, craftType 0–4). Types 5–7 (challenge setup, corruption
-/// flows) are deliberately excluded — they have their own handling. These screens also open over
+/// prefab (<c>CardCraftManager</c>, craftType 0–4). Types 6–7 (corruption flows) are excluded
+/// because <c>CorruptionAccessibility</c> owns them; type 5 (Obelisk challenge setup) is excluded
+/// because it is not adapted yet at all — see todo.md. These screens also open over
 /// the map (event shops/healers), so this context sits above the map and event contexts. Confirm
 /// alerts (tutorial warnings, buy failures) are owned by the global alert dialogue, which
 /// outranks this context. All state and speech live in <see cref="CardCraftScreenManager"/>;

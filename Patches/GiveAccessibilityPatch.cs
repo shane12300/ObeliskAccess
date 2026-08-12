@@ -91,13 +91,16 @@ internal static class GiveScreenManager
             Close();
             return;
         }
-        if (dir > 0)
-            gm.NextTarget();
-        else
-            gm.PrevTarget();
-        if (TargetIsEmptySeat(gm))
+        // Do NOT delegate to the game's NextTarget/PrevTarget. They wrap playerTarget against
+        // GetNumPlayers() — a count of NON-EMPTY entries — while GetPlayerNickPosition indexes the
+        // RAW array, which RemovePlayerPosition blanks in place without compacting. With a hole in
+        // the middle (["a", "", "c"]) the seat past the hole is unreachable in both directions,
+        // forever: the mouse UI never exposes this because it hides its buttons instead. Walk the
+        // raw array ourselves and seat playerTarget on a real occupant.
+        if (!SeatNextTarget(gm, dir))
         {
-            SpeechManager.Speak("Empty seat — press Left or Right again.");
+            SpeechManager.Speak("No other player can be reached. Closing the give window.");
+            Close();
             return;
         }
         SpeechManager.Speak("To " + TargetText());
@@ -144,6 +147,37 @@ internal static class GiveScreenManager
         gm.GiveAction(); // closes the window itself
     }
 
+    /// <summary>
+    /// Move <c>playerTarget</c> to the next occupied seat that isn't us, walking the raw position
+    /// array in <paramref name="dir"/> and wrapping. Returns false when no such seat exists (a
+    /// full lap found only holes and ourselves). On success the game's own target label is
+    /// refreshed through its private <c>RefreshTargetName</c>, so <see cref="TargetText"/> and the
+    /// on-screen text stay in agreement.
+    /// </summary>
+    private static bool SeatNextTarget(GiveManager gm, int dir)
+    {
+        var nm = NetworkManager.Instance;
+        if (nm == null)
+            return false;
+        var slots = nm.PlayerPositionListArray();
+        if (slots == null || slots.Length == 0)
+            return false;
+
+        int me = nm.GetMyPosition();
+        int step = dir >= 0 ? 1 : -1;
+        int at = gm.playerTarget;
+        for (int i = 0; i < slots.Length; i++)
+        {
+            at = ((at + step) % slots.Length + slots.Length) % slots.Length;
+            if (at == me || string.IsNullOrEmpty(slots[at]))
+                continue;
+            gm.playerTarget = at;
+            Traverse.Create(gm).Method("RefreshTargetName").GetValue();
+            return true;
+        }
+        return false;
+    }
+
     /// <summary>A mid-run leave blanks the player's PlayerPositionList entry without compacting;
     /// the game's target cycling can land on the hole and GiveAction would send to nick "".</summary>
     private static bool TargetIsEmptySeat(GiveManager gm)
@@ -180,6 +214,14 @@ internal static class GiveScreenManager
             return;
         if (state && gm.IsActive())
         {
+            // ShowGive can seat playerTarget on a blanked slot when someone has left mid-run
+            // (see SeatNextTarget) — move to a real occupant before announcing.
+            if (TargetIsEmptySeat(gm) && !SeatNextTarget(gm, 1))
+            {
+                SpeechManager.Speak("No other player can be reached. Closing the give window.");
+                Close();
+                return;
+            }
             SpeechManager.Speak("Give window. Giving " + Word + ", you have " + Balance()
                 + ". To " + TargetText() + ". Quantity " + gm.quantity
                 + ". Up and Down adjust by 1 — hold Control for 20, Shift for 100, both for 1000."

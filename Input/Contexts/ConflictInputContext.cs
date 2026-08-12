@@ -13,8 +13,10 @@ namespace ObeliskAccess.Input.Contexts;
 /// </summary>
 public class ConflictInputContext : InputContextBase
 {
-    /// <summary>Static so the RouterInputPatches suppressions can gate on it. The Conflict
-    /// property is null except while a conflict is in progress, and permanently null in SP.</summary>
+    /// <summary>Static screen-open test for patches and pollers with no context instance
+    /// (the router's key suppressions are declared via the <see cref="IInputContext"/>
+    /// flags, not this property). The Conflict property is null except while a conflict is
+    /// in progress, and permanently null in SP.</summary>
     public static bool IsCurrentlyActive => ConflictScreenManager.IsOpen;
 
     public override bool IsActive => IsCurrentlyActive;

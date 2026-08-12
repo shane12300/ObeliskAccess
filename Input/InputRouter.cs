@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -10,7 +11,7 @@ namespace ObeliskAccess.Input;
 /// routed to the single highest-priority context that is currently active. This is the one place
 /// that decides who owns input, replacing the per-screen guards that each menu patch used to carry.
 ///
-/// Only <see cref="RouterInputPatches"/> patches the game's <c>InputController</c>; contexts never
+/// Only the patches in <c>RouterInputPatches.cs</c> touch the game's <c>InputController</c>; contexts never
 /// patch it directly, so adding a new screen means registering one context — no existing code changes.
 /// </summary>
 public static class InputRouter
@@ -160,5 +161,28 @@ public static class InputRouter
         if (control == kb[Key.Digit3] || control == kb[Key.Numpad3]) { n = 3; return true; }
         if (control == kb[Key.Digit4] || control == kb[Key.Numpad4]) { n = 4; return true; }
         return false;
+    }
+
+    private static readonly HashSet<string> _tickFailuresLogged = new HashSet<string>();
+
+    /// <summary>
+    /// Run one manager's per-frame tick in isolation. Pollers chain several ticks in a single
+    /// Update, and Unity only catches the exception at the Update boundary — so without this a
+    /// throw in the first tick permanently starves every later one in the same method (e.g. a
+    /// combat-flush failure silently killing selector-window arrival announcements, or a
+    /// hero-selection failure killing the popup/tree mouse-close detection, which strands their
+    /// contexts open). Logged once per tick name so a per-frame fault cannot flood the log.
+    /// </summary>
+    internal static void SafeTick(Action tick, string name)
+    {
+        try
+        {
+            tick();
+        }
+        catch (Exception ex)
+        {
+            if (_tickFailuresLogged.Add(name))
+                Plugin.Logger?.LogError($"[tick] {name} threw (further failures suppressed): {ex}");
+        }
     }
 }

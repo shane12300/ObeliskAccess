@@ -5,19 +5,26 @@ using UnityEngine;
 namespace ObeliskAccess.Input.Contexts;
 
 /// <summary>
-/// Owns the keyboard while a combat is in progress. Deliberately thin: plain arrow keys are left to
-/// the game (its <c>ControllerMovement</c> warps the cursor; a postfix speaks the focused element),
-/// and the game's native combat keys (0–9 cast, Space end-turn, Enter confirm) are left untouched.
-/// This context only adds Ctrl+↑/↓ drill-in and Escape-to-exit-drill; the on-demand Alt review keys
-/// live in <see cref="CombatHotkeyPoller"/>. All state/speech lives in <see cref="CombatNavigator"/>.
+/// Owns the keyboard while a combat is in progress. Plain arrow keys are left to the game (its
+/// <c>ControllerMovement</c> warps the cursor; a postfix speaks the focused element), and the
+/// game's native combat keys (0–9 cast, Space end-turn) are left untouched — including its Enter,
+/// which is why this is the one context with <see cref="SwallowsGameEnter"/> false. On top of that
+/// this context adds Ctrl+↑/↓ drill-in, Escape (cancel a pending ping pick → leave the drill →
+/// drop a held card), and an <see cref="OnConfirm"/> that is itself an activation path: it
+/// completes a multiplayer emote-ping target, casts a held card on the focused character via
+/// <c>ControllerExecute()</c>, and activates own-hand cards via <c>OnMouseUpController()</c>
+/// (both bypass the click raycast, which overlay colliders can eclipse). The on-demand Alt review
+/// keys live in <see cref="CombatHotkeyPoller"/>. All state/speech lives in
+/// <see cref="CombatNavigator"/>.
 /// </summary>
 public class CombatInputContext : InputContextBase
 {
     /// <summary>
-    /// True while a live combat owns input. Exposed statically so the <c>DoFirePerformed</c> Ctrl-click
-    /// guard (which has no context instance) can gate on it, mirroring <see cref="MapInputContext"/>.
-    /// Returns false under any combat modal that steals input (energy picker, death screen, deck/discard
-    /// windows, character stats window) so those keep their own handling.
+    /// True while a live combat owns input. Exposed statically for the announce patches that have
+    /// no context instance (<c>CombatAccessibilityPatch</c>, <c>EmoteAccessibilityPatch</c>); the
+    /// router's own key suppressions are declared via the <see cref="IInputContext"/> flags, not
+    /// this property. Returns false under any combat modal that steals input (energy picker, death
+    /// screen, deck/discard windows, character stats window) so those keep their own handling.
     /// </summary>
     public static bool IsCurrentlyActive
     {
@@ -128,9 +135,17 @@ public class CombatInputContext : InputContextBase
                 handCard = preCard;
         }
         if (handCard != null)
+        {
             handCard.OnMouseUpController();
+        }
         else
-            Traverse.Create(controller).Method("DoFirePerformed").GetValue();
+        {
+            // Flagged so the router's bare-Ctrl suppression lets the mod's own fire through
+            // (a Harmony detour catches reflection invokes too).
+            RouterGuards.SelfFiring = true;
+            try { Traverse.Create(controller).Method("DoFirePerformed").GetValue(); }
+            finally { RouterGuards.SelfFiring = false; }
+        }
 
         // The pickup half of a two-step cast is otherwise silent — say what happened, briefly.
         if (m != null && !wasDragging && m.CardDrag)

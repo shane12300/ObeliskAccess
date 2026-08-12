@@ -13,8 +13,10 @@ namespace ObeliskAccess.Input.Contexts;
 /// focused item" means — so they are one context that branches on the live screen state rather
 /// than three patches that had to guard against each other.
 ///
-/// Arrow navigation is left to the game's own <c>controllerList</c> movement (announced by
-/// <c>MainMenuNavigationPatch</c>), so <see cref="OnMove"/> is not overridden.
+/// On the main-menu and save-slot screens, arrow navigation is left to the game's own
+/// <c>controllerList</c> movement (announced by <c>MainMenuNavigationPatch</c>).
+/// <see cref="OnMove"/> is overridden solely to take movement over on the game-mode screen, whose
+/// spatial row walk is replaced with a linear list.
 /// </summary>
 public class MainMenuInputContext : InputContextBase
 {
@@ -173,7 +175,11 @@ public class MainMenuInputContext : InputContextBase
         // Standard buttons (Play, Back, section buttons): reproduce the game's Enter click. The
         // game's own Enter → DoFirePerformed is suppressed while this context owns input (see
         // RouterDoKeyBindingPatch), so this is the only fire — exactly one activation per press.
-        Traverse.Create(controller).Method("DoFirePerformed").GetValue();
+        // Flagged so the router's bare-Ctrl suppression lets the mod's own fire through
+        // (a Harmony detour catches reflection invokes too).
+        RouterGuards.SelfFiring = true;
+        try { Traverse.Create(controller).Method("DoFirePerformed").GetValue(); }
+        finally { RouterGuards.SelfFiring = false; }
         return true;
     }
 }

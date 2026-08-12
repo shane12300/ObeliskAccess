@@ -11,7 +11,9 @@ namespace ObeliskAccess.Input.Contexts;
 /// </summary>
 public class GiveInputContext : InputContextBase
 {
-    /// <summary>Static so the RouterInputPatches suppressions can gate on it.</summary>
+    /// <summary>Static screen-open test for patches and pollers with no context instance.
+    /// (The router's key suppressions are declared via the <see cref="IInputContext"/>
+    /// flags, not this property.)</summary>
     public static bool IsCurrentlyActive => GiveScreenManager.Open;
 
     public override bool IsActive => IsCurrentlyActive;

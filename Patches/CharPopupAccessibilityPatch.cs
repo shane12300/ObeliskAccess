@@ -904,8 +904,9 @@ internal static class CharPopupScreenManager
 
 // ======================= announcement patches =======================
 
-/// <summary>The window opened (keyboard Alt+C or mouse right-click). The IsOpened guard filters
-/// out CharPopupMini's silent priming, which never calls Show.</summary>
+/// <summary>The window opened (keyboard Alt+C or mouse right-click). CharPopupMini's silent
+/// priming never reaches here — it calls Init + ShowStats + Close, not Show — so what neutralises
+/// it is OnGameTabShown's !IsOpen guard and the IsOpened() prefix on the Close patch.</summary>
 [HarmonyPatch(typeof(CharPopup), nameof(CharPopup.Show))]
 internal static class CharPopupShowAnnouncePatch
 {

@@ -603,7 +603,9 @@ internal static class HeroSelectionScreenManager
             _runRows.Add(new RunRow
             {
                 Read = () => "Weekly modifiers. Press Enter to open the modifiers panel.",
-                Activate = () => OpenDeferredPanel(madness: true),
+                // The weekly button opens the SAME window as madness (MadnessManager branches on
+                // IsWeeklyChallenge internally) — but say "modifiers", matching the row.
+                Activate = () => OpenDeferredPanel(madness: true, label: "Modifiers"),
             });
         }
         if (hsm.sandboxButton != null && hsm.sandboxButton.gameObject.activeSelf)
@@ -676,14 +678,14 @@ internal static class HeroSelectionScreenManager
         return label + ". Press Enter to open the madness panel.";
     }
 
-    private static void OpenDeferredPanel(bool madness)
+    private static void OpenDeferredPanel(bool madness, string label = null)
     {
         if (madness)
         {
             if (MadnessManager.Instance == null)
                 return;
             MadnessManager.Instance.ShowMadness();
-            SpeechManager.Speak("Madness panel opened. This panel is not yet accessible — "
+            SpeechManager.Speak((label ?? "Madness") + " panel opened. This panel is not yet accessible — "
                 + "press Escape to close it.");
         }
         else
@@ -1014,7 +1016,9 @@ internal static class HeroSelectionScreenManager
                 + " is empty.");
             return;
         }
-        // Empty slot: roll the random-hero dice (single-player only, matching the game).
+        // Empty slot: roll the random-hero dice. Single-player only — a mod-imposed
+        // simplification, NOT a game rule: BoxSelection.SetOwner re-enables the dice on your own
+        // box in MP, and SetRandomHero has no MP guard of its own.
         if (MpSpeech.IsMp)
         {
             SpeechManager.Speak("Random heroes aren't available in multiplayer.");

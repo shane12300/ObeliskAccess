@@ -22,12 +22,48 @@ internal static class RouterGuards
 {
     /// <summary>
     /// The game's on-screen virtual keyboard is up (opened by a synthetic click landing on an
-    /// input field, or gamepad Y in MP). While it shows, the game must own every key — arrows
+    /// input field, or gamepad X/Square via <c>DoButtonWest</c>). While it shows, the game must
+    /// own every key — arrows
     /// drive <c>KeyboardManager.ControllerMovement</c>, Enter clicks the highlighted OSK key —
     /// or the hidden mod screen beneath would act on keys the user aims at the keyboard.
     /// </summary>
     internal static bool OskActive =>
         KeyboardManager.Instance != null && KeyboardManager.Instance.IsActive();
+
+    /// <summary>
+    /// A live game text field owns the keyboard. The game guards its own handlers this way —
+    /// <c>DoKeyBinding</c> bails when the EventSystem's selection carries a TMP/legacy input
+    /// field, and <c>DoMovementVector</c> bails on the craft and tome search boxes — and the mod
+    /// must match it, or typing in the Forge search box and pressing Enter would buy the focused
+    /// card while the arrows walked the item list instead of the caret. The chat, lobby and alert
+    /// edit sessions have their own gates; this covers every field the mod does not drive.
+    /// </summary>
+    internal static bool GameTextFieldFocused
+    {
+        get
+        {
+            var es = UnityEngine.EventSystems.EventSystem.current;
+            if (es == null)
+                return false;
+            // Never fire for a field the MOD is driving (alert input, lobby name/password): those
+            // sessions have their own gates and their contexts expect keys to keep arriving.
+            if (ObeliskAccess.Patches.TmpEditSession.AnyActive)
+                return false;
+            var sel = es.currentSelectedGameObject;
+            if (sel == null || !sel.activeInHierarchy)
+                return false;
+            return sel.GetComponent<TMPro.TMP_InputField>() != null
+                || sel.GetComponent<UnityEngine.UI.InputField>() != null;
+        }
+    }
+
+    /// <summary>
+    /// Set while the mod itself invokes the game's private <c>DoFirePerformed</c> (combat and
+    /// main-menu confirm fall back to it). A Harmony detour applies to reflection invokes too, so
+    /// without this the bare-Ctrl suppression below would swallow the mod's OWN synthetic click
+    /// whenever the user happened to be holding Ctrl — a silent dead Enter.
+    /// </summary>
+    internal static bool SelfFiring;
 }
 
 [HarmonyPatch(typeof(InputController), "DoMovement")]
@@ -46,6 +82,12 @@ public class RouterDoMovementPatch
         // game's movement (no cursor warp) and route nothing.
         if (ObeliskAccess.Patches.ChatSpeech.Typing)
             return false;
+
+        // Any other live game text field (craft/tome search): let the game have the key, exactly
+        // as its own DoMovementVector guard does. Routing here would move the mod's list instead
+        // of the caret.
+        if (RouterGuards.GameTextFieldFocused)
+            return true;
 
         InputRouter.Controller = __instance;
         Vector2 direction = _context.ReadValue<Vector2>();
@@ -91,6 +133,11 @@ public class RouterDoKeyBindingPatch
         if (RouterGuards.OskActive)
             return true;
 
+        // A live game text field owns the keyboard (see RouterGuards): never swallow Tab out of
+        // it, and never repurpose Enter while the user is typing.
+        if (RouterGuards.GameTextFieldFocused)
+            return true;
+
         InputControl control = _context.control;
 
         // Tab: the game maps Tab (unconditionally, before its keyboard-shortcuts gate) to
@@ -134,6 +181,10 @@ public class RouterDoKeyBindingPatch
         if (RouterGuards.OskActive)
             return;
 
+        // A live game text field owns the keyboard (see RouterGuards).
+        if (RouterGuards.GameTextFieldFocused)
+            return;
+
         InputRouter.Controller = __instance;
         InputControl control = _context.control;
 
@@ -165,7 +216,10 @@ public class RouterDoButtonNorthPatch
     {
         if (RouterGuards.OskActive)
             return true;
-        return !InputRouter.AnySuppressesBareAlt;
+        // Test AltHeld, not just the flag: the game routes BOTH bare Alt and the gamepad's
+        // buttonNorth (Y) into DoButtonNorth, and suppressing the pad's inspect button on every
+        // Alt-using screen would change the game for controller players.
+        return !(InputRouter.AltHeld && InputRouter.AnySuppressesBareAlt);
     }
 }
 
@@ -182,6 +236,8 @@ public class RouterDoFirePerformedPatch
 {
     static bool Prefix()
     {
+        if (RouterGuards.SelfFiring)
+            return true; // the mod's own synthetic click — never suppress it
         return !(InputRouter.CtrlHeld && InputRouter.AnyUsesCtrlModifier);
     }
 }

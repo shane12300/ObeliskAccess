@@ -12,7 +12,43 @@ ObeliskAccess is a BepInEx 5 mod for "Across the Obelisk" that makes the game ac
 dotnet build
 ```
 
-The build's `CopyToPlugins` target copies the output DLLs into the game's BepInEx plugins folder automatically (override the install location with `-p:GameDir=...`). There are no automated tests.
+The build's `CopyToPlugins` target copies the output DLLs into the game's BepInEx plugins folder automatically (override the install location with `-p:GameDir=...`). There are no automated tests for the mod itself (the installer crate has `cargo test` unit tests).
+
+## Release process
+
+`scripts/create-release.ps1` publishes a GitHub release. The **top `## Version X.Y — Title`
+section of `changelog.md` is the single source of truth**: it supplies the version (normalized
+to a three-part `vX.Y.Z` tag), the release title, and the release notes verbatim. The script
+verifies a clean tree, `gh` auth, that HEAD is pushed to `origin/master` (the draft is created
+without `--target`, so on publish GitHub tags the *remote* HEAD — an unpushed commit would tag a
+different tree than the one just built), that the git tag is new locally and on origin, and that
+no release or draft already exists for that tag (a draft creates no tag, so the tag checks alone
+cannot see one); builds the mod with `-p:Version=` and `-p:GameDir=` pointed at a temp staging dir
+(so the DLL's PE file-version always matches the tag — the installer reads it back to detect the
+installed version — and the csproj's copy targets never touch the live game install);
+builds `installer/` with `cargo build --release`;
+packages `ObeliskAccess-vX.Y.Z.zip`; shows the full release form and asks for confirmation
+before creating the release as a **draft** (`gh release create --draft` — review and publish
+on GitHub; the git tag is only created when the draft is published). `-DryRun` still builds both
+the mod and the installer and still writes the zip to `$env:TEMP`; it stops before creating the
+GitHub release (its staging dirs are left on disk for inspection; a real run cleans them up).
+Three assets are attached to every release: the mod zip, `ObeliskAccessInstaller.exe`, and
+`ObeliskAccessInstaller-cli.exe`.
+
+**Zip layout contract** (consumed by `installer/src/core/install.rs` — change both together):
+`plugins/**` → `<game>\BepInEx\plugins\`, `gameroot/**` → game root (never overwrites an
+existing file — the user's own native speech DLLs win), zip-root docs → the plugin folder.
+
+`installer/` is a Rust crate following the say-the-spire2 installer layout:
+`src/core/{paths,detect,github,bepinex,install,uninstall,version,winutil}.rs`, shared by **two
+binaries** — `src/main.rs` (the wxdragon GUI = native accessible wxWidgets controls; also accepts
+`--cli`) and `src/cli_main.rs` (`ObeliskAccessInstaller-cli.exe`). The second binary exists because
+the GUI image is `windows_subsystem = "windows"`, and shells do NOT wait for a GUI-subsystem
+process: `ObeliskAccessInstaller.exe --cli` returns to the prompt at once, the shell reclaims
+stdin, and the prompt loop reads EOF and quits. Only a console-subsystem image fixes that, so
+terminal users (and the README) are pointed at the `-cli` binary. It pins the BepInEx 5 download
+(`paths.rs::BEPINEX_URL`). Building it needs LLVM's libclang (`LIBCLANG_PATH`) and ninja
+(the VS-bundled one works); the release script wires both up when present.
 
 ## todo.md maintenance
 
@@ -39,8 +75,9 @@ screen owns the keyboard and translates raw keys into semantic events; per-scree
 
 ### Core data flow
 
-1. **`Plugin.cs`** — BepInEx entry point. Registers the `IInputContext`s in priority order, attaches
-   the map hotkey poller, then calls `Harmony.PatchAll()` to auto-register all `[HarmonyPatch]` classes.
+1. **`Plugin.cs`** — BepInEx entry point. Binds `AccessibilityOptions` to the BepInEx config,
+   registers the `IInputContext`s in priority order, attaches the hotkey pollers (15 components),
+   then calls `Harmony.PatchAll()` to auto-register all `[HarmonyPatch]` classes.
 2. **`Input/` — the input router** (see below). The one place that owns keyboard dispatch.
 3. **`SpeechManager`** — Single TTS integration point. Delegates to the `UnityAccessibilityLib`
    NuGet package (net35 build, resolved for our net46 target), which speaks through an active screen
@@ -59,8 +96,15 @@ screen owns the keyboard and translates raw keys into semantic events; per-scree
    static manager the context delegates to (e.g. `MapNavigator`, `TutorialPopupManager`).
    Multiplayer text goes through `Patches/MpSpeech.cs` (`IsMp`, `LocalNick`, `LocalOwns`,
    `DisplayNick` — with an optional fallback-text overload — `OwnerNick`, `OwnershipClause`,
-   `HostNick` — all null-safe, all collapse to the SP answer outside MP; every screen uses these,
-   never inline `GetPlayerNickReal`).
+   `HostNick` — all `internal`, all null-safe, all collapse to the SP answer outside MP; every
+   screen uses these rather than inlining `GetPlayerNickReal` — the one remaining inline site is
+   inside `MpAmbientAccessibilityPatch` itself).
+   Cross-screen helpers that several screens share: `Patches/CardSpeech.cs` (card/aura text),
+   `Patches/HeroSpeech.cs` (hero, trait and seed text), `Patches/CardDrill.cs` (the shared
+   Ctrl+↑/↓ drill used by rewards/loot/character-sheet — combat has its own), `Patches/Nav.cs`
+   (wrap/clamp index arithmetic) and `Patches/PartyStrip.cs` (the map/town party walker).
+   One file breaks the `Patches/XyzAccessibilityPatch.cs` naming convention:
+   `Patches/CorruptionAccessibility.cs`.
    Screen-less MP awareness (ready counts, desync reloads, room join/leave/host-left, alert
    icons, cinematic skip votes) lives in `Patches/MpAmbientAccessibilityPatch.cs`; partner
    turn/cast narration needs no extra patches — MP combat is lock-step simulated on every client,
@@ -71,7 +115,7 @@ screen owns the keyboard and translates raw keys into semantic events; per-scree
 
 - `IInputContext.cs` — the interface + `InputContextBase` no-op base. A context exposes `IsActive`
   (queried live from game state) and handlers `OnMove(Vector2)`, `OnConfirm()`, `OnCancel()`,
-  `OnTab(bool)`, `OnNumber(int)`. A handler returning `true` consumes the event.
+  `OnTab(bool)`, `OnNumber(int)`, `OnSpace()`. A handler returning `true` consumes the event.
 - `InputRouter.cs` — priority-ordered context registry. Each event goes to the single
   highest-priority context whose `IsActive` is true (no fall-through). Also the home of raw-key
   helpers: `IsKeyboard`, `IsEnter`, `IsTab`, `IsDigit`, and the modifier reads
@@ -80,8 +124,11 @@ screen owns the keyboard and translates raw keys into semantic events; per-scree
   screen owns input.
 - `RouterInputPatches.cs` — **the ONLY patches on `InputController`.** `DoMovement` (prefix,
   swallows arrows iff handled) → `Move`; `DoEscape` (prefix, swallowable) → `Cancel`; `DoKeyBinding`
-  postfix routes Enter→`Confirm`, Tab→`Tab`, digits 1–4→`Number`, plus a prefix that swallows the
-  game's own handling of keys the mod repurposes. **The game does NOT ignore Tab**: `DoKeyBinding`
+  postfix routes Enter→`Confirm`, Tab→`Tab`, digits 1–4→`Number`, Space→`Space`, plus a prefix that
+  swallows the game's own handling of keys the mod repurposes. All four prefixes and the postfix
+  short-circuit while `RouterGuards.OskActive` — with the game's virtual keyboard
+  (`KeyboardManager`) up, it owns every key and the mod stands down entirely.
+  **The game does NOT ignore Tab**: `DoKeyBinding`
   maps it (unconditionally, before its shortcuts gate) to `NextField()`, an EventSystem walk that
   selects the Selectable below the current selection — selecting a TMP input field activates it,
   so in MP a Tab could silently focus the chat input and mute the router via the Typing gate (the
@@ -117,13 +164,15 @@ screen owns the keyboard and translates raw keys into semantic events; per-scree
   Ctrl-held and unaffected). A new context declares what it repurposes and is otherwise covered
   by the defaults — no router edits needed.
 - `Input/Contexts/*InputContext.cs` — one per screen (thin; delegates to a `Patches/` manager).
-- `Input/MapHotkeyPoller.cs`, `Input/CombatHotkeyPoller.cs`, `Input/EventHotkeyPoller.cs`,
-  `Input/TownHotkeyPoller.cs`, `Input/CardCraftHotkeyPoller.cs`, `Input/AlertHotkeyPoller.cs`,
-  `Input/FinishRunHotkeyPoller.cs`, `Input/CharWindowHotkeyPoller.cs`, `Input/IntroHotkeyPoller.cs` — `MonoBehaviour`s that poll letters the game leaves
-  **unbound** (Alt+letter review keys), since the InputAction system never fires for them; each is
-  gated on `InputRouter.IsActive(context)`. The combat/event/town/craft/finish-run pollers also
-  run their manager's per-frame tick *outside* that gate (lifecycle detection — town arrival,
-  craft-screen open, finish-run arrival — must survive a modal owning input).
+- `Input/*HotkeyPoller.cs` — one per screen family (18 files: Alert, CardCraft, CharWindow, Chat,
+  Combat, Conflict, Event, FinishRun, HeroSelection, Intro, Lobby, Loot, Map, Rewards, Settings,
+  Town — `Plugin.Awake` attaches 15 components, some serving two screens). `MonoBehaviour`s that
+  poll letters the game leaves **unbound** (Alt+letter review keys), since the InputAction system
+  never fires for them; each key read is gated on `InputRouter.IsActive(context)`, except
+  `ChatHotkeyPoller`, which is context-free because MP chat floats over every screen. Nearly every
+  poller also runs its manager's per-frame tick *outside* that gate — lifecycle detection (town
+  arrival, craft-screen open, finish-run arrival, mouse-driven close) must survive a modal owning
+  input; only the intro and settings pollers are pure key readers.
 
 Registration order in `Plugin.Awake` **is** priority (highest first):
 `Alert > PlayersPanel > Tutorial > Settings > Corruption > CardCraft > DeathScreen > CombatSelector > PerkTree >
@@ -178,6 +227,7 @@ alert comes from `AlertHotkeyPoller`.
 | Map — party strip | `MapInputContext` | Tab toggles region; ↑/↓ read heroes; 1–4 jump to slot; Enter opens the character sheet (via `OverCharacter.Clicked()`) |
 | Map — global | `MapInputContext` + poller | Alt+G gold; Alt+I (and auto on open) position + trackers + tip |
 | Corruption prompt | `CorruptionInputContext` | ←/→ choose reward + accept; ↑/↓ toggle accept; Enter confirm |
+| Combat | `CombatInputContext` + poller (state in `CombatNavigator`, `Patches/CombatAccessibilityPatch.cs`) | Plain arrows are left to the game (its `ControllerMovement` warp; the mod announces the landed focus from a postfix). The context's `OnConfirm` is a real activation path — it completes a pending MP emote-ping target, casts a held card on the focused character via `ControllerExecute()`, and activates own-hand cards via `OnMouseUpController()` — while the *game's* Enter also stays live (the only context with `SwallowsGameEnter => false`). Ctrl+↑/↓ card drill; Escape order = cancel ping pick → leave drill → drop held card. Poller review keys (all Alt): C character sheet, H health, B block, E energy, S statuses, V battlefield, O round + turn order, D pile counts, I revealed intent, T tooltip, R repeat. Cast digits, Space end-turn and the MP emote letters keep their game meaning. `IsCurrentlyActive` goes false under every in-combat modal |
 | MP emotes/pings (combat, no context) | `EmotePingManager` (`Patches/EmoteAccessibilityPatch.cs`) + `CombatInputContext` hooks; echoes in `Patches/MpEchoPatches.cs` | Bare R/E/S/A/W/Q are the GAME's emote keys in MP combat (BattleKeyboard — the wheel only exists in MP); the mod adds speech + the keyboard target pick for S/A: `SetCharactersPing` prefix speaks the 3s-cooldown refusal, its postfix arms the pick ("arrow to a character, Enter"); OnConfirm completes via public `EmoteTarget(character.Id, action)` on the focused character (never the raycast — the marker collider is offset), OnCancel resets via Traverse `ResetCharactersPing`; `Pending` re-validates against the live ping markers. `EmoteTarget` postfix announces local+remote (sits after the mute filter; postfix params share the original's locals ⇒ resolved sender index visible). Card pings via private `DoEmoteCard` (shared local+RPC sink) with a `HaveEmoteIcon` prefix snapshot. Partner aim (`NET_DrawArrowNet`) behind off-by-default `AnnouncePartnerAim`, change-deduped, reset on turn change. Echo patches: `GiveControlToPlayer` handovers, `NET_BuyItemResult` denials, partner Forge/Altar crafts (receive-only RPCs; own crafts skipped) |
 | MP players panel (`playersT` face of AlertManager) | `PlayersPanelInputContext` (directly under Alert; `PlayersPanelManager`, `Patches/PlayersPanelAccessibilityPatch.cs`) | Opened by the game's players button or Alt+P (`ChatHotkeyPoller`). ↑/↓ rows from public `playerList`: game-rendered nick line (nick + master tag) + platform + ready (`PlayerManualReady`) + muted (`IsPlayerMutedBySlot`) + owned heroes (team null-safe — panel opens in the lobby too) + ping; Enter = `AlertPlayer.DoMute()/DoUnmute()` (own row refused); Escape = `HideAlert()` (both hide patches `_active`-guarded — never double-speak) |
 | MP give window (GiveManager, over map/town) | `GiveInputContext` (above Event/Town/Map; `GiveScreenManager`, `Patches/GiveAccessibilityPatch.cs`) | Ctrl+G opener in map/town pollers (bare-Ctrl suppression covers Town). ←/→ target (`Prev/NextTarget`, game skips self), ↑/↓ amount ±1 with Ctrl=20/Shift=100/both=1000 (`Give(±n)`, game clamps), Tab currency (`ShowGive(true, other)` — game RESETS amount+target, announced), Enter `GiveAction()` (client→master RPC), Escape closes. Receipts: prefix/postfix balance diff on public `CurrencyManager.ApplyShareGoldDustDict` (runs on ALL clients; `NET_MASTERGivePlayer` is master-only) — speaks only the strict "local +N, exactly one other −N" transfer signature; giver side silent |
@@ -187,7 +237,7 @@ alert comes from `AlertHotkeyPoller`.
 | Map event (story dialog) | `EventInputContext` + poller | ↑/↓ walk title/text/choices (choices at bottom); Enter select/Continue; Alt+T hover info (probability, blocked reason, card previews, roll explainer); Alt+R repeat; rolls narrated play-by-play |
 | Alert dialogs (global) | `AlertInputContext` (top priority; `AlertDialogueManager`, `Patches/AlertAccessibilityPatch.cs`) | Covers all `AlertManager` shapes (confirm single/double, input, copy/paste, buttonless MP "waiting"). ↑/↓ walk body lines then visible option-button rows; Enter activates option rows only (text rows hint); Escape = cancel/dismiss ("No options, waiting" when buttonless); input alerts use an explicit edit mode — the game's auto-focus of the TMP field is undone on open (poller Tick), Enter on the field row starts editing (`ActivateInputField`), Enter/Escape end it keeping the typed text (an `_editCache` frame-mirror restores TMP's Escape revert; Tick also catches TMP self-deactivating), accept row submits; answers by mouse/gamepad announced too; Alt+R + the edit-mode Tick via `AlertHotkeyPoller` |
 | Town hub | `TownInputContext` + poller | ↑/↓ hub items (5 buildings, upgrades, Ready, treasures); Enter opens/claims (confirm alerts via the global alert dialogue); Tab party strip (↑/↓ heroes, 1–4 slots); Alt+T/G/I/R; arrival overview |
-| Town services (Altar/Church/Forge/Divination/Armory) | `CardCraftInputContext` + poller | One context for `CardCraftManager` craftType 0–4 (also covers map-event shops). ↑/↓ items with page auto-advance; ←/→ pages (or A/B variant in Altar preview); Enter single-press buy; Tab regions (Forge deck ref; Armory equipped+controls); 1–4 hero; Alt+F filters (Forge); Alt+T full card/item detail; purchases announced via `Hero.*` postfixes (partner crafts arriving via `NET_HeroCard*` are skipped there — `MpCraftEcho.ReceivingRemote` — so only the MP echo speaks). Escape on an MP **map** shop toggles the game's ready-vote (`Ready()` — exit is lock-step when all players ready; a direct `ExitCardCraft` would strand the player at the masked `closevent` barrier and can deadlock the party); SP/town Escape exits directly as before |
+| Town services (Altar/Church/Forge/Divination/Armory) | `CardCraftInputContext` + poller | One context for `CardCraftManager` craftType 0–4 (also covers map-event shops). ↑/↓ items with page auto-advance; ←/→ pages where the shop has them (Forge/Armory; the A/B variant in Altar preview); Enter buys in one press on Forge/Divination/Armory, but is a **two-step** on the Altar (preview → confirm) and the Church (confirm remove) — see the `Phase` enum; Tab regions (Forge deck ref; Armory equipped+controls); 1–4 hero; Alt+F filters (Forge); Alt+T full card/item detail; Alt+G currencies, Alt+I overview, Alt+R repeat; purchases announced via `Hero.*` postfixes (partner crafts arriving via `NET_HeroCard*` are skipped there — `MpCraftEcho.ReceivingRemote` — so only the MP echo speaks). Escape on an MP **map** shop toggles the game's ready-vote (`Ready()` — exit is lock-step when all players ready; a direct `ExitCardCraft` would strand the player at the masked `closevent` barrier and can deadlock the party); SP/town Escape exits directly as before |
 | Town upgrades window | `TownUpgradeInputContext` | ←/→ building column, ↑/↓ its 6-upgrade chain; states with locked reasons; Enter buys via game confirm alert; Tab grid/sell/exit; sell-supply ↑/↓ quantity sub-mode |
 | Rewards screen (post-combat / event / divination) | `RewardsInputContext` + poller | Table: ↑/↓ hero rows (Restart pseudo-row last), ←/→ cards→dust→Deck; Enter takes (Singularity overwrite + MP restart confirms via the global alert dialogue); Ctrl+↑/↓ card detail drill, Escape exits; Alt+T full detail, Alt+I overview, Alt+R repeat; picks and auto-close announced via `NET_*`/`CheckAllAssigned` postfixes; poller waits out the ~2s row animation before announcing arrival |
 | Loot screen (boss/chest item picks, Obelisk-challenge chests) | `LootInputContext` + poller | Arrows walk the loot row (items → gold pile → Restart); Enter takes for the hero whose turn it is (MP restart confirm via the global alert dialogue); Tab party review (equipped items per hero; Enter reorders picker in SP; 1–4 jump); Ctrl+↑/↓ item detail drill, Escape exits; Alt+T/I/G/R; item announces carry an equipped-slot comparison; picks announced via `Looted`/`LootGold` prefix+postfix pairs; poller's tick detects arrival (active-slot poll), turn changes, and finish |
@@ -198,7 +248,7 @@ alert comes from `AlertHotkeyPoller`.
 | Character window (CharPopup, over hero selection) | `CharPopupInputContext` (state in `CharPopupScreenManager`, `Patches/CharPopupAccessibilityPatch.cs`) | Tab/Shift+Tab cycle Stats/Perks/Rank/Skins/Card Backs/Singularity (unavailable skipped: Perks+Rank in Obelisk or locked hero; Singularity only in that mode); ↑/↓ rows (Stats: description, stats, resists, per-trait rows with Alt+T detail, per-card rows via `_CardParent` CardItems with Alt+T `CardSpeech.FullDetail`, classic-variant toggle; Rank: progress, reward rows, use-supplies with exact disabled reason — NO game confirm, spends immediately; Skins/Card Backs: Enter equips via `OnMouseUp()` — internally guarded; Card Backs ←/→ categories, page auto-flip); Escape closes (Card Backs tab first hops to Stats). Open detect: `Show` postfix guarded `IsOpened()` — `CharPopupMini` silently primes the popup (`Init(showNothing:true)`+`ShowStats`+`Close`) on every hero click, so never key on `Init`/`ShowStats` without that guard; tab resync postfixes use a self-switch flag |
 | Perk tree (PerkTree overlay, topmost of the family) | `PerkTreeInputContext` (state in `PerkTreeScreenManager`, `Patches/PerkTreeAccessibilityPatch.cs`) | Opens from the Perks tab or the portrait perk-badge (`BotHeroChar` → `PerkTree.Show` directly, no CharPopup beneath). Tab cycles the 4 categories + Controls region; ↑/↓ rows (threshold state first), ←/→ nodes; choose-one clusters expanded in place (child `PND.Perk` id+node passed to `SelectPerk`); Enter toggles with outcome + running points (refusals diagnosed: dependent perk / row threshold), Space = `PerksAssignConfirm`, Alt+T = full `NewPerkDescription` (public; side effect: disables node hover at 0 points — same as the game's own hover), Alt+I points summary. Controls: Confirm/Reset/Import/Export/save-slots (load+delete rows per filled slot)/Exit — all slot dialogs global-alert-owned. Escape → `Hide()` (game raises the unsaved confirm itself; dirty flag = `buttonConfirm.buttonEnabled`). Scope: everywhere the tree opens — hero selection AND mid-run from the character sheet's Perks tab (map, town incl. tier 0, combat, rewards, loot); registered above CharWindow, and its close announce says "Back to character sheet" when the sheet is beneath. Space needs no router suppression (inert outside combat) |
 | Act-transition screen (scene "IntroNewGame", between acts / entering sub-dungeons / adventure-complete farewell) | `IntroInputContext` + poller (state in `IntroScreenManager`, `Patches/IntroAccessibilityPatch.cs`) | Open announce (title + full story body + Continue hint) from a `GameManager.SceneLoaded` postfix gated on the scene name — both `DoIntro` and `DoFinishGame` call it after the TMPs are set (`TextFade` only animates alpha, the text is complete immediately); the run-start cinematic path and mid-act redirect never call it, so they stay silent. ↑/↓ walk title / body lines / Continue row; Enter = `SkipIntro()` from any row (the only, harmless action — game's Enter suppressed in the `DoKeyBinding` prefix); Escape left to the game (its default on this scene is the same skip); Alt+R via `IntroHotkeyPoller`. Sub-dungeon variant (empty body) announces "Continuing automatically" — the game's `FadeOut` auto-skips after 4s. Close (any path, incl. auto-fade) detected via a `SkipIntro` postfix; no close announce — map/finish-run arrival takes over |
-| End-of-run screen (scene "FinishRun") + unlocked-cards popup | `FinishRunInputContext` + poller (state in `FinishRunScreenManager`, `Patches/FinishRunAccessibilityPatch.cs`) | ↑/↓ rows read live from `FinishRunManager` TMP fields: header, six score rows, adventure-completed, final score (+madness/best/time), reward + retention + total (sprite icons → words via `CardSpeech.CleanFlat`), per-hero `FinishProgression` rows (animate upward), Main Menu button last (Enter = `ControllerMovement()` warp + `DoFirePerformed`; "Still tallying" while disabled — "Main menu available" announced on enable). Unlocked-cards popup sub-mode (`CharacterWindowUI.ShowUnlockedCards` postfix, `ShowInTome`-filtered): ←/→ cards, Alt+T detail, Enter/Escape → `characterWindow.Hide()`; arrival overview waits it out; Alt+I overview, Alt+R repeat |
+| End-of-run screen (scene "FinishRun") + unlocked-cards popup | `FinishRunInputContext` + poller (state in `FinishRunScreenManager`, `Patches/FinishRunAccessibilityPatch.cs`) | ↑/↓ rows read live from `FinishRunManager` TMP fields: header, six score rows, adventure-completed, final score (+madness/best/time), reward + retention + total (sprite icons → words via `CardSpeech.CleanFlat`), per-hero `FinishProgression` rows (animate upward), Main Menu button last (Enter = `mainMenuButton.Clicked()` directly — the earlier same-frame `ControllerMovement()` warp + `DoFirePerformed` raycast saw the *pre-warp* cursor, which is what made the exit need two presses; "Still tallying" while disabled — "Main menu available" announced on enable). Unlocked-cards popup sub-mode (`CharacterWindowUI.ShowUnlockedCards` postfix, `ShowInTome`-filtered): ←/→ cards, Alt+T detail, Enter/Escape → `characterWindow.Hide()`; arrival overview waits it out; Alt+I overview, Alt+R repeat |
 
 ### Extensibility pattern
 
@@ -214,7 +264,10 @@ alert comes from `AlertHotkeyPoller`.
 
 **`ForceKeyboardShortcutsPatch`** is essential — without it, `InputController.DoMovement` silently
 drops all keyboard arrow-key input because `GameManager.Instance.ConfigKeyboardShortcuts` defaults
-to `false`. The patch postfixes `SettingsManager.LoadPrefs` to force it `true`.
+to `false`. The patch postfixes `SettingsManager.LoadPrefs` to force it `true`, and a second
+postfix on `SettingsManager.SetKeyboardShortcuts` re-asserts it (snapping the settings toggle back
+on) if the user turns it off mid-session — otherwise the mod would be left half-dead until the
+next `LoadPrefs`.
 
 **Public vs private member access** — many game members the mod uses are public (call directly).
 Private members patched/read by string name must go through `Traverse.Create(...).Field<T>(...)` /
@@ -222,7 +275,8 @@ Private members patched/read by string name must go through `Traverse.Create(...
 the decompile is stale — reflect the live DLL or re-decompile (see "Game code reference").
 
 **Harmony003 warning** — the analyzer incorrectly flags `_context` struct-field reads in
-`RouterInputPatches` (DoMovement/DoKeyBinding) as modifications. These ~2 warnings are safe to ignore.
+`RouterInputPatches` (DoMovement/DoKeyBinding) as modifications. These 3 warnings (all in the
+`DoMovement`/`DoKeyBinding` prefixes) are safe to ignore.
 
 ## Game code reference
 

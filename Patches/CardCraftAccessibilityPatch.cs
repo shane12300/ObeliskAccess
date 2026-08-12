@@ -12,9 +12,12 @@ namespace ObeliskAccess.Patches;
 /// The five town service screens — Altar (upgrade, craftType 0), Church (remove, 1), Forge (craft,
 /// 2), Divination (3) and Armory (item shop, 4) — are one game prefab, <c>CardCraftManager</c>,
 /// switched by <c>craftType</c>; this manager mirrors that: one focus model branching per type.
-/// Up/Down walk the current list (deck rows, grid cells, tiers), Left/Right cycle pages (or the
-/// A/B variant in the Altar preview), Tab cycles regions, 1–4 switch hero, Enter buys with a
-/// single press. Opening is detected by polling (<c>ShowCardCraft</c> is async void — patching it
+/// Up/Down walk the current list (deck rows, grid cells, tiers), Left/Right cycle pages on the
+/// types that have them (Forge, Armory) or the A/B variant in the Altar preview, Tab cycles
+/// regions, 1–4 switch hero. Enter buys in a single press on the Forge, Divination and Armory,
+/// but is a two-step elsewhere: on the Altar it opens the upgrade preview and on the Church the
+/// removal confirm (see the <c>Phase</c> enum), and a second Enter commits. Opening is detected by
+/// polling (<c>ShowCardCraft</c> is async void — patching it
 /// fires before the UI exists). Purchases announce through Hero.* postfixes because the game
 /// finishes them in coroutines behind the public <c>blocked</c> flag.
 /// </summary>
@@ -448,7 +451,7 @@ internal static class CardCraftScreenManager
         {
             _phase = Phase.Browse;
             var rows = DeckRows(m);
-            SpeechManager.Speak("Cancelled. " + (RowInRange(rows) ? DeckRowLine(m, rows[_index]) : ""));
+            SpeechManager.Speak("Cancelled. " + (FocusForRead(rows.Count) ? DeckRowLine(m, rows[_index]) : ""));
             return true;
         }
 
@@ -496,7 +499,7 @@ internal static class CardCraftScreenManager
             case 0:
             case 1:
                 var rows = DeckRows(m);
-                if (RowInRange(rows))
+                if (FocusForRead(rows.Count))
                     SpeechManager.Speak(DeckRowLine(m, rows[_index]));
                 break;
             case 2:
@@ -515,7 +518,7 @@ internal static class CardCraftScreenManager
                 break;
             case 3:
                 var tiers = DivinationEntries(m);
-                if (tiers.Count > 0 && _index < tiers.Count)
+                if (FocusForRead(tiers.Count))
                     SpeechManager.Speak(DivinationLine(tiers[_index]));
                 break;
             case 4:
@@ -666,7 +669,7 @@ internal static class CardCraftScreenManager
         if (RefuseIfCannotBuy(m)) // before SelectRow — its remainingUses==0 no-op leaves a stale selection
             return;
         var rows = DeckRows(m);
-        if (!RowInRange(rows))
+        if (!FocusForAction(rows.Count))
             return;
         var row = rows[_index];
         var cd = row.cardData;
@@ -762,7 +765,7 @@ internal static class CardCraftScreenManager
         if (RefuseIfCannotBuy(m)) // before SelectRow — its remainingUses==0 no-op leaves a stale selection
             return;
         var rows = DeckRows(m);
-        if (!RowInRange(rows))
+        if (!FocusForAction(rows.Count))
             return;
         var row = rows[_index];
         var cd = row.cardData;
@@ -916,6 +919,9 @@ internal static class CardCraftScreenManager
             SpeechManager.Speak(m.craftType == 2 ? "No cards match the current filters" : "No items");
             return;
         }
+        // Clamp DOWNWARD only — not FocusForRead: the -1 sentinel must survive to the arithmetic
+        // below, where it makes the first Down land on item 1 (-1 + 1) and the first Up wrap to
+        // the last. Resolving it to 0 here would skip the first item.
         if (_index >= entries.Count)
             _index = entries.Count - 1;
 
@@ -965,7 +971,7 @@ internal static class CardCraftScreenManager
         if (RefuseIfCannotBuy(m))
             return;
         var entries = GridEntries(m);
-        if (entries.Count == 0 || _index >= entries.Count)
+        if (!FocusForAction(entries.Count))
             return;
         var item = entries[_index];
         var cd = Globals.Instance?.GetCardData(item.cardId, false);
@@ -991,7 +997,7 @@ internal static class CardCraftScreenManager
         if (RefuseIfCannotBuy(m))
             return;
         var entries = GridEntries(m);
-        if (entries.Count == 0 || _index >= entries.Count)
+        if (!FocusForAction(entries.Count))
             return;
         var item = entries[_index];
         var cd = Globals.Instance?.GetCardData(item.cardId, false);
@@ -1028,7 +1034,7 @@ internal static class CardCraftScreenManager
 
     private static void MoveEquipped(CardCraftManager m, int delta)
     {
-        _index = Wrap(_index + delta, CardSpeech.EquipSlots.Length);
+        _index = Step(_index, delta, CardSpeech.EquipSlots.Length);
         SpeechManager.Speak(EquippedLine(m, _index));
     }
 
@@ -1047,7 +1053,10 @@ internal static class CardCraftScreenManager
     private static void ActivateEquipped(CardCraftManager m)
     {
         var hero = m.CurrentHero;
-        var type = CardSpeech.EquipSlots[_index < CardSpeech.EquipSlots.Length ? _index : 0];
+        // Read-only (full detail of the focused slot), so the -1 sentinel resolves to slot 1
+        // rather than refusing.
+        FocusForRead(CardSpeech.EquipSlots.Length);
+        var type = CardSpeech.EquipSlots[_index];
         string id = hero != null ? CardSpeech.EquippedId(hero, type) : "";
         if (string.IsNullOrEmpty(id))
         {
@@ -1184,16 +1193,14 @@ internal static class CardCraftScreenManager
             SpeechManager.Speak("No shop controls");
             return;
         }
-        if (_index >= controls.Count)
-            _index = controls.Count - 1;
-        _index = Wrap(_index + delta, controls.Count);
+        _index = Step(_index, delta, controls.Count);
         SpeechManager.Speak((_index + 1) + " of " + controls.Count + ". " + controls[_index].Label);
     }
 
     private static void ActivateControl(CardCraftManager m)
     {
         var controls = BuildControls(m);
-        if (controls.Count == 0 || _index >= controls.Count)
+        if (!FocusForAction(controls.Count))
             return;
         controls[_index].Act();
     }
@@ -1269,10 +1276,8 @@ internal static class CardCraftScreenManager
     private static void BuyFocusedDivination(CardCraftManager m)
     {
         var entries = DivinationEntries(m);
-        if (entries.Count == 0)
+        if (!FocusForAction(entries.Count))
             return;
-        if (_index < 0 || _index >= entries.Count)
-            _index = 0;
         var e = entries[_index];
         if (e.Locked)
         {
@@ -1348,12 +1353,32 @@ internal static class CardCraftScreenManager
         return list;
     }
 
-    private static bool RowInRange(List<CardVertical> rows)
+    /// <summary>Seat <see cref="_index"/> for a READ (announce a row, Alt+T detail, a Tab
+    /// re-announce). Resolves the fresh-screen -1 sentinel to the first item and clamps a stale
+    /// index down. False only when there is nothing to read.</summary>
+    private static bool FocusForRead(int count)
     {
-        if (rows.Count == 0)
+        if (count <= 0)
             return false;
-        if (_index >= rows.Count)
-            _index = rows.Count - 1;
+        _index = Mathf.Clamp(_index, 0, count - 1);
+        return true;
+    }
+
+    /// <summary>Seat <see cref="_index"/> for an ACTION (buy, preview, remove, activate). Unlike
+    /// the read path this REFUSES on the -1 sentinel instead of resolving it: Enter as the first
+    /// key on a freshly-opened shop must never spend the player's gold on a row they have not
+    /// heard. False means the caller must not act.</summary>
+    private static bool FocusForAction(int count)
+    {
+        if (count <= 0)
+            return false;
+        if (_index < 0)
+        {
+            SpeechManager.Speak("Nothing focused. Press Down to start browsing.");
+            return false;
+        }
+        if (_index >= count)
+            _index = count - 1;
         return true;
     }
 
@@ -1396,7 +1421,7 @@ internal static class CardCraftScreenManager
         if (_region == Region.DeckRef)
         {
             var refRows = DeckRows(m);
-            SpeechManager.Speak(RowInRange(refRows)
+            SpeechManager.Speak(FocusForRead(refRows.Count)
                 ? CardSpeech.FullDetail(refRows[_index].cardData) : "Nothing focused");
             return;
         }
@@ -1408,7 +1433,7 @@ internal static class CardCraftScreenManager
         if (_region == Region.Controls)
         {
             var controls = BuildControls(m);
-            SpeechManager.Speak(controls.Count > 0 && _index < controls.Count
+            SpeechManager.Speak(FocusForRead(controls.Count)
                 ? controls[_index].Label : "Nothing focused");
             return;
         }
@@ -1418,7 +1443,7 @@ internal static class CardCraftScreenManager
             case 0:
             case 1:
                 var rows = DeckRows(m);
-                if (RowInRange(rows))
+                if (FocusForRead(rows.Count))
                     SpeechManager.Speak(CardSpeech.FullDetail(rows[_index].cardData));
                 else
                     SpeechManager.Speak("Nothing focused");
@@ -1426,7 +1451,7 @@ internal static class CardCraftScreenManager
             case 2:
             case 4:
                 var entries = GridEntries(m);
-                if (entries.Count == 0 || _index >= entries.Count)
+                if (!FocusForRead(entries.Count))
                 {
                     SpeechManager.Speak("Nothing focused");
                     break;
@@ -1448,7 +1473,7 @@ internal static class CardCraftScreenManager
                 break;
             case 3:
                 var tiers = DivinationEntries(m);
-                if (tiers.Count > 0 && _index < tiers.Count)
+                if (FocusForRead(tiers.Count))
                     SpeechManager.Speak(DivinationLine(tiers[_index])
                         + ". Buys a card reward draw whose quality scales with the tier");
                 else

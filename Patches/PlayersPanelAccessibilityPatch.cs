@@ -7,8 +7,11 @@ namespace ObeliskAccess.Patches;
 /// <summary>
 /// MP players panel — the second face of the always-alive AlertManager canvas (ShowPlayers swaps
 /// <c>popupT</c> off / <c>playersT</c> on; the alert dialogue deliberately excludes it via its
-/// popupT guard, so the two contexts can never both be active). Rows are rebuilt live from the
-/// public <c>playerList</c>; each speaks the game's own rendered nick line (nick + master tag)
+/// popupT guard, so the two contexts can never both be active). Rows are rebuilt live — one per
+/// occupied slot of <c>NetworkManager.PlayerPositionListArray()</c>, never by walking
+/// <c>playerList</c> itself, which renders per position and leaves stale, deactivated hole rows
+/// behind (see <c>Positions</c>). Each row's text starts from the game's own rendered nick line on
+/// <c>playerList[pos]</c> (nick + master tag)
 /// plus ping, platform, mute state, and mod-added enrichment the game's panel drops: ready state
 /// and which heroes the player runs. Enter on a partner's row toggles mute via the row's own
 /// public <c>DoMute</c>/<c>DoUnmute</c>; Escape closes through <c>HideAlert</c>. Opened by the

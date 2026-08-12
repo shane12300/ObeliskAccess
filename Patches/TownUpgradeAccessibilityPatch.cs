@@ -59,7 +59,9 @@ internal static class TownUpgradeScreenManager
         if (_inSellPanel)
         {
             // Up = more, Down = fewer; the game clamps to 0..SupplyActual.
-            Window?.ModifySupplyQuantity(-delta);
+            var w = Window;
+            if (w != null)
+                w.ModifySupplyQuantity(-delta);
             AnnounceSellPanel();
             return;
         }
@@ -133,15 +135,16 @@ internal static class TownUpgradeScreenManager
                 // -> AskForGold/AskForDust), so local balances are still pre-sale this frame; the
                 // 100-per-supply rate is hardcoded in SellSupply.
                 SpeechManager.Speak("Sold " + qty + " supply for " + (qty * 100) + " gold and "
-                    + (qty * 100) + " dust. Supply " + (PlayerManager.Instance?.SupplyActual ?? 0)
+                    + (qty * 100) + " dust. Supply " + SupplyActual()
                     + ". Balances update shortly.");
             }
             else
             {
-                var cm = AtOManager.Instance?.CurrencyManager;
+                var ato = AtOManager.Instance;
+                var cm = ato != null ? ato.CurrencyManager : null;
                 SpeechManager.Speak("Sold " + qty + " supply. Gold " + (cm?.GetPlayerGold() ?? 0)
                     + ", dust " + (cm?.GetPlayerDust() ?? 0)
-                    + ", supply " + (PlayerManager.Instance?.SupplyActual ?? 0));
+                    + ", supply " + SupplyActual());
             }
             return;
         }
@@ -181,9 +184,19 @@ internal static class TownUpgradeScreenManager
         return true;
     }
 
+    /// <summary>Current supply count, Unity-null-safe (a plain <c>?.</c> would call into a
+    /// destroyed PlayerManager rather than short-circuiting).</summary>
+    private static int SupplyActual()
+    {
+        var pm = PlayerManager.Instance;
+        return pm != null ? pm.SupplyActual : 0;
+    }
+
     private static void Close()
     {
-        TownManager.Instance?.ShowTownUpgrades(false);
+        var tm = TownManager.Instance;
+        if (tm != null)
+            tm.ShowTownUpgrades(false);
         // The hub manager notices the window closing and announces "Town".
     }
 

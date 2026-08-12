@@ -15,8 +15,9 @@ namespace ObeliskAccess.Input.Contexts;
 /// </summary>
 public class CharWindowInputContext : InputContextBase
 {
-    /// <summary>Exposed statically for the router patches (Enter swallow, bare-Ctrl and
-    /// bare-Alt suppression), which have no context instance.</summary>
+    /// <summary>Static screen-open test for patches and pollers with no context instance. (The
+    /// router's key suppressions are declared via the <see cref="IInputContext"/> flags, not this
+    /// property.)</summary>
     public static bool IsCurrentlyActive => CharWindowScreenManager.IsOpen;
 
     public override bool IsActive => IsCurrentlyActive;

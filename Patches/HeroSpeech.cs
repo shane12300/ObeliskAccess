@@ -19,13 +19,26 @@ internal static class HeroSpeech
 
     // ---- focus sounds: the same clips the game plays when the mouse hovers each surface ----
 
+    /// <summary>Play one of the game's library clips, Unity-null-safe (a plain <c>?.</c> would
+    /// call into a destroyed GameManager rather than short-circuiting).</summary>
+    private static void PlayClip(string id, float delay = 0f)
+    {
+        var gm = GameManager.Instance;
+        if (gm == null)
+            return;
+        if (delay > 0f)
+            gm.PlayLibraryAudio(id, delay);
+        else
+            gm.PlayLibraryAudio(id);
+    }
+
     /// <summary>Roster portrait focus — the game's HeroSelection.OnMouseEnter sound.</summary>
     public static void PlayHeroFocusSound()
-        => GameManager.Instance?.PlayLibraryAudio("castnpccardfast", 0.25f);
+        => PlayClip("castnpccardfast", 0.25f);
 
     /// <summary>Perk node focus — the game's PerkNode.OnMouseEnter sound.</summary>
     public static void PlayPerkFocusSound()
-        => GameManager.Instance?.PlayLibraryAudio("ui_menu_popup_01");
+        => PlayClip("ui_menu_popup_01");
 
     /// <summary>Button/row focus — the game's BotonGeneric.OnMouseEnter sound.</summary>
     public static void PlayButtonFocusSound()

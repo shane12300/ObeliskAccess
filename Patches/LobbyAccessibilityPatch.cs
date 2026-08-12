@@ -34,10 +34,12 @@ internal static class LobbyScreenManager
         public TMP_Dropdown Dropdown;      // Enter opens the spoken option walk
         public Action DropdownApply;       // runs after the chosen value is written back
         public int KickSlot = -1;          // two-step Enter kick target
+        public string RoomName;            // set on room-browser rows, for identity re-validation
     }
 
     private static Panel _panel = Panel.None;
     private static int _index;
+    private static string _focusedRoom;   // name of the focused room-browser row, if any
     private static JoinRegion _joinRegion = JoinRegion.Rooms;
     private static bool _sceneAnnounced;
     private static bool _panelAnnounced;
@@ -117,6 +119,7 @@ internal static class LobbyScreenManager
         {
             _panel = now;
             _index = 0;
+            _focusedRoom = null;
             _joinRegion = JoinRegion.Rooms;
             _ddOpen = null;
             _kickArmedSlot = -1;
@@ -176,6 +179,7 @@ internal static class LobbyScreenManager
     {
         _panel = Panel.None;
         _index = 0;
+        _focusedRoom = null;
         _sceneAnnounced = false;
         _panelAnnounced = false;
         _ddOpen = null;
@@ -267,6 +271,7 @@ internal static class LobbyScreenManager
                 rows.Add(new Row
                 {
                     Speech = RoomRowSpeech(captured),
+                    RoomName = RoomRowName(captured),
                     Activate = () =>
                     {
                         SpeechManager.Speak("Joining " + RoomRowName(captured) + ".");
@@ -481,6 +486,7 @@ internal static class LobbyScreenManager
         _index = Mathf.Clamp(_index, 0, rows.Count - 1);
         _index = ((_index + dir) % rows.Count + rows.Count) % rows.Count;
         _kickArmedSlot = -1;
+        _focusedRoom = rows[_index].RoomName;
         SpeechManager.Speak(rows[_index].Speech + ", " + (_index + 1) + " of " + rows.Count);
     }
 
@@ -503,6 +509,24 @@ internal static class LobbyScreenManager
         if (rows.Count == 0)
             return;
         _index = Mathf.Clamp(_index, 0, rows.Count - 1);
+
+        // The room browser's rows are live GridTransform children and the game DESTROYS a RoomList
+        // the moment its room fills or closes (RoomReceived, ~1-2s cadence). A raw index would then
+        // join whatever slid into this position — a full, wrong-version or passworded room the user
+        // never heard. Re-find the announced room by name, the way the town hub anchors on
+        // _focusedKey and the kick path re-checks the occupant nick.
+        if (_focusedRoom != null)
+        {
+            int again = rows.FindIndex(r => r.RoomName == _focusedRoom);
+            if (again < 0)
+            {
+                _focusedRoom = rows[_index].RoomName;
+                SpeechManager.Speak("That room is gone. Now on: " + rows[_index].Speech + ".");
+                return;
+            }
+            _index = again;
+        }
+
         var row = rows[_index];
 
         if (row.Edit != null)
@@ -571,6 +595,7 @@ internal static class LobbyScreenManager
         {
             _joinRegion = _joinRegion == JoinRegion.Rooms ? JoinRegion.Controls : JoinRegion.Rooms;
             _index = 0;
+            _focusedRoom = null;
             var rows = BuildRows();
             SpeechManager.Speak((_joinRegion == JoinRegion.Rooms
                 ? "Rooms, " + rows.Count + (rows.Count == 1 ? " row. " : " rows. ")

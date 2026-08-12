@@ -106,6 +106,10 @@ internal static class ChatSpeech
             return;
         }
         // First press = newest; each further press steps one older; wraps back to newest.
+        // Clamp first: the buffer can SHRINK under a walk (WelcomeMsg replaces the whole list on
+        // joining a room), which would otherwise index past the new end.
+        if (_historyIndex >= content.Count)
+            _historyIndex = -1;
         _historyIndex = _historyIndex < 0 ? content.Count - 1 : _historyIndex - 1;
         if (_historyIndex < 0)
             _historyIndex = content.Count - 1;
@@ -113,6 +117,10 @@ internal static class ChatSpeech
         SpeechManager.Speak("Message " + fromNewest + " of " + content.Count + ": "
             + CardSpeech.CleanFlat(content[_historyIndex]));
     }
+
+    /// <summary>Restart the Alt+M walk at the newest message. Called when the buffer is replaced
+    /// wholesale (ChatManager.WelcomeMsg) rather than appended to.</summary>
+    public static void ResetHistory() => _historyIndex = -1;
 
     public static void OpenPlayersPanel()
     {
@@ -216,6 +224,9 @@ public class ChatWelcomeAnnouncePatch
         // WelcomeMsg resets the buffer, so chatText holds exactly the welcome line — read the
         // rendered text instead of re-running the localization format (stays correct if the game
         // changes the string's shape).
+        // The buffer was REPLACED (new List), not appended to, so a history walk left mid-way
+        // would index past the new end on the next Alt+M.
+        ChatSpeech.ResetHistory();
         string line = __instance.chatText != null ? CardSpeech.CleanFlat(__instance.chatText.text) : "";
         if (line.Length > 0)
             SpeechManager.SpeakQueued(line);

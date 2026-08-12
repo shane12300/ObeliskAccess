@@ -14,13 +14,15 @@ namespace ObeliskAccess.Input.Contexts;
 ///
 /// Digits are NOT handled here: the game's <c>BattleKeyboard.KeyboardNum</c> already toggles the
 /// Nth container card while these windows are active, and the mod's SelectCardTo* postfixes
-/// announce the result. Enter and Space reach this context because <see cref="RouterInputPatches"/>
-/// suppresses the game's own handling of both keys while this context is active.
+/// announce the result. Enter and Space reach this context from the <c>DoKeyBinding</c> postfix;
+/// the matching prefix suppression (declared by <see cref="SwallowsGameEnter"/> and
+/// <see cref="SwallowsGameSpace"/>) exists so the game does not also act on the same press.
 /// </summary>
 public class CombatSelectorInputContext : InputContextBase
 {
-    /// <summary>Exposed statically so the router's key-suppression prefixes (which have no context
-    /// instance) can gate on it, mirroring the other combat-family contexts.</summary>
+    /// <summary>Static screen-open test for patches and pollers with no context instance, mirroring
+    /// the other combat-family contexts. (The router's key suppressions are declared via the
+    /// <see cref="IInputContext"/> flags, not this property.)</summary>
     public static bool IsCurrentlyActive
     {
         get
@@ -55,10 +57,19 @@ public class CombatSelectorInputContext : InputContextBase
                 CombatSelectorManager.Drill(1);
             return true;
         }
+        // Always consume: MoveFocus returns false before the mode registers (the window's
+        // IsActive() can lead our TurnOn patch), and a fall-through there would warp the combat
+        // cursor and re-announce the board underneath the open modal.
         if (direction.x < 0f)
-            return CombatSelectorManager.MoveFocus(-1);
+        {
+            CombatSelectorManager.MoveFocus(-1);
+            return true;
+        }
         if (direction.x > 0f)
-            return CombatSelectorManager.MoveFocus(1);
+        {
+            CombatSelectorManager.MoveFocus(1);
+            return true;
+        }
         // Swallow Up/Down too — the game's cursor navigation must not run under the modal.
         return true;
     }

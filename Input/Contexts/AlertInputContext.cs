@@ -16,9 +16,11 @@ namespace ObeliskAccess.Input.Contexts;
 public class AlertInputContext : InputContextBase
 {
     /// <summary>
-    /// True while an alert popup owns input. Static so the <c>RouterInputPatches</c> suppressions
-    /// (game Enter's synthetic click, bare-Ctrl click, combat emote letters) can gate on it.
-    /// Excludes the multiplayer player-list panel, which shares <c>AlertManager.IsActive()</c>.
+    /// True while an alert popup owns input. Static screen-open test for patches and pollers with
+    /// no context instance; the router's key suppressions (game Enter's synthetic click, bare-Ctrl
+    /// click, combat emote letters) are declared via the <see cref="IInputContext"/> flags, not
+    /// this property. Excludes the multiplayer player-list panel, which shares
+    /// <c>AlertManager.IsActive()</c>.
     /// </summary>
     public static bool IsCurrentlyActive => AlertDialogueManager.Active;
 

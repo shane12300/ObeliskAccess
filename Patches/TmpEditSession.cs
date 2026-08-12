@@ -37,7 +37,25 @@ internal sealed class TmpEditSession
         _fieldProvider = fieldProvider;
     }
 
-    public bool Editing => _editing;
+    public bool Editing
+    {
+        get => _editing;
+        private set
+        {
+            if (_editing == value)
+                return;
+            _editing = value;
+            _activeCount += value ? 1 : -1;
+        }
+    }
+
+    /// <summary>Any session anywhere is currently editing. The router uses this to keep its
+    /// "a game text field owns the keyboard" guard from firing on fields the MOD drives — those
+    /// already have their own gates, and their contexts expect Enter/Tab to keep reaching them.
+    /// </summary>
+    internal static bool AnyActive => _activeCount > 0;
+
+    private static int _activeCount;
 
     public bool EndedThisFrame => Time.frameCount == _endedFrame;
 
@@ -93,7 +111,7 @@ internal sealed class TmpEditSession
         var field = _fieldProvider();
         if (field == null)
             return;
-        _editing = true;
+        Editing = true;
         _deactivatePending = false;
         _editCache = field.text;
         field.Select();
@@ -109,7 +127,7 @@ internal sealed class TmpEditSession
     {
         if (!_editing)
             return;
-        _editing = false;
+        Editing = false;
         _endedFrame = Time.frameCount;
         var field = _fieldProvider();
         string text = _editCache;
@@ -128,7 +146,7 @@ internal sealed class TmpEditSession
     /// <summary>Silent reset — no OnEnded, no speech (used when the screen disappears).</summary>
     public void Abort()
     {
-        _editing = false;
+        Editing = false; // via the property, so the AnyActive count stays balanced
         _deactivatePending = false;
         ClearSelection(_fieldProvider());
     }

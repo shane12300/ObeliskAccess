@@ -10,7 +10,9 @@ namespace ObeliskAccess.Input.Contexts;
 /// </summary>
 public class LobbyInputContext : InputContextBase
 {
-    /// <summary>Static so the RouterInputPatches Enter-swallow list can gate on it.</summary>
+    /// <summary>Static screen-open test for patches and pollers with no context instance. (The
+    /// router's key suppressions are declared via the <see cref="IInputContext"/> flags — the
+    /// hand-maintained swallow lists this once fed are gone.)</summary>
     public static bool IsCurrentlyActive => LobbyScreenManager.Active;
 
     public override bool IsActive => IsCurrentlyActive;

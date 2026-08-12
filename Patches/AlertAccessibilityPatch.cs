@@ -49,7 +49,9 @@ internal static class AlertDialogueManager
     private static bool _suppressAnswerSpeech;
     private static int _inputSuccessFrame = -1;
 
-    // Labels captured in the SetConfirmAnswer prefix; the postfix runs after HideAlert wiped them.
+    // Labels captured in the SetConfirmAnswer prefix: by the time the postfix runs, HideAlert has
+    // deactivated the button parents, so the visibility test that picks the right label no longer
+    // works (the .text itself survives — see the note on the HideAlert patch below).
     private static string _labelAccept = "";
     private static string _labelCancel = "";
 

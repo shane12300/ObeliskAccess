@@ -29,9 +29,11 @@ public class HeroSelectionHotkeyPoller : MonoBehaviour
             return;
 
         // Lifecycle ticks — deliberately outside the input gate (cheap no-ops off-scene).
-        HeroSelectionScreenManager.Tick();
-        CharPopupScreenManager.Tick();
-        PerkTreeScreenManager.Tick();
+        // Each is isolated so one throwing cannot starve the others (see SafeTick): the popup and
+        // tree ticks are what detect a mouse-driven close, so losing them strands their contexts.
+        InputRouter.SafeTick(HeroSelectionScreenManager.Tick, "hero-selection");
+        InputRouter.SafeTick(CharPopupScreenManager.Tick, "char-popup");
+        InputRouter.SafeTick(PerkTreeScreenManager.Tick, "perk-tree");
 
         if (InputRouter.IsActive(PerkTreeContext))
         {

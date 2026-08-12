@@ -42,7 +42,8 @@ public class Plugin : BaseUnityPlugin
         var deathScreenContext = new DeathScreenInputContext();
         InputRouter.Register(deathScreenContext);
         // The in-combat card-selection windows (discard / look-at-deck / discover / pile viewers)
-        // are modals over combat, so their context sits directly above it.
+        // are modals over combat, so their context sits above it (with the perk tree and the
+        // character sheet registered in between).
         var combatSelectorContext = new CombatSelectorInputContext();
         InputRouter.Register(combatSelectorContext);
         // The perk tree overlay opens over the in-run character sheet (its Perks tab) and over

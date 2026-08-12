@@ -859,7 +859,9 @@ internal static class MapNavigator
     }
 }
 
-/// <summary>Resets the navigator and speaks the map info the moment the map finishes drawing.</summary>
+/// <summary>Resets the navigator and arms the arrival announcement when the map finishes drawing.
+/// It deliberately speaks nothing here — see OnMapReady; the speech comes from TickArrival once
+/// the map actually owns input.</summary>
 [HarmonyPatch(typeof(MapManager), "BeginMapContinueEnd")]
 public class MapReadyPatch
 {

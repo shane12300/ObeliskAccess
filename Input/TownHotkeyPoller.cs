@@ -21,11 +21,17 @@ public class TownHotkeyPoller : MonoBehaviour
         if (kb == null)
             return;
 
-        TownScreenManager.Tick();
-        TownUpgradeScreenManager.Tick();
+        // Isolated so one throwing cannot starve the other (see SafeTick).
+        InputRouter.SafeTick(TownScreenManager.Tick, "town-hub");
+        InputRouter.SafeTick(TownUpgradeScreenManager.Tick, "town-upgrades");
 
         // Ctrl+G opens the MP give-gold/dust window (before the Alt gate — Ctrl, not Alt).
-        if (InputRouter.CtrlHeld && kb.gKey.wasPressedThisFrame && InputRouter.IsActive(TownContext))
+        // Unlike every other poller key this one does NOT require Alt, so it needs the gates the
+        // Alt keys get for free: opening the give panel under a live chat field or the on-screen
+        // keyboard would put a second screen under the user's typing. Alt+Ctrl+G is not this key.
+        if (InputRouter.CtrlHeld && !InputRouter.AltHeld && kb.gKey.wasPressedThisFrame
+            && !ChatSpeech.Typing && !RouterGuards.OskActive
+            && InputRouter.IsActive(TownContext))
         {
             GiveScreenManager.TryOpen();
             return;

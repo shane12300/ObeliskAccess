@@ -911,8 +911,8 @@ public class EventReadyToggleAnnouncePatch
 }
 
 /// <summary>
-/// The mod's one deliberate behaviour change (documented in the README under "Design
-/// philosophy"): in single player the game auto-selects a lone event choice 0.5 seconds after
+/// The mod's one deliberate behaviour change (documented in the README under "Story events"):
+/// in single player the game auto-selects a lone event choice 0.5 seconds after
 /// showing it (tail of the EventManager reply-layout coroutine). That window is calibrated to a
 /// sighted player who has already seen the whole screen — for a screen-reader user it cuts off
 /// the event text mid-sentence and makes the option unreviewable (Alt+T can never be reached).
