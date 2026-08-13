@@ -34,10 +34,8 @@ installer:
 If the game folder needs administrator rights to write to (typical for installs under Program
 Files), the installer offers to relaunch itself elevated.
 
-**Prefer a terminal?** The release also includes **`ObeliskAccessInstaller-cli.exe`**, which does
-exactly the same things as plain text prompts. Run it from a command prompt or PowerShell with no
-arguments. (Use this one rather than `ObeliskAccessInstaller.exe --cli`: the graphical installer is
-a windowed program, so a shell does not wait for it and its text mode exits immediately.)
+**Prefer a terminal?** Work from the git repo instead — `scripts\deploy.ps1` builds the mod and
+installs it in one command. See [Building from source](#building-from-source).
 
 ### Manual installation
 
@@ -658,20 +656,40 @@ The mod covers a full run, but some screens are not adapted yet:
 
 ## Building from source
 
-```bash
-dotnet build
+This is also the route to take if you would rather install from a terminal than use the
+graphical installer.
+
+Prerequisites: a .NET SDK and the game itself (the mod compiles against the game's own DLLs).
+BepInEx is **not** a prerequisite here — the deploy script installs it for you if it's missing.
+
+The deploy script does everything in one step:
+
+```powershell
+.\scripts\deploy.ps1
 ```
 
-Prerequisites: a .NET SDK, and the game installed (the mod compiles against the game's own
-DLLs — a wrong `GameDir` shows up as missing-reference compile errors). `GameDir` must be the
-game's own folder, the one containing `AcrossTheObelisk.exe`. If your game isn't in the
-default Steam location, pass it on the command line:
+It checks the game folder; installs BepInEx 5 if it isn't already there (downloading a pinned
+version to a temp folder, extracting it into the game folder, then deleting the temp folder);
+runs the build; copies `ObeliskAccess.dll` + `UnityAccessibilityLib.dll` into
+`BepInEx\plugins\ObeliskAccess\`; and copies the bundled `native\UniversalSpeech.dll` +
+`native\nvdaControllerClient.dll` into the game root — printing exactly what it copied and what
+it left alone. Unlike a manual BepInEx install, you don't need to launch the game first: the
+script creates the plugins folder itself. Useful switches:
 
-```bash
-dotnet build -p:GameDir="D:\Games\Across the Obelisk"
+```powershell
+.\scripts\deploy.ps1 -GameDir "D:\Games\Across the Obelisk"   # non-default install location
+.\scripts\deploy.ps1 -Configuration Release                   # release build
+.\scripts\deploy.ps1 -ForceNative                             # overwrite the speech DLLs too
+.\scripts\deploy.ps1 -NoBuild                                 # copy what is already built
+.\scripts\deploy.ps1 -SkipBepInEx                             # never touch BepInEx; fail if absent
+.\scripts\deploy.ps1 -WhatIf                                  # list what it would do, change nothing
 ```
 
-The build restores packages from nuget.org and the BepInEx feed (`nuget.bepinex.dev`), copies
-`ObeliskAccess.dll` + `UnityAccessibilityLib.dll` into the game's plugins folder, and copies
-the bundled `native\UniversalSpeech.dll` + `native\nvdaControllerClient.dll` into the game
-root *only if they aren't already there* — an existing copy is never overwritten.
+The speech DLLs in the game root are **never overwritten** unless you pass `-ForceNative`: a
+copy you placed there yourself always wins.
+
+Plain `dotnet build` also works and does the same two copies (the csproj carries build targets
+for them). Pass `-p:GameDir="D:\Games\Across the Obelisk"` if your game isn't in the default
+Steam location; `GameDir` must be the game's own folder, the one containing
+`AcrossTheObelisk.exe`, and a wrong one shows up as missing-reference compile errors. Either
+way, packages restore from nuget.org and the BepInEx feed (`nuget.bepinex.dev`).

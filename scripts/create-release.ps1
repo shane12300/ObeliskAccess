@@ -195,10 +195,6 @@ try {
     }
     $installerExe = Join-Path $RepoRoot "installer\target\release\ObeliskAccessInstaller.exe"
     if (-not (Test-Path $installerExe)) { Fail "Installer build output missing: $installerExe" }
-    # Console-subsystem twin: shells do not wait for the GUI image, so its --cli mode is unusable
-    # from an interactive prompt. Both are shipped; the README points terminal users at this one.
-    $installerCli = Join-Path $RepoRoot "installer\target\release\ObeliskAccessInstaller-cli.exe"
-    if (-not (Test-Path $installerCli)) { Fail "CLI installer build output missing: $installerCli" }
 
     # --- Package the zip per the layout contract ------------------------------
 
@@ -229,7 +225,6 @@ try {
     $releaseTitle = "ObeliskAccess $version $emDash $title"
     $zipSize = "{0:N1} MB" -f ((Get-Item $zipPath).Length / 1MB)
     $exeSize = "{0:N1} MB" -f ((Get-Item $installerExe).Length / 1MB)
-    $cliSize = "{0:N1} MB" -f ((Get-Item $installerCli).Length / 1MB)
 
     Write-Host ""
     Write-Host "================ RELEASE FORM ================" -ForegroundColor Green
@@ -238,7 +233,6 @@ try {
     Write-Host "Assets:"
     Write-Host "  $zipName ($zipSize)"
     Write-Host "  ObeliskAccessInstaller.exe ($exeSize)"
-    Write-Host "  ObeliskAccessInstaller-cli.exe ($cliSize)"
     Write-Host ""
     Write-Host "Release notes:" -ForegroundColor Green
     Write-Host "----------------------------------------------"
@@ -250,7 +244,6 @@ try {
         Write-Host "Dry run: stopping before release creation. Staged assets:" -ForegroundColor Yellow
         Write-Host "  $zipPath"
         Write-Host "  $installerExe"
-        Write-Host "  $installerCli"
         Write-Host "(The mod and installer WERE built; only the GitHub release was skipped.)"
         exit 0
     }
@@ -264,7 +257,7 @@ try {
     # --- Create draft ---------------------------------------------------------
 
     Write-Host "Creating draft release $tag..." -ForegroundColor Cyan
-    Invoke-Native { gh release create $tag --draft --title $releaseTitle --notes-file $notesFile $zipPath $installerExe $installerCli }
+    Invoke-Native { gh release create $tag --draft --title $releaseTitle --notes-file $notesFile $zipPath $installerExe }
     if ($LASTEXITCODE -ne 0) { Fail "gh release create failed." }
 
     Write-Host "Draft release $tag created (URL above)." -ForegroundColor Green

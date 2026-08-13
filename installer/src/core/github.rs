@@ -1,6 +1,6 @@
 use serde::Deserialize;
 
-use super::paths::{GITHUB_API_URL, GITHUB_RELEASES_URL};
+use super::paths::GITHUB_RELEASES_URL;
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct ReleaseInfo {
@@ -25,20 +25,6 @@ fn client() -> Result<reqwest::blocking::Client, String> {
         .timeout(std::time::Duration::from_secs(15))
         .build()
         .map_err(|e| format!("Failed to create HTTP client: {}", e))
-}
-
-pub fn fetch_latest_release() -> Result<ReleaseInfo, String> {
-    let resp = client()?
-        .get(GITHUB_API_URL)
-        .send()
-        .map_err(|e| format!("Failed to connect to GitHub: {}", e))?;
-
-    if !resp.status().is_success() {
-        return Err(format!("GitHub API returned status {}", resp.status()));
-    }
-
-    resp.json::<ReleaseInfo>()
-        .map_err(|e| format!("Failed to parse release info: {}", e))
 }
 
 pub fn fetch_all_releases() -> Result<Vec<ReleaseInfo>, String> {

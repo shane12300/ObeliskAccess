@@ -10,8 +10,10 @@ single player and multiplayer. See the README for the key reference.
 - Speech output through a running screen reader (NVDA, JAWS, etc.), with Windows speech
   as a fallback.
 - An installer (`ObeliskAccessInstaller.exe`) that installs BepInEx 5 and the mod,
-  updates, and uninstalls — screen-reader friendly. A text-mode version
-  (`ObeliskAccessInstaller-cli.exe`) does the same from a command prompt.
+  updates, and uninstalls — screen-reader friendly. If you would rather work from a
+  terminal, the source repository has a `scripts\deploy.ps1` that does the same from
+  a git checkout: it installs BepInEx if needed, builds the mod, and copies everything
+  into place in one command.
 - Main menu, game-mode selection, and save slots.
 - Settings menu, plus a new Accessibility tab holding the mod's own options.
 - Tutorial pop-ups.

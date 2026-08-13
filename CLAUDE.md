@@ -32,22 +32,32 @@ before creating the release as a **draft** (`gh release create --draft` — revi
 on GitHub; the git tag is only created when the draft is published). `-DryRun` still builds both
 the mod and the installer and still writes the zip to `$env:TEMP`; it stops before creating the
 GitHub release (its staging dirs are left on disk for inspection; a real run cleans them up).
-Three assets are attached to every release: the mod zip, `ObeliskAccessInstaller.exe`, and
-`ObeliskAccessInstaller-cli.exe`.
+Two assets are attached to every release: the mod zip and `ObeliskAccessInstaller.exe`.
+
+`scripts/deploy.ps1` is the **from-source install** path (the repo's answer to "I want to
+install from a terminal", which is why no console installer binary is shipped). It resolves and
+validates `GameDir`; installs BepInEx 5 when absent (download to a temp dir → `Expand-Archive` →
+copy into the game folder → temp dir removed in a `finally`, so a failed download leaves nothing
+behind); builds; then does the same two copies the csproj targets do — plugin DLLs always, the
+two `native/` speech DLLs only when absent unless `-ForceNative`. Also takes `-Configuration`,
+`-NoBuild`, `-SkipBepInEx`, `-WhatIf`.
+**The BepInEx pin is duplicated**: `$BepInExVersion`/`$BepInExUrl` in `deploy.ps1` and
+`BEPINEX_VERSION`/`BEPINEX_URL` in `installer/src/core/paths.rs` must be bumped together, and the
+BepInEx-installed test in both (`winhttp.dll` **and** `BepInEx/core`) must stay in step.
 
 **Zip layout contract** (consumed by `installer/src/core/install.rs` — change both together):
 `plugins/**` → `<game>\BepInEx\plugins\`, `gameroot/**` → game root (never overwrites an
 existing file — the user's own native speech DLLs win), zip-root docs → the plugin folder.
 
 `installer/` is a Rust crate following the say-the-spire2 installer layout:
-`src/core/{paths,detect,github,bepinex,install,uninstall,version,winutil}.rs`, shared by **two
-binaries** — `src/main.rs` (the wxdragon GUI = native accessible wxWidgets controls; also accepts
-`--cli`) and `src/cli_main.rs` (`ObeliskAccessInstaller-cli.exe`). The second binary exists because
-the GUI image is `windows_subsystem = "windows"`, and shells do NOT wait for a GUI-subsystem
-process: `ObeliskAccessInstaller.exe --cli` returns to the prompt at once, the shell reclaims
-stdin, and the prompt loop reads EOF and quits. Only a console-subsystem image fixes that, so
-terminal users (and the README) are pointed at the `-cli` binary. It pins the BepInEx 5 download
-(`paths.rs::BEPINEX_URL`). Building it needs LLVM's libclang (`LIBCLANG_PATH`) and ninja
+`src/core/{paths,detect,github,bepinex,install,uninstall,version,winutil}.rs` plus `src/gui.rs`,
+built as the single GUI binary `src/main.rs` (wxdragon = native accessible wxWidgets controls).
+It pins the BepInEx 5 download (`paths.rs::BEPINEX_URL`).
+**There is deliberately no text-mode installer.** A `--cli` flag on a GUI-subsystem image cannot
+work — shells do not wait for such a process, so it returns to the prompt at once, the shell
+reclaims stdin, and the prompt loop reads EOF and quits; a console-subsystem twin binary was
+tried and then dropped, because anyone wanting a terminal install is working from the repo
+anyway and is better served by `scripts/deploy.ps1`. Don't reintroduce either. Building it needs LLVM's libclang (`LIBCLANG_PATH`) and ninja
 (the VS-bundled one works); the release script wires both up when present.
 
 ## todo.md maintenance

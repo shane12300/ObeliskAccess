@@ -1,7 +1,5 @@
 use std::path::{Path, PathBuf};
 
-pub const GITHUB_API_URL: &str =
-    "https://api.github.com/repos/shane12300/ObeliskAccess/releases/latest";
 pub const GITHUB_RELEASES_URL: &str =
     "https://api.github.com/repos/shane12300/ObeliskAccess/releases";
 

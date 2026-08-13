@@ -8,12 +8,6 @@ description = "Installer for the ObeliskAccess accessibility mod for Across the 
 name = "ObeliskAccessInstaller"
 path = "src/main.rs"
 
-# Console-subsystem twin for terminal use. The GUI image above cannot serve as a CLI: shells do
-# not wait for a GUI-subsystem process, so its --cli mode reads EOF and exits. See src/cli_main.rs.
-[[bin]]
-name = "ObeliskAccessInstaller-cli"
-path = "src/cli_main.rs"
-
 [dependencies]
 wxdragon = "0.9"
 reqwest = { version = "0.12", features = ["blocking", "rustls-tls", "json"], default-features = false }
