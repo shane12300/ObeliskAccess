@@ -79,6 +79,12 @@ keys, behaviour fixes) — not code-level changes. Add entries under the **curre
 heading; **never** change or add a version number unless the user explicitly says to. The
 current working version is 1.0, marked as the initial release.
 
+**Keep entries short — one to three lines, matching the terse style already in the file.**
+`create-release.ps1` lifts the top version section verbatim as the GitHub release notes, so
+every entry is release text: it says *what changed*, not how the feature works. A change that
+needs real explanation gets it in `README.md`, with the changelog pointing there (as the "See
+the README's 'Story events'" entry does). Never walk through a feature's keys here.
+
 ## Architecture
 
 Input handling and speech are split into two concerns: a **central input router** decides which
@@ -114,9 +120,12 @@ screen owns the keyboard and translates raw keys into semantic events; per-scree
    Cross-screen helpers that several screens share: `Patches/CardSpeech.cs` (card/aura text),
    `Patches/HeroSpeech.cs` (hero, trait and seed text), `Patches/CardDrill.cs` (the shared
    Ctrl+↑/↓ drill used by rewards/loot/character-sheet — combat has its own), `Patches/Nav.cs`
-   (wrap/clamp index arithmetic) and `Patches/PartyStrip.cs` (the map/town party walker).
-   One file breaks the `Patches/XyzAccessibilityPatch.cs` naming convention:
-   `Patches/CorruptionAccessibility.cs`.
+   (wrap/clamp index arithmetic), `Patches/PartyStrip.cs` (the map/town party walker) and
+   `Patches/CombatPreview.cs` (resolves the enemy line-up a combat node will spawn — the
+   randomized-roster / madness-0-removal / sandbox-`LessNPCs` replay — and speaks it; shared by the
+   map's Alt+T node detail, which needs only the count, and the corruption prompt, which names the
+   whole line-up. `Functions.GetRandomCombat` reseeds `UnityEngine.Random`, so `Resolve` must only
+   run from a discrete event, never per frame — the corruption screen caches it per draw).
    Screen-less MP awareness (ready counts, desync reloads, room join/leave/host-left, alert
    icons, cinematic skip votes) lives in `Patches/MpAmbientAccessibilityPatch.cs`; partner
    turn/cast narration needs no extra patches — MP combat is lock-step simulated on every client,
@@ -176,11 +185,12 @@ screen owns the keyboard and translates raw keys into semantic events; per-scree
   Ctrl-held and unaffected). A new context declares what it repurposes and is otherwise covered
   by the defaults — no router edits needed.
 - `Input/Contexts/*InputContext.cs` — one per screen (thin; delegates to a `Patches/` manager).
-- `Input/*HotkeyPoller.cs` — one per screen family (18 files: Alert, CardCraft, CharWindow, Chat,
-  Combat, Conflict, Event, FinishRun, HeroSelection, Intro, Lobby, Loot, Map, Rewards, Settings,
-  Town — `Plugin.Awake` attaches 15 components, some serving two screens). `MonoBehaviour`s that
-  poll letters the game leaves **unbound** (Alt+letter review keys), since the InputAction system
-  never fires for them; each key read is gated on `InputRouter.IsActive(context)`, except
+- `Input/*HotkeyPoller.cs` — one per screen family (17 files: Alert, CardCraft, CharWindow, Chat,
+  Combat, Conflict, Corruption, Event, FinishRun, HeroSelection, Intro, Lobby, Loot, Map, Rewards,
+  Settings, Town — `Plugin.Awake` attaches all 17, some serving two or three screens).
+  `MonoBehaviour`s that poll letters the game leaves **unbound** (Alt+letter review keys), since
+  the InputAction system never fires for them; each key read is gated on
+  `InputRouter.IsActive(context)`, except
   `ChatHotkeyPoller`, which is context-free because MP chat floats over every screen. Nearly every
   poller also runs its manager's per-frame tick *outside* that gate — lifecycle detection (town
   arrival, craft-screen open, finish-run arrival, mouse-driven close) must survive a modal owning
@@ -238,7 +248,7 @@ alert comes from `AlertHotkeyPoller`.
 | Map — nodes | `MapInputContext` | ←/→ reachable nodes; Ctrl+↑/↓ descend/ascend look-ahead, Ctrl+←/→ siblings; Enter travels (in MP: casts the travel vote, with locked-vote / follow-the-leader refusals explained; partners' votes + tally + unanimous departure announced from a `NET_SharePlayerSelectedNode` postfix — re-parsed with `JsonHelper`, never the possibly-stale dict; follow state appended to Alt+I); Alt+T node detail |
 | Map — party strip | `MapInputContext` | Tab toggles region; ↑/↓ read heroes; 1–4 jump to slot; Enter opens the character sheet (via `OverCharacter.Clicked()`) |
 | Map — global | `MapInputContext` + poller | Alt+G gold; Alt+I (and auto on open) position + trackers + tip |
-| Corruption prompt | `CorruptionInputContext` | ←/→ choose reward + accept; ↑/↓ toggle accept; Enter confirm |
+| Pre-combat corruption prompt | `CorruptionInputContext` + poller (state in `CorruptionScreenManager`, `Patches/CorruptionAccessibilityPatch.cs`) | Row walker: header (difficulty + rarity) / corruption card / enemies / reward A / reward B / free card (only when a reward is `herocard`) / accept / continue. ↑/↓ rows, ←/→ sub-items (walk the enemy line-up via `CombatPreview`, or hop between the two reward rows; other rows re-read), Enter performs the focused row's action (select reward — which also ticks the accept box, as the game's own `ChooseReward` does — toggle accept, or continue), 1/2 select reward A/B from anywhere. **No arrow key mutates state** (the old design bound ←/→ to "choose that reward and accept", so exploring committed the run). Alt+T row detail (corruption card `CardSpeech.FullDetail`, walked enemy's full stats, free card, what accepting means), Alt+I overview, Alt+R repeat. Escape left to the game — the prompt has no cancel, travel is already committed. Selection state read live from `BotonGeneric.permaBorder` (Traverse) and `corruptionBoxX.activeSelf`, both set on every client, so the host's remote picks read back correctly; the target node's ids come from the prompt's private `nodeSelected*Id` fields. Arrival announce is keyed on the `CorruptionText` fill serial, never on the prompt going active — in MP it activates before the draw barrier fills the labels, so an activation edge would read the *previous* draw's text; the serial also re-fires on a master's `NextCorruption` re-roll. MP: all rows readable on every client, actions refuse with the host's nick, host's picks echoed via the `NET_*` postfixes |
 | Combat | `CombatInputContext` + poller (state in `CombatNavigator`, `Patches/CombatAccessibilityPatch.cs`) | Plain arrows are left to the game (its `ControllerMovement` warp; the mod announces the landed focus from a postfix). The context's `OnConfirm` is a real activation path — it completes a pending MP emote-ping target, casts a held card on the focused character via `ControllerExecute()`, and activates own-hand cards via `OnMouseUpController()` — while the *game's* Enter also stays live (the only context with `SwallowsGameEnter => false`). Ctrl+↑/↓ card drill; Escape order = cancel ping pick → leave drill → drop held card. Poller review keys (all Alt): C character sheet, H health, B block, E energy, S statuses, V battlefield, O round + turn order, D pile counts, I revealed intent, T tooltip, R repeat. Cast digits, Space end-turn and the MP emote letters keep their game meaning. `IsCurrentlyActive` goes false under every in-combat modal |
 | MP emotes/pings (combat, no context) | `EmotePingManager` (`Patches/EmoteAccessibilityPatch.cs`) + `CombatInputContext` hooks; echoes in `Patches/MpEchoPatches.cs` | Bare R/E/S/A/W/Q are the GAME's emote keys in MP combat (BattleKeyboard — the wheel only exists in MP); the mod adds speech + the keyboard target pick for S/A: `SetCharactersPing` prefix speaks the 3s-cooldown refusal, its postfix arms the pick ("arrow to a character, Enter"); OnConfirm completes via public `EmoteTarget(character.Id, action)` on the focused character (never the raycast — the marker collider is offset), OnCancel resets via Traverse `ResetCharactersPing`; `Pending` re-validates against the live ping markers. `EmoteTarget` postfix announces local+remote (sits after the mute filter; postfix params share the original's locals ⇒ resolved sender index visible). Card pings via private `DoEmoteCard` (shared local+RPC sink) with a `HaveEmoteIcon` prefix snapshot. Partner aim (`NET_DrawArrowNet`) behind off-by-default `AnnouncePartnerAim`, change-deduped, reset on turn change. Echo patches: `GiveControlToPlayer` handovers, `NET_BuyItemResult` denials, partner Forge/Altar crafts (receive-only RPCs; own crafts skipped) |
 | MP players panel (`playersT` face of AlertManager) | `PlayersPanelInputContext` (directly under Alert; `PlayersPanelManager`, `Patches/PlayersPanelAccessibilityPatch.cs`) | Opened by the game's players button or Alt+P (`ChatHotkeyPoller`). ↑/↓ rows from public `playerList`: game-rendered nick line (nick + master tag) + platform + ready (`PlayerManualReady`) + muted (`IsPlayerMutedBySlot`) + owned heroes (team null-safe — panel opens in the lobby too) + ping; Enter = `AlertPlayer.DoMute()/DoUnmute()` (own row refused); Escape = `HideAlert()` (both hide patches `_active`-guarded — never double-speak) |

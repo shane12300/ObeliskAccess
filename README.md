@@ -119,7 +119,7 @@ that screen adds or does differently.
   revealed enemy intent; the battlefield overview there is Alt+V.)
 - **Alt+G** reads your money on the map, in town and its shops, and on the loot screen.
 - **Alt+R** repeats the last spoken line on most screens. It is not available on the map, the
-  settings menu, the main-menu screens, tutorial pop-ups, the corruption prompt, or the give
+  settings menu, the main-menu screens, tutorial pop-ups, or the give
   window — but it does work inside any pop-up dialog raised from those screens, and over the
   multiplayer players panel.
 - **Ctrl+Up/Down** opens a line-by-line detail drill on cards and characters where they appear
@@ -304,14 +304,37 @@ unsaved changes.
 
 ### Corruption offers
 
-When a corruption is offered at a node, the prompt announces itself: the difficulty, both
-rewards, and the controls. **Left chooses reward A and Right chooses reward B — choosing a
-reward also accepts the corruption.** Up/Down toggle acceptance on its own, and Enter
-confirms; confirming with the corruption not accepted declines the offer, while confirming
-with it accepted but no reward chosen is refused — the game's alert tells you to pick a
-reward first. Once the choice locks in,
-the prompt says so and travel proceeds. In multiplayer only the host decides — everyone else
-hears the host's picks as they happen.
+When a corruption is offered at a node, the prompt announces itself: the difficulty, the
+corruption card and what it does, the enemies waiting in the fight, both rewards, and the
+score accepting is worth.
+
+Up/Down walk the offer's rows — the header, the corruption card, the enemies, reward A,
+reward B, the free card a "hero card" reward would grant, whether you have accepted, and
+Continue. Left/Right walk sub-items: on the enemies row they step through the line-up one at
+a time (each monster's name, its position in the line, health, speed, and the aura a champion
+is immune to); on either reward row they hop to the other one. Any other row just re-reads
+itself. **Arrow keys never change anything** — they are safe to explore with.
+
+Each row reports its current state as you pass it: the reward rows say whether they are the
+chosen one, and the accept row says whether you have accepted and what the score bonus is. So
+you can check where the offer stands at any point without altering it.
+
+Enter acts on the focused row: it chooses that reward, toggles acceptance, or continues.
+**1** and **2** choose reward A and B from anywhere. Note that choosing a reward also accepts
+the corruption (that is the game's own behaviour) — it is announced when it happens. The
+accept row is the way back out: Enter there switches acceptance off again (which also clears
+the reward choice), and the row says so as you pass it.
+Continuing with the corruption not accepted declines the offer, while continuing with it
+accepted but no reward chosen is refused — the game's alert tells you to pick a reward first.
+Once the choice locks in, the prompt says so and travel proceeds.
+
+Alt+T reads the focused row in full — the corruption's complete rules text, the walked
+enemy's full stats and resistances, or the free card. Alt+I repeats the whole offer, Alt+R
+repeats the last line. Escape is left to the game (there is nothing to cancel — the only way
+on is Continue).
+
+In multiplayer only the host decides. Everyone else can still read every row, hears the
+host's picks as they happen, and is told who they are waiting for if they try to act.
 
 ### Story events
 

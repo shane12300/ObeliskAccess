@@ -34,7 +34,8 @@ public class Plugin : BaseUnityPlugin
         InputRouter.Register(new TutorialInputContext());
         var settingsContext = new SettingsInputContext();
         InputRouter.Register(settingsContext);
-        InputRouter.Register(new CorruptionInputContext());
+        var corruptionContext = new CorruptionInputContext();
+        InputRouter.Register(corruptionContext);
         var cardCraftContext = new CardCraftInputContext();
         InputRouter.Register(cardCraftContext);
         // The in-combat death popup outranks the card-selection windows — it can appear
@@ -112,6 +113,10 @@ public class Plugin : BaseUnityPlugin
         // The map's Alt+G/T/I hotkeys use letters the game leaves unbound, so a frame poller sees
         // them; it fires only while the map context owns input.
         gameObject.AddComponent<MapHotkeyPoller>().MapContext = mapContext;
+
+        // The pre-combat corruption prompt's Alt+T/I/R keys; its poller also drives the arrival
+        // announce (which must survive an alert owning input, and re-fires on a master's re-roll).
+        gameObject.AddComponent<CorruptionHotkeyPoller>().CorruptionContext = corruptionContext;
 
         // The settings menu's Alt+T tooltip key is likewise unbound.
         gameObject.AddComponent<SettingsHotkeyPoller>().SettingsContext = settingsContext;

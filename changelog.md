@@ -41,3 +41,8 @@ single player and multiplayer. See the README for the key reference.
   in single player, so the text can be read first. See the README's "Story events".
 - Escape on a multiplayer map shop now casts the ready-to-leave vote instead of closing
   the shop for you alone.
+- The corruption offer before a fight is now a walkable review screen that reads out the
+  corruption card, the enemy line-up and the score on offer, and arrow keys no longer commit
+  your run. See the README's "Corruption offers".
+- Corruption rewards paying gold and dust read as bare numbers ("gain 720 720 1"); the
+  currency labels are now spoken.
