@@ -23,15 +23,17 @@ verifies a clean tree, `gh` auth, that HEAD is pushed to `origin/master` (the dr
 without `--target`, so on publish GitHub tags the *remote* HEAD — an unpushed commit would tag a
 different tree than the one just built), that the git tag is new locally and on origin, and that
 no release or draft already exists for that tag (a draft creates no tag, so the tag checks alone
-cannot see one); builds the mod with `-p:Version=` and `-p:GameDir=` pointed at a temp staging dir
-(so the DLL's PE file-version always matches the tag — the installer reads it back to detect the
-installed version — and the csproj's copy targets never touch the live game install);
-builds `installer/` with `cargo build --release`;
+cannot see one); builds the mod with `-p:Version=` (so the DLL's PE file-version always matches
+the tag — the installer reads it back to detect the installed version) and `-p:SkipDeploy=true`,
+which turns off the csproj's two copy targets so the release build never touches the live game
+install. **`GameDir` must NOT be redirected to do that** — it is also the root of every game-DLL
+`<HintPath>`, so pointing it at an empty staging dir un-resolves every reference and the compile
+dies in a wall of `CS0246`. Then builds `installer/` with `cargo build --release`;
 packages `ObeliskAccess-vX.Y.Z.zip`; shows the full release form and asks for confirmation
 before creating the release as a **draft** (`gh release create --draft` — review and publish
 on GitHub; the git tag is only created when the draft is published). `-DryRun` still builds both
 the mod and the installer and still writes the zip to `$env:TEMP`; it stops before creating the
-GitHub release (its staging dirs are left on disk for inspection; a real run cleans them up).
+GitHub release (its stage dir is left on disk for inspection; a real run cleans it up).
 Two assets are attached to every release: the mod zip and `ObeliskAccessInstaller.exe`.
 
 `scripts/deploy.ps1` is the **from-source install** path (the repo's answer to "I want to

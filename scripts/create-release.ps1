@@ -162,13 +162,11 @@ try {
     # --- Build the mod --------------------------------------------------------
 
     Write-Host "Building ObeliskAccess $version (Release)..." -ForegroundColor Cyan
-    # Point GameDir at a throwaway staging dir: the csproj's CopyToPlugins / CopyNativeSpeech
-    # targets otherwise fire against the hardcoded Program Files install, which litters (or, without
-    # admin, fails) on any machine where the game lives elsewhere.
-    $buildStage = Join-Path $env:TEMP "ObeliskAccess-build-$tag"
-    if (Test-Path $buildStage) { Remove-Item -Recurse -Force $buildStage }
-    New-Item -ItemType Directory -Force $buildStage | Out-Null
-    Invoke-Native { dotnet build -c Release -p:Version=$version -p:GameDir=$buildStage }
+    # SkipDeploy turns off the csproj's CopyToPlugins / CopyNativeSpeech targets, which would
+    # otherwise fire against the local game install - littering it (or, without admin, failing) with
+    # binaries that are only meant for the zip. GameDir must stay at its default: it is also the
+    # root of every game-DLL <HintPath>, so redirecting it to a staging dir breaks the compile.
+    Invoke-Native { dotnet build -c Release -p:Version=$version -p:SkipDeploy=true }
     if ($LASTEXITCODE -ne 0) { Fail "dotnet build failed." }
 
     $outDir = Join-Path $RepoRoot "bin\Release\net46"
@@ -267,7 +265,7 @@ try {
     # stage dir would be silently reused by the next run. Skipped on -DryRun, whose whole point is
     # to leave the built artifacts on disk for inspection (PowerShell runs finally on "exit" too).
     if (-not $DryRun) {
-        foreach ($tmp in @($stage, $buildStage, $zipPath, $notesFile)) {
+        foreach ($tmp in @($stage, $zipPath, $notesFile)) {
             if ($tmp -and (Test-Path $tmp)) { Remove-Item -Recurse -Force $tmp -ErrorAction SilentlyContinue }
         }
     }

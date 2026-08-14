@@ -85,7 +85,11 @@
     </Reference>
   </ItemGroup>
 
-  <Target Name="CopyToPlugins" AfterTargets="Build">
+  <!-- Both copy targets are skipped with -p:SkipDeploy=true. GameDir is the SOURCE of every game
+       DLL reference above as well as the copy destination, so a build that must not touch the
+       install (the release build) has to opt out of the copies here - it cannot redirect GameDir,
+       which would also point the HintPaths at a folder with no game DLLs in it. -->
+  <Target Name="CopyToPlugins" AfterTargets="Build" Condition="'$(SkipDeploy)' != 'true'">
     <ItemGroup>
       <!-- The mod, plus its speech dependency, which BepInEx must find next to the plugin. -->
       <PluginFiles Include="$(OutputPath)$(AssemblyName).dll" />
@@ -102,7 +106,7 @@
        copies from native/ into the game root, but ONLY when absent, so a user's own/newer copy or a
        different-arch build they placed is never overwritten. Guarded on the source existing so the
        build doesn't fail before the binaries have been added to native/. -->
-  <Target Name="CopyNativeSpeech" AfterTargets="Build">
+  <Target Name="CopyNativeSpeech" AfterTargets="Build" Condition="'$(SkipDeploy)' != 'true'">
     <Copy
       SourceFiles="$(MSBuildProjectDirectory)\native\UniversalSpeech.dll"
       DestinationFolder="$(GameDir)"
