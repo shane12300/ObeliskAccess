@@ -8,6 +8,14 @@ description = "Installer for the ObeliskAccess accessibility mod for Across the 
 name = "ObeliskAccessInstaller"
 path = "src/main.rs"
 
+[features]
+default = ["require-admin"]
+# Embeds the UAC-elevation manifest (app.rc/app.manifest) into the built binary.
+# Off by default for `cargo test`: the manifest applies to every binary compiled
+# from this crate, including the test harness, which would then need an
+# elevated shell just to launch. Use `cargo test --no-default-features`.
+require-admin = []
+
 [dependencies]
 wxdragon = "0.9"
 reqwest = { version = "0.12", features = ["blocking", "rustls-tls", "json"], default-features = false }
@@ -20,7 +28,6 @@ semver = "1"
 pelite = "0.10"
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.59", features = ["Win32_System_Console", "Win32_UI_Shell", "Win32_Foundation"] }
 winreg = "0.55"
 
 [build-dependencies]

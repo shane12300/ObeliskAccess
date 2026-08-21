@@ -4,7 +4,7 @@ use std::rc::Rc;
 
 use wxdragon::prelude::*;
 
-use crate::core::{bepinex, detect, github, install, paths, uninstall, version, winutil};
+use crate::core::{bepinex, detect, github, install, paths, uninstall, version};
 
 struct State {
     release: Option<github::ReleaseInfo>,
@@ -454,8 +454,10 @@ fn log_install_report(log: &TextCtrl, report: &install::InstallReport) {
     }
 }
 
-/// Shared preflight: refuse while the game runs; offer an elevated relaunch when
-/// the game directory is not writable (Program Files installs).
+/// Shared preflight: refuse while the game runs, or if no valid game directory
+/// is selected. The manifest requests administrator rights up front (Windows
+/// shows the UAC prompt before this process even starts), so no runtime
+/// writability probe or elevated relaunch is needed here.
 fn ensure_ready(parent: &Frame, game_path: &Path) -> bool {
     if !detect::validate_game_path(game_path) {
         MessageDialog::builder(
@@ -478,22 +480,6 @@ fn ensure_ready(parent: &Frame, game_path: &Path) -> bool {
         .with_style(MessageDialogStyle::OK | MessageDialogStyle::IconWarning)
         .build()
         .show_modal();
-        return false;
-    }
-
-    if !install::can_write(game_path) {
-        let answer = MessageDialog::builder(
-            parent,
-            "The game directory is not writable from this account (this is common for installs under Program Files).\n\nRelaunch the installer as administrator?",
-            "Administrator Rights Needed",
-        )
-        .with_style(MessageDialogStyle::YesNo | MessageDialogStyle::IconQuestion)
-        .build()
-        .show_modal();
-
-        if answer == ID_YES && winutil::relaunch_elevated("") {
-            std::process::exit(0);
-        }
         return false;
     }
 

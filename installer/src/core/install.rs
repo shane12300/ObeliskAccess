@@ -178,19 +178,6 @@ pub fn extract_zip_plain(data: &[u8], dest: &Path) -> Result<(), String> {
     Ok(())
 }
 
-/// Can we create files in this directory? Used to offer elevation up front
-/// instead of failing halfway through an install.
-pub fn can_write(dir: &Path) -> bool {
-    let probe = dir.join(".obeliskaccess-write-probe");
-    match fs::File::create(&probe) {
-        Ok(_) => {
-            let _ = fs::remove_file(&probe);
-            true
-        }
-        Err(_) => false,
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -297,11 +284,5 @@ mod tests {
         extract_zip_plain(&zip, dir.path()).unwrap();
         assert!(dir.path().join("BepInEx").join("core").join("BepInEx.dll").exists());
         assert!(dir.path().join("winhttp.dll").exists());
-    }
-
-    #[test]
-    fn can_write_temp_dir() {
-        let dir = tempfile::tempdir().unwrap();
-        assert!(can_write(dir.path()));
     }
 }

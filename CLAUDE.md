@@ -12,7 +12,7 @@ ObeliskAccess is a BepInEx 5 mod for "Across the Obelisk" that makes the game ac
 dotnet build
 ```
 
-The build's `CopyToPlugins` target copies the output DLLs into the game's BepInEx plugins folder automatically (override the install location with `-p:GameDir=...`). There are no automated tests for the mod itself (the installer crate has `cargo test` unit tests).
+The build's `CopyToPlugins` target copies the output DLLs into the game's BepInEx plugins folder automatically (override the install location with `-p:GameDir=...`). There are no automated tests for the mod itself (the installer crate has `cargo test` unit tests — run as `cargo test --no-default-features`, see below).
 
 ## Release process
 
@@ -52,7 +52,7 @@ BepInEx-installed test in both (`winhttp.dll` **and** `BepInEx/core`) must stay 
 existing file — the user's own native speech DLLs win), zip-root docs → the plugin folder.
 
 `installer/` is a Rust crate following the say-the-spire2 installer layout:
-`src/core/{paths,detect,github,bepinex,install,uninstall,version,winutil}.rs` plus `src/gui.rs`,
+`src/core/{paths,detect,github,bepinex,install,uninstall,version}.rs` plus `src/gui.rs`,
 built as the single GUI binary `src/main.rs` (wxdragon = native accessible wxWidgets controls).
 It pins the BepInEx 5 download (`paths.rs::BEPINEX_URL`).
 **There is deliberately no text-mode installer.** A `--cli` flag on a GUI-subsystem image cannot
@@ -61,6 +61,18 @@ reclaims stdin, and the prompt loop reads EOF and quits; a console-subsystem twi
 tried and then dropped, because anyone wanting a terminal install is working from the repo
 anyway and is better served by `scripts/deploy.ps1`. Don't reintroduce either. Building it needs LLVM's libclang (`LIBCLANG_PATH`) and ninja
 (the VS-bundled one works); the release script wires both up when present.
+
+**Elevation**: `app.manifest` (embedded via `app.rc`/`build.rs`) requests
+`requireAdministrator`, so Windows shows the UAC prompt as the process starts, before any of
+its own UI runs — the standard pattern for installers that write into `Program Files`. There is
+no in-app writability probe or runtime elevated-relaunch anymore (that was the old design,
+`can_write`/`relaunch_elevated`, since removed); `gui.rs::ensure_ready` only checks for a valid
+game path and that the game isn't running. Embedding the manifest is gated behind the
+`require-admin` Cargo feature (`build.rs`, on by default) **only because** `embed_resource`
+applies to every binary the crate produces, including the `cargo test` harness — without the
+gate, running the test suite would itself demand an elevated shell. Normal `cargo build` /
+`cargo build --release` (and `create-release.ps1`, which calls the latter) keep the default
+feature and the manifest; run tests as `cargo test --no-default-features`.
 
 ## todo.md maintenance
 

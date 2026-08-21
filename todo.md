@@ -310,8 +310,8 @@ feature still requires stays in its original priority section (with a note point
 - [x] **Single-choice event auto-select suppressed** — the game auto-picks a lone event option
       0.5s after showing it (single player only), which outran speech and made the option
       unreviewable. Suppressed via a gated `Reply.SelectThisOption` prefix (2026-07-24); the
-      mod's one deliberate behaviour deviation, documented in the README under "Design
-      philosophy". Mouse/gamepad/multiplayer selection paths unaffected. **Verified in-game
+      mod's one deliberate behaviour deviation, documented in the README under "Story events".
+      Mouse/gamepad/multiplayer selection paths unaffected. **Verified in-game
       2026-07-24.**
 - [x] **In-combat card-selection windows** (was P1 "In-combat selector popups" —
       `UIDiscardSelector`, `UIDeckCards`, `UIAddcardSelector` — plus the Combat-improvements
